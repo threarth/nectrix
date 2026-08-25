@@ -1,0 +1,88 @@
+# Istruzioni per agenti e collaboratori
+
+Queste regole si applicano all'intero repository.
+
+## Scopo corrente
+
+Leggere `ROADMAP.md` prima di modificare il progetto e lavorare esclusivamente sulla fase richiesta. Non anticipare feature di fasi successive. Se la richiesta non indica una fase, determinare la fase corrente dai deliverable presenti e chiedere conferma prima di oltrepassarne il gate.
+
+## Ordine di lettura
+
+Prima di interventi architetturali o applicativi leggere integralmente:
+
+1. `README.md`;
+2. `DOMAIN_MODEL.md`;
+3. `INVARIANTS.md`;
+4. `ARCHITECTURE.md`;
+5. la sezione pertinente di `ROADMAP.md`.
+
+Le invarianti sono requisiti, non suggerimenti.
+
+## Regole di implementazione
+
+- Analizzare lo stato del repository e le modifiche non committate prima di editare.
+- Fare il cambiamento minimo che completa la fase corrente.
+- Mantenere frontend Svelte/Vite/TypeScript/TipTap e backend PHP/SQLite semplici; niente framework pesanti senza motivazione documentata.
+- Non introdurre Docker, Elasticsearch, vector DB, graph database, autenticazione complessa, microservizi o AI nelle fasi iniziali.
+- Non costruire astrazioni per funzionalità non ancora richieste.
+- Trattare `document_json` come fonte autorevole del contenuto e `plain_text` come derivato.
+- Non salvare il testo o offset assoluti come identità autorevole di un'Occurrence.
+- Non fondere Concept, Context e Tag in una tabella o astrazione semantica comune.
+- Non creare Alias dal testo di una occurrence senza comando esplicito.
+- Non cancellare automaticamente un Concept quando perde l'ultima occurrence.
+- Non correggere silenziosamente inconsistenze tra documento e database: validare, fallire atomicamente e conservare i dati per il recupero.
+
+## Modifiche al dominio
+
+Ogni cambiamento a Concept, ConceptAlias, Occurrence o al mark `conceptOccurrence` deve aggiornare nello stesso intervento:
+
+- `DOMAIN_MODEL.md`;
+- `ARCHITECTURE.md` se cambia ownership o sincronizzazione;
+- `INVARIANTS.md`;
+- test delle invarianti interessate.
+
+Ogni cambiamento alla distinzione Concept/Context/Tag richiede una decisione architetturale esplicita. La somiglianza dei nomi non è una ragione valida per unificarli.
+
+Le ambiguità che possono cambiare identità, lifecycle, cancellazione o significato dei dati devono essere segnalate prima di codificare. Proporre una soluzione e descriverne i trade-off.
+
+## Editor e occurrence
+
+Qualsiasi intervento sull'editor deve considerare almeno:
+
+- modifica interna e ai bordi del mark;
+- cancellazione parziale e totale;
+- undo/redo;
+- copy/paste;
+- cut/paste verificato e ambiguo;
+- serializzazione e parsing;
+- save/reload;
+- frammentazione in text node contigui;
+- input manipolato o ID duplicati.
+
+Ogni bug editoriale deve avere un test regressivo. Non affidarsi al solo test manuale per il lifecycle delle occurrence.
+
+## Test e gate
+
+- Scrivere test per ogni invariante introdotta o modificata.
+- Eseguire test e build applicabili alla fine di ogni fase.
+- Non dichiarare completata una fase con test o build falliti.
+- Se un comando non può essere eseguito nell'ambiente, documentare esattamente cosa resta da verificare.
+- Preferire test unitari vicini alla trasformazione, test di integrazione per transazioni/riconciliazione e test end-to-end per i flussi utente critici.
+
+## Dipendenze e dati
+
+- Aggiungere una dipendenza solo quando riduce concretamente rischio o complessità della fase corrente.
+- Usare Composer solo se offre un beneficio dimostrabile; non è un requisito del bootstrap.
+- Abilitare le foreign key SQLite su ogni connessione.
+- Usare transazioni per modifiche che coinvolgono documento e record semantici.
+- Le migrazioni devono essere incrementali e testabili; non modificare database utente distruttivamente senza strategia di migrazione/backup.
+
+## Documentazione della consegna
+
+Alla fine di un intervento indicare:
+
+- fase e criterio di uscita affrontati;
+- file modificati;
+- decisioni architetturali prese;
+- test/build eseguiti e risultato;
+- rischi o decisioni differite, senza implementare in anticipo la soluzione.
