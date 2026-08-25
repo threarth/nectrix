@@ -80,9 +80,9 @@ Gate: ambiguità degli Alias gestita mostrando i Concept distinti; invarianti Al
 
 ## FASE 8 — Context
 
-CRUD, move aciclico, assegnazione di un Context principale alla Note, filtro exact/subtree e raggruppamento occurrence per Context.
+CRUD di Context e sub-context a profondità arbitraria, breadcrumb, move aciclico di interi rami, assegnazione di un Context principale alla Note, filtro `exact`/`subtree` e raggruppamento occurrence per Context. La cancellazione di nodi con figli o Note richiede riassegnazione esplicita.
 
-Gate: lo stesso Concept compare in più Context senza duplicazione; test della gerarchia verdi.
+Gate: lo stesso Concept compare in più Context senza duplicazione; query ricorsive, move, anti-ciclo, filtro subtree e cancellazione prudente coperti da test verdi.
 
 ## FASE 9 — Tag
 
@@ -128,15 +128,15 @@ Gate: inspector, provenance e filtri navigabili; occurrence non trasformate in n
 
 ## FASE 16 — Sources
 
-Implementare Source, SourceLocator e associazioni tipizzate verso Note, Concept, Occurrence e Relation.
+Implementare catalogo Source riutilizzabile e ricercabile, inclusa la vista libri con titolo, autori, anno, ISBN e metadata. Il dialog “Aggiungi fonte” permette di scegliere una fonte già presente oppure crearla. Implementare SourceLocator, NoteSource per l'intera nota, SourceAnchor/SourceCitation per parti di testo e associazioni tipizzate verso Concept, Occurrence e Relation.
 
-Gate: provenance precisa senza foreign key polimorfiche non verificabili.
+Gate: la stessa fonte è riusabile senza duplicazione; fonti di nota e di range sono distinguibili; anchor stabile attraverso edit/delete/undo/copy/paste/reload; provenance precisa senza foreign key polimorfiche non verificabili.
 
 ## FASE 17 — Immagini e figure
 
-Allegati locali con metadata e collegamenti alle entità previste.
+Implementare upload di PNG/JPEG/WebP, storage locale sicuro, record Asset e nodo immagine TipTap inline/block con alt text e proprietà di visualizzazione. Consentire inserimento, spostamento, ridimensionamento previsto dalla UI, copy/paste, delete, undo/redo e reload. Collegamenti a Source, Note, Concept e occurrence restano associazioni esplicite.
 
-Gate: file lifecycle, ricerca e riferimenti integri e testati.
+Gate: nessun base64 nel documento, MIME e limiti verificati lato server, file lifecycle recuperabile, immagini persistenti dopo reload e riferimenti integri e testati.
 
 ## FASE 18 — Commenti
 

@@ -12,6 +12,8 @@ Il progetto distingue tre dimensioni indipendenti:
 
 La stessa stringa può essere il nome di un Concept, di un Context e di un Tag senza creare alcuna identità condivisa tra le tre entità.
 
+I Context formano gerarchie di profondità arbitraria. La roadmap include inoltre un catalogo riutilizzabile di fonti collegabili a intere note o a range testuali e immagini inline conservate come asset locali sicuri.
+
 ## Stato del progetto
 
 La **FASE 0 — Architettura** è completata. Il repository non contiene ancora frontend, backend o schema eseguibile; la prossima fase prevista è il bootstrap minimale.

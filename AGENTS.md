@@ -43,6 +43,8 @@ Ogni cambiamento a Concept, ConceptAlias, Occurrence o al mark `conceptOccurrenc
 
 Ogni cambiamento alla distinzione Concept/Context/Tag richiede una decisione architetturale esplicita. La somiglianza dei nomi non è una ragione valida per unificarli.
 
+Ogni cambiamento a Source, SourceLocator, SourceAnchor, SourceCitation o Asset deve preservare la distinzione tra provenienza, ancoraggio editoriale e file binario e aggiornare `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili.
+
 Le ambiguità che possono cambiare identità, lifecycle, cancellazione o significato dei dati devono essere segnalate prima di codificare. Proporre una soluzione e descriverne i trade-off.
 
 ## Editor e occurrence
@@ -76,6 +78,7 @@ Ogni bug editoriale deve avere un test regressivo. Non affidarsi al solo test ma
 - Abilitare le foreign key SQLite su ogni connessione.
 - Usare transazioni per modifiche che coinvolgono documento e record semantici.
 - Le migrazioni devono essere incrementali e testabili; non modificare database utente distruttivamente senza strategia di migrazione/backup.
+- Non incorporare immagini base64 nel documento; non fidarsi di MIME type, estensione o filename forniti dal client.
 
 ## Documentazione della consegna
 

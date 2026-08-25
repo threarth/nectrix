@@ -121,13 +121,17 @@ Il Tag è metadata organizzativo libero; non ha occurrence, Alias o archi automa
 Nella prima versione ogni Note ha al massimo un Context principale. Il multi-context non viene simulato tramite Tag.
 
 **INV-CCT-07 — Gerarchia valida**  
-La gerarchia Context è aciclica e ogni nodo ha al massimo un parent.
+La gerarchia Context è aciclica, ogni nodo ha al massimo un parent e supporta profondità arbitraria. Un sub-context è un Context, non un nuovo tipo di entità.
 
 **INV-CCT-08 — Query separate e combinabili**  
 Concept, Context e Tag possono essere interrogati separatamente e congiunti tramite filtri `Concept × Context × Tag`, senza ridurli a string matching.
 
 **INV-CCT-09 — Spostamenti non semantici**  
 Cambiare Context a una Note o spostare un Context nella gerarchia non crea, fonde o rinomina Concept.
+
+**INV-CCT-10 — Cancellazione gerarchica prudente**
+
+Un Context con figli o Note assegnate non viene eliminato a cascata; richiede prima spostamento o riassegnazione espliciti.
 
 ## E. Relation, Comment e Source
 
@@ -142,6 +146,42 @@ Un Comment ancorato a un range non usa una coppia di posizioni assolute come uni
 
 **INV-SRC-01 — Provenance distinta**  
 Source e SourceLocator sono distinti: la fonte identifica l'opera/risorsa, il locator una sua porzione.
+
+**INV-SRC-02 — Catalogo riutilizzabile**
+
+Collegare una fonte selezionata dal catalogo non duplica la Source; crea una nuova associazione verso la stessa identità.
+
+**INV-SRC-03 — Ambito esplicito**
+
+Una fonte collegata all'intera Note e una collegata a un range usano associazioni distinte e interrogabili.
+
+**INV-SRC-04 — Anchor senza testo duplicato**
+
+Il testo corrente di un SourceAnchor si legge dal documento; testo copiato e offset assoluti non sono la sua identità autorevole.
+
+**INV-SRC-05 — Cancellazione non distruttiva**
+
+Eliminare un SourceAnchor o una sua citazione non elimina automaticamente Source, SourceLocator o altri collegamenti.
+
+**INV-SRC-06 — Locator coerente**
+
+Ogni SourceLocator usato da NoteSource o SourceCitation appartiene alla stessa Source dell'associazione.
+
+**INV-AST-01 — Binario esterno al documento**
+
+Il `document_json` contiene `assetId` e attributi editoriali, mai il file immagine codificato base64.
+
+**INV-AST-02 — Asset distinto dalla provenance**
+
+Asset identifica un file; Source identifica una provenienza. Un collegamento possibile non fonde le due entità.
+
+**INV-AST-03 — Eliminazione recuperabile**
+
+Rimuovere l'ultimo nodo che usa un Asset non elimina immediatamente il file; undo/redo e retention restano possibili.
+
+**INV-AST-04 — Validazione del contenuto**
+
+Il server determina tipo e dimensioni dal contenuto reale, applica limiti e non usa il nome originale come percorso.
 
 ## F. Matrice minima di test
 
@@ -165,5 +205,12 @@ Quando le relative fasi saranno implementate, devono esistere almeno questi test
 | omonimo Concept/Context/Tag | API/search | CCT-01, 02 |
 | filtro Concept × Context × Tag | integrazione | CCT-08 |
 | ciclo Context | dominio/API | CCT-07 |
+| gerarchia Context a più livelli e filtro subtree | integrazione | CCT-07, 08 |
+| cancellazione Context non vuoto | dominio/API | CCT-10 |
+| riuso libro dal catalogo in più Note | integrazione | SRC-01, 02, 03 |
+| fonte su range: edit, delete, undo, reload | editor + integrazione | SRC-03..05 |
+| locator appartenente ad altra Source | API | SRC-06 |
+| upload e round trip immagine inline | integrazione + end-to-end | AST-01, 04 |
+| delete e undo dell'ultimo nodo immagine | editor + integrazione | AST-03 |
 
 Ogni bug editoriale corretto deve produrre un nuovo test regressivo nella suite più vicina alla causa e, se necessario, un test end-to-end del comportamento osservabile.

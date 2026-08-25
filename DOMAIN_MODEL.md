@@ -25,7 +25,7 @@ Context 1 ───────< Context
                                                └──< Relation (target)
 ```
 
-Comment e Source sono definiti concettualmente, ma non entrano nello schema iniziale eseguibile.
+Comment, Source e Asset sono definiti concettualmente, ma non entrano nello schema iniziale eseguibile.
 
 ## 3. Entità
 
@@ -133,9 +133,9 @@ Ambito gerarchico nel quale una Note viene studiata o utilizzata.
 | `name` | string | obbligatorio, non vuoto |
 | `parent_id` | opaque ID nullable | self-FK; `NULL` per radice |
 
-Sono vietati cicli e auto-parenting. È raccomandata l'unicità del nome normalizzato tra fratelli (`parent_id`, nome normalizzato), mentre lo stesso nome può comparire in rami diversi. Il percorso è calcolato dalla gerarchia.
+Sono vietati cicli e auto-parenting. La profondità non ha un limite di dominio. È raccomandata l'unicità del nome normalizzato tra fratelli (`parent_id`, nome normalizzato), mentre lo stesso nome può comparire in rami diversi. Il percorso e la profondità sono calcolati dalla gerarchia e non sono identità persistenti.
 
-Un Context non definisce il significato dei Concept contenuti nelle note. Spostare una Note o un ramo Context non duplica né rinomina Concept.
+Un sub-context è semplicemente un Context con `parent_id`; non richiede una seconda tabella. Un Context non definisce il significato dei Concept contenuti nelle note. Spostare una Note o un ramo Context non duplica né rinomina Concept.
 
 ### 3.6 Tag
 
@@ -184,15 +184,86 @@ Un commento è una discussione ancorata a contenuto della Note, non a semplici o
 
 L'anchor dovrà usare strutture ProseMirror robuste e una strategia di remapping. Il formato preciso verrà scelto nella FASE 18 dopo test dedicati. In questa fase non vengono create tabelle o API.
 
-### 3.10 Source (solo modello concettuale)
+### 3.10 Source e provenance (modello per la FASE 16)
 
-Una Source rappresenta una provenienza riutilizzabile, con tipi iniziali:
+Una Source rappresenta una provenienza riutilizzabile nel catalogo personale.
 
-`url`, `book`, `pdf`, `image`, `figure`, `document`, `other`.
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key |
+| `type` | enum | `url`, `book`, `pdf`, `image`, `figure`, `document`, `other` |
+| `title` | string | obbligatorio, non vuoto |
+| `authors` | string | opzionale; forma bibliografica iniziale |
+| `year` | integer nullable | anno bibliografico, validato |
+| `isbn` | string nullable | normalizzato per ricerca, non identità |
+| `url` | string nullable | URL validato quando presente |
+| `file_path` | string nullable | riferimento locale gestito dal sistema |
+| `notes` | text | opzionale |
+| `created_at` | timestamp | immutabile |
+| `updated_at` | timestamp | aggiornato a ogni modifica |
 
-Metadata previsti: titolo, autore, URL, anno, ISBN, file path e note. Un `SourceLocator` separato descriverà page, chapter, section, paragraph, quote e coordinate/anchor. Concept, Occurrence, Relation e Note useranno tabelle di associazione distinte per conservare foreign key reali; non si userà un'unica foreign key polimorfica non verificabile da SQLite.
+Il catalogo dei libri non è una seconda entità: è la vista delle Source con `type = book`. Il dialog può cercare e riusare una Source esistente oppure crearla, evitando duplicazioni bibliografiche. Una futura normalizzazione di autori/editori non è anticipata nel modello iniziale.
 
-Il modello è documentato ora ma sarà implementato nella FASE 16.
+`SourceLocator` identifica una porzione della Source:
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key |
+| `source_id` | UUIDv7 | FK obbligatoria verso Source |
+| `page` | string nullable | supporta pagina singola o intervallo |
+| `chapter` | string nullable | capitolo/numero/titolo |
+| `section` | string nullable | sezione |
+| `paragraph` | string nullable | paragrafo |
+| `quote` | text nullable | estratto non autorevole |
+| `coordinates` | JSON nullable | coordinate o anchor specifico del formato |
+
+`NoteSource` collega una Source, e opzionalmente un suo locator, all'intera Note:
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key |
+| `note_id` | UUIDv7 | FK verso Note |
+| `source_id` | UUIDv7 | FK verso Source |
+| `source_locator_id` | UUIDv7 nullable | deve appartenere alla stessa Source |
+
+`SourceAnchor` identifica un range vivo della Note senza copiarne il testo:
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key e `sourceAnchorId` nel mark |
+| `note_id` | UUIDv7 | FK obbligatoria verso Note |
+| `status` | enum | `active`, `detached`, `deleted` |
+| `created_at` | timestamp | immutabile |
+| `updated_at` | timestamp | aggiornato ai cambi di stato |
+
+`SourceCitation` associa una o più fonti allo stesso anchor:
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key |
+| `source_anchor_id` | UUIDv7 | FK verso SourceAnchor |
+| `source_id` | UUIDv7 | FK verso Source |
+| `source_locator_id` | UUIDv7 nullable | deve appartenere alla stessa Source |
+
+Concept, Occurrence e Relation avranno associazioni dedicate verso Source/SourceLocator nelle fasi previste. Non si usa una foreign key polimorfica non verificabile da SQLite.
+
+### 3.11 Asset immagine (modello per la FASE 17)
+
+Un Asset rappresenta un file immagine locale riutilizzabile; non rappresenta automaticamente una Source o un Concept.
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key e `assetId` nel nodo immagine |
+| `media_type` | enum | inizialmente `image/png`, `image/jpeg`, `image/webp` |
+| `original_filename` | string | solo metadata, mai path di storage |
+| `storage_key` | string | nome interno opaco e univoco |
+| `size_bytes` | integer | dimensione verificata |
+| `sha256` | string | hash del contenuto |
+| `width_px` | integer | larghezza intrinseca positiva |
+| `height_px` | integer | altezza intrinseca positiva |
+| `created_at` | timestamp | immutabile |
+
+Il nodo immagine nel documento conserva posizione, `assetId`, alt text, titolo e proprietà di presentazione. Più nodi possono riferirsi allo stesso Asset. La rimozione dell'ultimo nodo non cancella immediatamente il file, così undo e recupero restano possibili.
 
 ## 4. Relazioni e cardinalità
 
@@ -203,6 +274,9 @@ Il modello è documentato ora ma sarà implementato nella FASE 16.
 - Note → Occurrence: uno-a-molti; anche zero.
 - Note ↔ Tag: molti-a-molti tramite NoteTag.
 - Concept ↔ Concept: molti-a-molti diretto e tipizzato tramite Relation.
+- Note ↔ Source: molti-a-molti tramite NoteSource.
+- Note → SourceAnchor → SourceCitation → Source: provenienza di range testuali, anche con più fonti per range.
+- Note document → Asset: molti nodi possono riusare lo stesso file immagine.
 
 ## 5. Query fondamentali
 

@@ -30,6 +30,9 @@ La proprietà dei dati è deliberatamente separata.
 | identità e appartenenza di una occurrence | record `Occurrence` | attributi del mark nel documento |
 | testo corrente di una occurrence | intervallo marcato nel documento | estrazione temporanea per UI/ricerca |
 | Concept, Alias, Context, Tag, Relation | database relazionale | indici e viste di ricerca |
+| catalogo e metadata delle fonti | record `Source` e `SourceLocator` | label e risultati di ricerca |
+| ancoraggio di una fonte a un range | record `SourceAnchor` + mark nel documento | testo corrente estratto dal documento |
+| file immagine e metadata tecnici | record `Asset` + file locale | nodo immagine nel documento |
 
 Il testo di una occurrence non viene memorizzato come copia autorevole nel database. Quando serve, viene estratto dal `document_json` corrente. Un eventuale indice testuale delle occurrence è una cache ricostruibile e deve includere la revisione del documento da cui deriva.
 
@@ -182,11 +185,73 @@ FTS5 indicizza il plain text derivato delle note. Le ricerche per canonical name
 
 ## 9. Context gerarchici
 
-La gerarchia iniziale usa una self-reference `Context.parent_id`. Sono vietati cicli e auto-parenting. Il percorso è derivato dai nodi e non salvato come unica rappresentazione autorevole. Spostare un Context cambia il percorso dei discendenti senza cambiare i loro ID.
+La gerarchia usa una self-reference `Context.parent_id` e supporta un numero arbitrario di livelli:
 
-Ogni nota ha zero o un Context principale. `NULL` significa “nessun contesto assegnato”, non un Context speciale. La semantica dei filtri sui discendenti deve essere esplicita nell'API.
+```text
+Finanza
+└── Fixed Income
+    └── Bond Pricing
+        └── Yield Measures
+```
 
-## 10. Sicurezza dei dati e osservabilità
+Ogni nodo può essere radice, Context o sub-context: non sono entità differenti. Sono vietati cicli e auto-parenting. Il percorso è derivato ricorsivamente dai nodi e non salvato come unica rappresentazione autorevole. SQLite usa query ricorsive (`WITH RECURSIVE`) per antenati e discendenti. Spostare un Context cambia il percorso dei discendenti senza cambiare i loro ID.
+
+Ogni nota ha zero o un Context principale, che può trovarsi a qualsiasi profondità. `NULL` significa “nessun contesto assegnato”, non un Context speciale. Ogni filtro dichiara la modalità `exact` oppure `subtree`; `subtree` include il nodo scelto e tutti i discendenti.
+
+La cancellazione ordinaria è consentita solo per un Context foglia senza Note assegnate. Negli altri casi l'utente deve prima spostare o riassegnare figli e Note. Non si applicano cancellazioni a cascata.
+
+## 10. Fonti e citazioni
+
+`Source` è un elemento riutilizzabile di un catalogo personale. Un libro viene registrato una sola volta con titolo, autore/i, anno, ISBN e altri metadata; il dialog “Aggiungi fonte” cerca innanzitutto nel catalogo, filtrabile per tipo, titolo, autore e ISBN. Dal dialog l'utente può selezionare una Source esistente oppure crearne una e usarla immediatamente.
+
+La provenienza è separata in tre livelli:
+
+```text
+Source          opera o risorsa (es. un libro)
+SourceLocator   punto nella fonte (es. capitolo 4, pagina 122)
+Association     dove Nectrix usa quella fonte
+```
+
+Un collegamento all'intera Note usa `NoteSource`. Un collegamento a una parte del testo usa un `SourceAnchor` persistente rappresentato nel documento da:
+
+```json
+{
+  "type": "sourceAnchor",
+  "attrs": {
+    "sourceAnchorId": "uuid-v7"
+  }
+}
+```
+
+Il record `SourceAnchor` identifica il range e la Note; una tabella `SourceCitation` collega l'anchor a una o più coppie Source/SourceLocator. In questo modo lo stesso passaggio può avere più fonti senza accumulare liste di ID nel mark.
+
+Come per le occurrence, il testo del range non è duplicato autorevolmente nel database e gli offset assoluti non ne costituiscono l'identità. Nella prima implementazione l'anchor è non vuoto e limitato a un textblock. Editing interno, cancellazione, undo/redo, copy/paste, salvataggio e reload devono avere test dedicati. La cancellazione completa porta l'anchor a `detached`; non elimina Source o SourceLocator.
+
+Un copy/paste crea un nuovo `sourceAnchorId` e duplica le associazioni alle stesse fonti. Un cut/paste interno verificato può mantenere l'ID con la stessa policy prudente delle occurrence.
+
+## 11. Immagini inline
+
+Le immagini nel testo sono nodi TipTap/ProseMirror che contengono soltanto riferimenti e proprietà editoriali:
+
+```json
+{
+  "type": "image",
+  "attrs": {
+    "assetId": "uuid-v7",
+    "alt": "descrizione accessibile",
+    "title": null,
+    "width": null
+  }
+}
+```
+
+Il file binario non viene incorporato come base64 nel `document_json`. Viene conservato nello storage locale con nome non controllato dall'utente; il database mantiene un record `Asset` con MIME type verificato, dimensione, hash e dimensioni in pixel. Il documento resta autorevole per posizione, ordine, alt text e dimensione di visualizzazione.
+
+La prima versione accetta PNG, JPEG e WebP dopo verifica del contenuto reale, applica limiti configurabili di byte e pixel e non accetta SVG attivi. Eliminare un nodo immagine non elimina immediatamente l'Asset: l'asset non più referenziato diventa candidato a garbage collection dopo un periodo di retention. Undo deve poterlo ripristinare.
+
+Copiare un'immagine già presente in Nectrix può riusare lo stesso `assetId`, perché un Asset è una risorsa immutabile condivisibile e non un'occurrence. Incollare o caricare un nuovo file crea invece un nuovo Asset. Un'immagine può successivamente essere collegata a una Source/figura senza fondere `Asset` (file) e `Source` (provenienza).
+
+## 12. Sicurezza dei dati e osservabilità
 
 - foreign key SQLite abilitate per ogni connessione;
 - transazioni per ogni modifica multi-entità;
@@ -194,10 +259,12 @@ Ogni nota ha zero o un Context principale. `NULL` significa “nessun contesto a
 - nessuna cancellazione a cascata da Concept verso note o testo;
 - validazione server-side anche quando il client ha già validato;
 - backup e migrazioni prima di introdurre operazioni distruttive.
+- file caricati fuori dal percorso pubblico, serviti da un endpoint che valida l'Asset richiesto;
+- nomi originali trattati come metadata, mai come path di storage.
 
 I log diagnostici non devono diventare una seconda fonte di verità.
 
-## 11. Decisioni differite
+## 13. Decisioni differite
 
 Restano intenzionalmente fuori dalla FASE 0:
 
@@ -207,7 +274,8 @@ Restano intenzionalmente fuori dalla FASE 0:
 - retention degli oggetti `detached`;
 - indicizzazione derivata del testo delle occurrence;
 - multi-context per nota;
-- gestione file e SourceLocator;
+- forma precisa degli endpoint di upload e limiti dimensionali predefiniti;
+- retention e garbage collection di SourceAnchor e Asset non referenziati;
 - renderer della Knowledge Map;
 - qualsiasi integrazione AI.
 
