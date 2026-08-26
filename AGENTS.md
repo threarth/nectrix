@@ -14,7 +14,8 @@ Prima di interventi architetturali o applicativi leggere integralmente:
 2. `DOMAIN_MODEL.md`;
 3. `INVARIANTS.md`;
 4. `ARCHITECTURE.md`;
-5. la sezione pertinente di `ROADMAP.md`.
+5. `DECISIONS.md` per le decisioni adottate o in scadenza;
+6. la sezione pertinente di `ROADMAP.md`.
 
 Le invarianti sono requisiti, non suggerimenti.
 
@@ -27,31 +28,37 @@ Le invarianti sono requisiti, non suggerimenti.
 - Non costruire astrazioni per funzionalità non ancora richieste.
 - Trattare `document_json` come fonte autorevole del contenuto e `plain_text` come derivato.
 - Non salvare il testo o offset assoluti come identità autorevole di un'Occurrence.
-- Non fondere Concept, Context e Tag in una tabella o astrazione semantica comune.
+- Non fondere Concept, Entity, Context e Tag in una tabella o astrazione semantica comune; soltanto Concept ed Entity condividono la base chiusa KnowledgeObject.
 - Non creare Alias dal testo di una occurrence senza comando esplicito.
-- Non cancellare automaticamente un Concept quando perde l'ultima occurrence.
+- Non cancellare automaticamente un KnowledgeObject quando perde l'ultima occurrence: il Concept segue `active`/`orphan`, la Entity resta `active`.
 - Non correggere silenziosamente inconsistenze tra documento e database: validare, fallire atomicamente e conservare i dati per il recupero.
 
 ## Modifiche al dominio
 
-Ogni cambiamento a Concept, ConceptAlias, Occurrence o al mark `conceptOccurrence` deve aggiornare nello stesso intervento:
+Ogni cambiamento a KnowledgeObject, Concept, Entity, EntityType, EntityIdentifier, ConceptAlias, KnowledgeOccurrence o al mark `knowledgeOccurrence` deve aggiornare nello stesso intervento:
 
 - `DOMAIN_MODEL.md`;
 - `ARCHITECTURE.md` se cambia ownership o sincronizzazione;
 - `INVARIANTS.md`;
 - test delle invarianti interessate.
 
-Ogni cambiamento alla distinzione Concept/Context/Tag richiede una decisione architetturale esplicita. La somiglianza dei nomi non è una ragione valida per unificarli.
+Ogni cambiamento a Template, TemplateField, SemanticBlock o FieldValue deve preservare payload tipizzati, appartenenza field/template/blocco, cardinalità, provenance e precedenza dei valori manuali, aggiornando `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili. Context e Tag non diventano KnowledgeObject e i dati strutturati non creano automaticamente Concept o Alias.
+
+Ogni cambiamento alla distinzione Concept/Entity/Context/Tag richiede una decisione architetturale esplicita. La somiglianza dei nomi non è una ragione valida per unificarli.
 
 Ogni cambiamento a Document, gerarchia editoriale, DocumentNote o al nodo `documentNoteReference` deve aggiornare `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili. Uno split/move tra Document deve essere atomico e preservare tutte le identità trasferite; non può essere simulato con un normale copy/paste.
 
-Ogni cambiamento a Source, SourceContributor, SourceIdentifier, SourceLocator, SourceAnchor, SourceCitation, BibliographicCitation, BibliographySettings o Asset deve preservare la distinzione tra catalogo bibliografico, provenance, citazione visibile, ancoraggio editoriale e file binario e aggiornare `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili.
+Ogni cambiamento a Source, SourceContributor, SourceIdentifier, SourceLocator, SourceAnchor, SourceCitation, BibliographicCitation, BibliographySettings o Asset deve preservare la distinzione tra Entity/EntityIdentifier, catalogo bibliografico, provenance, citazione visibile, ancoraggio editoriale e file binario e aggiornare `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili.
 
-Ogni cambiamento a DocumentAnchor, DocumentLink, al mark `documentLink`, agli heading ancorati o alle formule deve aggiornare `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili. Un DocumentLink resta distinto da una Relation tra Concept; titolo, slug, testo e offset non diventano identità autorevoli della destinazione.
+Associazioni trasversali verso Document, KnowledgeObject, KnowledgeOccurrence, SemanticBlock, FieldValue o KnowledgeRelation devono usare FK verificabili e, quando i subject non condividono davvero KnowledgeObject, tabelle associative dedicate. Non introdurre coppie generiche `target_type`/`target_id` non verificabili da SQLite.
+
+Ogni cambiamento a DocumentAnchor, DocumentLink, al mark `documentLink`, agli heading ancorati o alle formule deve aggiornare `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili. Un DocumentLink resta distinto da una KnowledgeRelation; titolo, slug, testo e offset non diventano identità autorevoli della destinazione.
 
 Ogni exporter deve leggere `document_json`, `DocumentNote.body_json` e i record semantici/bibliografici necessari, dichiarare le degradazioni e rispettare `INV-EXP-*`; non può usare `plain_text` come sostituto del contenuto né introdurre servizi di conversione a pagamento.
 
 Le ambiguità che possono cambiare identità, lifecycle, cancellazione o significato dei dati devono essere segnalate prima di codificare. Proporre una soluzione e descriverne i trade-off.
+
+Le decisioni trasversali adottate e quelle programmate hanno un unico registro in `DECISIONS.md`. Una decisione risolta non deve restare duplicata come genericamente “differita” in altri documenti.
 
 ## Editor e occurrence
 
@@ -99,4 +106,4 @@ Alla fine di un intervento indicare:
 - file modificati;
 - decisioni architetturali prese;
 - test/build eseguiti e risultato;
-- rischi o decisioni differite, senza implementare in anticipo la soluzione.
+- rischi o decisioni programmate nel registro, senza implementare in anticipo la soluzione.

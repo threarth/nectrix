@@ -4,23 +4,25 @@ Nectrix è un sistema personale di organizzazione della conoscenza centrato su t
 
 > Scrivere normalmente → strutturare solo quando serve → rendere tutto ricercabile e collegabile.
 
-Il progetto distingue tre dimensioni indipendenti:
+Il progetto distingue quattro ruoli indipendenti:
 
-- **Concept**: di che cosa si parla;
+- **Concept**: conoscenza astratta, di che cosa si parla;
+- **Entity**: cosa specifica sulla quale si raccolgono dati strutturati;
 - **Context**: nell'ambito di che cosa lo si studia o usa;
 - **Tag**: come si vuole classificare o gestire il materiale.
 
-La stessa stringa può essere il nome di un Concept, di un Context e di un Tag senza creare alcuna identità condivisa tra le tre entità.
+Concept ed Entity sono i due soli sottotipi paralleli di KnowledgeObject. Context e Tag restano esterni a questa gerarchia. La stessa stringa può essere il nome di un Concept, una Entity, un Context e un Tag senza creare collegamenti impliciti.
 
 I Context formano gerarchie di profondità arbitraria. L'unità editoriale è il **Document**: può essere un testo autonomo oppure un contenitore gerarchico per un libro composto da parti e capitoli. La roadmap include note a piè di pagina e finali, indice navigabile, formule, collegamenti ipertestuali, immagini locali sicure, un reference manager con citazioni e bibliografia ed export HTML, DOCX, ODT e LaTeX.
 
 ## Stato del progetto
 
-La **FASE 1 — Bootstrap minimale** è completata. Il repository contiene editor Svelte/TipTap, API PHP minimale, migrazione SQLite incrementale e test del round trip documentale. La prossima fase prevista è la FASE 2 — Highlight normale.
+La **FASE 1 — Bootstrap minimale** e la **Phase 1.1 — Domain Model Extension and Alignment** sono completate. Il repository contiene editor Svelte/TipTap, API PHP minimale, migrazioni SQLite incrementali, schema predisposto per Concept/Entity e dati strutturati, e test del round trip documentale. La prossima fase prevista è la FASE 2 — Highlight normale.
 
 I documenti normativi sono:
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): confini, componenti, persistenza e sincronizzazione;
+- [DECISIONS.md](DECISIONS.md): decisioni architetturali adottate e decisioni programmate con fase limite;
 - [DOMAIN_MODEL.md](DOMAIN_MODEL.md): entità, attributi, relazioni e regole di dominio;
 - [INVARIANTS.md](INVARIANTS.md): proprietà che ogni implementazione deve preservare;
 - [ROADMAP.md](ROADMAP.md): fasi, gate e criteri di completamento;
@@ -28,7 +30,7 @@ I documenti normativi sono:
 - [AGENTS.md](AGENTS.md): regole operative per chi modifica il repository;
 - [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md): policy economica e inventario verificato delle licenze di terze parti.
 
-In caso di conflitto, le invarianti di dominio hanno precedenza sulle scorciatoie implementative. Ogni cambiamento al modello Concept/Occurrence richiede un aggiornamento contestuale di `INVARIANTS.md`.
+In caso di conflitto, le invarianti di dominio hanno precedenza sulle scorciatoie implementative. Ogni cambiamento a KnowledgeObject, KnowledgeOccurrence o dati strutturati richiede un aggiornamento contestuale di `INVARIANTS.md`.
 
 ## Stack pianificato
 
@@ -83,4 +85,4 @@ La cancellazione non appartiene alla FASE 1. Lo schema editoriale accettato è d
 
 ## Primo milestone applicativo
 
-Il primo milestone termina quando un Document rich-text può contenere più occurrence persistenti dello stesso Concept e le loro identità restano coerenti durante modifica, cancellazione, undo/redo, copia/incolla, salvataggio e reload. Mappe, AI, flashcard e altre funzioni avanzate restano fuori ambito fino a quel momento.
+Il primo milestone termina quando un Document rich-text può contenere KnowledgeOccurrence persistenti di Concept ed Entity e le loro identità e discriminator restano coerenti durante modifica, cancellazione, undo/redo, copia/incolla, salvataggio e reload. Mappe, AI, flashcard e altre funzioni avanzate restano fuori ambito fino a quel momento.

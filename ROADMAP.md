@@ -9,6 +9,8 @@ Si implementa una fase per volta. Una fase può iniziare soltanto quando:
 3. le decisioni nuove sono riflesse nei documenti architetturali;
 4. ogni bug noto che viola un'invariante è risolto o dichiarato blocco.
 
+Una fase non può iniziare se in `DECISIONS.md` esiste una decisione `scheduled` con scadenza precedente o uguale a quella fase.
+
 Le feature delle fasi successive non vengono anticipate “per comodità”. È ammesso predisporre nel modello soltanto quanto serve a non chiudere possibilità già richieste, senza esporre funzionalità premature.
 
 ## FASE 0 — Architettura (completata)
@@ -17,7 +19,7 @@ Deliverable:
 
 - README e documenti di architettura, dominio, invarianti, roadmap e regole operative;
 - decisione sul lifecycle delle occurrence;
-- separazione formale Concept/Context/Tag;
+- separazione formale Concept/Context/Tag, poi estesa dalla Phase 1.1 alla base chiusa Concept/Entity senza assorbire Context o Tag;
 - verifica degli scenari del modello;
 - decisioni risolutive per i problemi architetturali individuati.
 
@@ -26,7 +28,7 @@ Gate di uscita:
 - nessun codice applicativo o dipendenza introdotta;
 - tutte le entità richieste definite;
 - identità in editing, delete, undo/redo, copy/paste, cut/paste, serialization e reload specificata;
-- query `Concept × Context × Tag` spiegabile tramite relazioni del modello;
+- query `KnowledgeObject × Context × Tag` spiegabile tramite relazioni del modello, con Concept ed Entity distinguibili;
 - ambiguità bloccanti risolte prima dello schema.
 
 ## FASE 1 — Bootstrap minimale (completata)
@@ -42,163 +44,228 @@ Decisioni già vincolanti dalla FASE 0: UUIDv7 per tutte le entità, `Document.r
 
 Gate: un Document con paragraph, heading, bold, italic, underline, liste, blockquote e history sopravvive esattamente a save/reload; test e build verdi.
 
+## PHASE 1.1 — Domain Model Extension and Alignment (completata)
+
+Fase intermedia additiva tra FASE 1 e FASE 2. Introdurre nel modello `KnowledgeObject` come base chiusa di Concept ed Entity, EntityType configurabili, KnowledgeOccurrence comuni, KnowledgeRelation comuni, Template, TemplateField, SemanticBlock e FieldValue tipizzati. Aggiornare insieme dominio, invarianti e architettura; aggiungere una migration incrementale senza modificare la tabella Document, le API o l'allowlist editoriale della FASE 1.
+
+Decisioni vincolanti:
+
+- Context e Tag restano fuori da KnowledgeObject;
+- occurrence e Relation comuni usano ID/discriminator verificati, non foreign key polimorfiche deboli;
+- SemanticBlock è un'istanza strutturata di Template riferita a Entity, non testo evidenziato;
+- FieldValue usa payload tipizzati e interrogabili; i tipi multi usano righe ordinate;
+- il collegamento FieldValue→Concept è opzionale e non genera Concept o Alias;
+- provider reali, autocomplete, mappe, AI, API CRUD e UI avanzata non appartengono alla fase;
+- `source_reference` può essere definito, ma i valori e la provenance Source attendono la migration della fase Sources per avere FK verificabili.
+
+Gate: migration additiva e ripetibile; vincoli di sottotipo, tipo dei FieldValue e Relation coperti da test; schema/API/editor Document invariati; tutti i test FASE 1, type-check e build verdi.
+
 ## FASE 2 — Highlight normale
 
-Introdurre solo il mark visuale di highlight. Testare editing interno, delete parziale/totale, undo/redo, copy/paste e reload.
+Introdurre solo il mark visuale di highlight. Testare editing interno e ai bordi, delete parziale/totale, undo/redo, copy/paste, cut/paste e reload. Highlight resta formattazione e non è una KnowledgeOccurrence, un SemanticBlock o un FieldValue; non crea Concept, Entity o dati strutturati.
 
-Gate: comportamento stabile e nessuna scrittura nelle tabelle Concept/Occurrence.
+Gate: comportamento stabile e nessuna scrittura nelle tabelle KnowledgeObject, Concept, Entity, KnowledgeOccurrence, SemanticBlock o FieldValue.
 
-## FASE 3 — Concept e Occurrence
+## FASE 3 — KnowledgeObject e Semantic Occurrences
 
-Introdurre `conceptOccurrence`, creazione Concept da selezione e associazione a Concept esistente cercato per canonical name/Alias. Ogni associazione crea un nuovo ID Occurrence.
+Introdurre il mark comune `knowledgeOccurrence` per entrambi i sottotipi. Da una selezione l'utente può creare un nuovo Concept, associare un Concept esistente cercato per canonical name/Alias, creare una nuova Entity con EntityType configurabile oppure associare una Entity esistente. Ogni associazione crea un nuovo ID KnowledgeOccurrence; `knowledgeObjectId` e `objectType = concept|entity` vengono validati insieme.
 
-Gate: creazione atomica, persistenza e rendering coerenti; nessuna promozione automatica ad Alias.
+Gate: creazione atomica di KnowledgeObject, sottotipo, occurrence e mark; persistenza e rendering coerenti per entrambi i discriminator; nessuna conversione automatica Concept↔Entity e nessuna promozione del testo ad Alias o EntityIdentifier. Da questa fase i flussi critici sono coperti anche da test end-to-end in browser reale.
 
-## FASE 4 — Invarianti delle occurrence
+## FASE 4 — Invarianti delle KnowledgeOccurrence
 
-Implementare e testare editing interno, delete parziale/totale, orphaning, undo/redo, copy/paste e policy cut/paste documentata in `ARCHITECTURE.md`.
+Implementare per entrambi i sottotipi editing interno e ai bordi, delete parziale/totale, undo/redo, copy/paste, cut/paste verificato e ambiguo, serializzazione, reload, frammentazione contigua e input manipolato. La perdita dell'ultima occurrence porta a `orphan` soltanto un Concept prima attivo; una Entity resta `active` e nessun KnowledgeObject viene eliminato. Il paste genera un nuovo `occurrenceId` mantenendo `knowledgeObjectId`/`objectType`.
 
-Gate: tutte le invarianti `INV-OCC-*` applicabili coperte da test verdi.
+Gate: tutte le invarianti `INV-OCC-*` applicabili coperte per Concept ed Entity, inclusi ID globali e discriminator incoerenti, da test verdi.
 
 ## FASE 5 — Sincronizzazione DB ↔ documento
 
-Implementare estrazione, validazione e riconciliazione transazionale degli ID, stati `active`/`detached`/`deleted`, optimistic concurrency e diagnostica delle inconsistenze.
+Implementare estrazione, validazione e riconciliazione transazionale di tutte le KnowledgeOccurrence: presenza nel documento e nel DB, nuovi ID dichiarati, ID assenti o duplicati, intervalli disgiunti, KnowledgeObject inesistenti, appartenenza errata, discriminator incoerenti, stati `active`/`detached`/`deleted` e optimistic concurrency. SemanticBlock e FieldValue non vengono inferiti dal documento; i riferimenti editoriali arrivano soltanto nella FASE 10.1.1 e non duplicano il dato autorevole.
 
 Gate: salvataggi ripetuti idempotenti; conflitti e documenti corrotti non producono modifiche parziali o cancellazioni definitive.
 
-## FASE 6 — Concept Inspector
+## FASE 6 — Inspectors e popover
 
-Mostrare proprietà del Concept e occurrence correnti estratte dai documenti, raggruppate con Document e Context. Il click naviga alla occurrence tramite ID.
+Introdurre Concept Inspector ed Entity Inspector e aprire quello appropriato dal popover di `knowledgeOccurrence`. Il Concept Inspector mostra inizialmente canonical name, descrizione e occurrence; l'Entity Inspector nome, EntityType e occurrence. Aggiungere archive/restore espliciti per Concept, Entity ed EntityType; i tipi referenziati archiviati restano validi per le Entity esistenti. Alias, EntityIdentifier, Context derivati, KnowledgeRelation, SemanticBlock e Source ampliano gli inspector soltanto dopo le rispettive fasi. Il testo delle occurrence viene sempre estratto dai Document.
 
-Gate: nessuna copia obsoleta del testo; navigazione affidabile dopo editing e reload.
+Gate: nessuna copia obsoleta del testo o dato di presentazione persistito; navigazione affidabile dopo editing/reload e scelta dell'inspector coerente con `objectType`.
 
-## FASE 7 — Alias
+## FASE 6.1 — Lifecycle e cancellazione dei Document
 
-CRUD Alias e ricerca Concept tramite canonical name o Alias. La modifica degli Alias non modifica le occurrence.
+Introdurre `Document.status = active|archived|trashed`, archive, trash e restore non distruttivi. Gli archiviati sono in sola lettura e ricercabili con scope esplicito; i trashed compaiono soltanto nella vista di recupero. Entrambi conservano contenuto, associazioni e stato delle KnowledgeOccurrence. Il purge fisico è un comando di manutenzione separato con preview, backup, controllo di figli, riferimenti entranti ed evidence; solo dopo tali verifiche rimuove le manifestazioni Document-owned senza eliminare KnowledgeObject o dati Entity-owned. Non è un `DELETE` CRUD implicito.
 
-Gate: ambiguità degli Alias gestita mostrando i Concept distinti; invarianti Alias verdi.
+Gate: archive/trash/restore coperti da test; nessuna cascade verso KnowledgeObject o dati strutturati; purge bloccato in presenza di riferimenti non gestiti e rollback completo su errore.
+
+## FASE 7 — ConceptAlias ed EntityIdentifier
+
+Implementare CRUD ConceptAlias e EntityIdentifier come modelli distinti. EntityIdentifier conserva `scheme`, `value`, `normalized_value` e `authority_or_namespace`: ticker, CIK, LEI e identificatori clinici non sono Alias, mentre proprietà come exchange possono essere FieldValue. `scheme` è lowercase stabile, authority assente è `NULL` e ogni scheme dichiara una policy versionata di normalizzazione/case-sensitivity. La creazione di occurrence non promuove il testo ad Alias o Identifier.
+
+Gate: ambiguità degli Alias gestita mostrando Concept distinti; duplicati normalizzati nella stessa Entity rifiutati; collisioni tra Entity producono candidati duplicati senza merge automatico; authority/namespace partecipa all'identità dell'Identifier.
 
 ## FASE 8 — Context
 
-CRUD di Context e sub-context a profondità arbitraria, breadcrumb, move aciclico di interi rami, assegnazione di un Context principale al Document, filtro `exact`/`subtree` e raggruppamento occurrence per Context. La cancellazione di nodi con figli o Document richiede riassegnazione esplicita.
+CRUD di Context e sub-context a profondità arbitraria, breadcrumb, move aciclico di interi rami, assegnazione di un Context principale al Document, filtro `exact`/`subtree` e raggruppamento occurrence per Context. Concept, Entity ed EntityType vengono filtrati attraverso il percorso esplicito Context→Document→KnowledgeOccurrence→KnowledgeObject; SemanticBlock si aggiunge allo stesso percorso dopo la FASE 10.1. Nessuno riceve silenziosamente `context_id`. La cancellazione di nodi con figli o Document richiede riassegnazione esplicita.
 
-Gate: lo stesso Concept compare in più Context senza duplicazione; query ricorsive, move, anti-ciclo, filtro subtree e cancellazione prudente coperti da test verdi.
+Gate: lo stesso Concept o Entity compare in più Context senza duplicazione; query derivate per entrambi i sottotipi, query ricorsive, move, anti-ciclo, filtro subtree e cancellazione prudente coperti da test verdi.
 
 ## FASE 9 — Tag
 
-CRUD e assegnazione/rimozione Tag, ricerca e filtro, sempre separati da Concept e Context.
+CRUD e assegnazione/rimozione Tag ai Document, ricerca e filtro, sempre separati da Concept, Entity, EntityType, Template e FieldValue. Il filtro di KnowledgeObject è derivato tramite Document e KnowledgeOccurrence; SemanticBlock e FieldValue entrano dopo il Template System. Un'assegnazione diretta richiederebbe una nuova decisione architetturale.
 
-Gate: query singole e combinate `Concept × Context × Tag` corrette, incluso il caso di nomi uguali.
+Gate: query singole e combinate `KnowledgeObject × Context × Tag` corrette per Concept ed Entity, incluso il caso di nomi uguali nelle dimensioni distinte.
 
-## FASE 10 — Ricerca globale
+## FASE 10 — Full text e semantic search
 
-FTS5 sul plain text e risultati categorizzati per Text, Concepts, Aliases/Occurrences, Contexts, Tags e Relations. Distinguere string matching da Concept matching.
+Introdurre FTS5 su titolo e `Document.plain_text` e risultati categorizzati per Text, Concept, ConceptAlias, Entity, EntityIdentifier, EntityType, KnowledgeOccurrence, Context e Tag. KnowledgeRelation, DocumentNote, commenti e rich-text FieldValue entrano soltanto dopo le fasi che li introducono. Distinguere sempre string matching da matching per identità Concept/Entity.
 
-Gate: ricerca Alias raggiunge il Concept anche senza match nel canonical name; indici ricostruibili dal dato autorevole.
+Gate: Alias e Identifier raggiungono il rispettivo KnowledgeObject senza confondere i namespace; risultati dichiarano categoria e percorso; indici ricostruibili dai dati autorevoli.
 
-## FASE 11 — Relations
+## FASE 10.1 — Template System
 
-CRUD di archi diretti tra Concept, tipi iniziali suggeriti e predicati custom.
+Introdurre CRUD utente di Template/TemplateField, SemanticBlock multipli per Entity e FieldValue tipizzati, inclusi tipi multi e collegamento Concept opzionale. SemanticBlock resta Entity-owned e non è highlight, occurrence, range o copia nel `document_json`. Aggiungere raccomandazioni molti-a-molti ordinate EntityType↔Template per guidare la UI senza imporre compatibilità rigida. `source_reference` resta disabilitato fino alla FASE 16.
 
-Gate: direzione e molteplicità preservate; nessun nodo automatico Context/Tag.
+Gate: field e blocchi ordinati; payload, appartenenza e cardinalità validati atomicamente; rinomina preserva l'ID; il normale CRUD blocca cambio tipo/cardinalità quando esistono valori e un'eventuale migrazione usa un comando separato con preview e transazione atomica; nessuna creazione automatica di Concept e nessun overwrite implicito dei valori manuali.
 
-## FASE 12 — Provenance delle relazioni
+## FASE 10.1.1 — Riferimenti editoriali a Entity e SemanticBlock
 
-Associare Relation a occurrence evidence e navigare al passaggio originario.
+Introdurre i nodi `entityReference` e `semanticBlockReference` come riferimenti/rendering derivati. Ogni collocazione conserva `referenceId` e ID della destinazione; non incorpora nome, Template o FieldValue autorevoli. Copy/paste rigenera `referenceId` mantenendo la destinazione, cut/paste interno verificato può conservarlo e input manipolato non crea Entity o SemanticBlock.
 
-Gate: evidence valida, navigabile e resistente al normale editing dell'occurrence.
+Gate: destinazioni validate, delete/undo/reload e clipboard coperti da test; nessun payload strutturato duplicato nel `document_json`; export e inspector possono risolvere entrambi i riferimenti.
+
+## FASE 10.2 — Structured and Combined Search
+
+Ricercare EntityType, Template, TemplateField e FieldValue sulle colonne tipizzate e combinare full text, Concept, Entity, Context e Tag tramite percorsi espliciti. Il collegamento tra Entity e Document avviene normalmente tramite KnowledgeOccurrence; numeri, boolean, date, misure, valute e reference non vengono confrontati con cast generici a testo.
+
+Gate: query strutturate e combinate producono risultati e conteggi ripetibili, dichiarano il percorso del match e non confondono string matching, identità semantica e payload tipizzati.
+
+## FASE 11 — KnowledgeRelation
+
+CRUD di archi diretti Concept↔Concept, Entity↔Entity ed Entity↔Concept, tipi iniziali suggeriti e predicati custom. Co-occurrence, DocumentLink, FieldValue→Concept, Context e Tag non generano automaticamente KnowledgeRelation.
+
+Gate: direzione, sottotipo degli estremi e molteplicità preservati; nessun nodo automatico Context/Tag.
+
+## FASE 12 — Provenance delle relazioni e dei dati
+
+Associare KnowledgeRelation e dati derivati a evidence verificabili già disponibili: Document, KnowledgeOccurrence, SemanticBlock e FieldValue. Ogni famiglia di destinazione usa un'associazione dedicata, non una FK polimorfica debole. Source e SourceLocator estendono questi percorsi nella FASE 16; non vengono anticipati.
+
+Gate: evidence valida, navigabile e resistente al normale editing; ogni output `derived` conserva il percorso verso i dati autorevoli e nessun target inesistente o di tipo errato viene accettato.
 
 ## FASE 13 — Compare
 
-Workspace per confrontare 2–4 Concept per proprietà, Context, Document, Relation e occurrence.
+Workspace con modalità separate Compare Concepts e Compare Entities. La prima confronta descrizione, Alias, Context derivati, Relation e occurrence; la seconda usa EntityType, EntityIdentifier, Context derivati, Relation, occurrence e Template condivisi per allineare FieldValue. Una modalità mista non viene introdotta senza un caso d'uso esplicito.
 
-Gate: confronto basato solo sulla conoscenza persistita, senza testo generato da AI.
+Gate: confronto basato solo sulla conoscenza persistita, colonne Entity allineate per TemplateField stabile e nessun testo generato da AI.
 
-## FASE 14 — Concept × Context
+## FASE 14 — Matrix e Context views
 
-Vista matriciale e drill-down delle celle verso occurrence, Document, co-Concept e Source disponibili.
+Viste `Concept × Context`, `Entity × Context`, `EntityType × Context`, `Template × Context` e filtri FieldValue×Context. Entity, Template e FieldValue raggiungono il Context tramite Document→KnowledgeOccurrence(entity)→Entity→SemanticBlock. Il drill-down mostra Document, occurrence, co-KnowledgeObject e Source quando disponibili.
 
-Gate: conteggi e filtri coerenti con le query strutturate.
+Gate: conteggi e filtri coerenti con le query strutturate e ogni cella dichiara il percorso che ha prodotto il match.
 
 ## FASE 15 — Knowledge Map
 
-Valutare Cytoscape.js e Sigma.js, quindi usare una libreria esistente. Nodi Concept, archi Relation; Context e Tag solo come filtri/grouping/coloring.
+Valutare Cytoscape.js e Sigma.js, quindi usare una libreria esistente. Consentire viste Concept only, Entity only e Concept+Entity; i nodi KnowledgeObject sono distinti visivamente e gli archi sono KnowledgeRelation. SemanticBlock, TemplateField, FieldValue, Context, Tag e KnowledgeOccurrence non diventano nodi principali; Context e Tag restano filtri/grouping/coloring.
 
-Gate: inspector, provenance e filtri navigabili; occurrence non trasformate in nodi principali.
+Gate: inspector, provenance e filtri navigabili; occurrence e dati strutturati consultabili senza essere trasformati in nodi principali.
 
 ## FASE 16 — Sources
 
-Implementare catalogo Source riutilizzabile e ricercabile, inclusa la vista libri con metadata strutturati, SourceContributor ordinati e SourceIdentifier normalizzati. Il dialog “Aggiungi fonte” permette di scegliere una fonte già presente oppure crearla e segnala duplicati senza fonderli automaticamente. Implementare SourceLocator, DocumentSource per l'intero Document, SourceAnchor/SourceCitation per parti di testo e associazioni tipizzate verso Concept, Occurrence e Relation.
+Implementare catalogo Source riutilizzabile e ricercabile, inclusa la vista libri con metadata strutturati, SourceContributor ordinati e SourceIdentifier normalizzati. Source resta distinta da Entity anche quando rappresentano lo stesso libro o paper: l'eventuale collegamento è esplicito. Implementare SourceLocator, DocumentSource, SourceAnchor/SourceCitation e associazioni dedicate e verificabili verso KnowledgeObject, KnowledgeOccurrence, SemanticBlock, FieldValue e KnowledgeRelation. Abilitare il payload FieldValue `source_reference` e la provenance verso Source/SourceLocator.
 
 Gate: la stessa fonte è riusabile senza duplicazione; fonte dell'intero Document e fonte di range sono distinguibili; contributor multipli sono ordinati e identificatori multipli normalizzati/ricercabili; duplicati nella stessa Source sono rifiutati e candidati tra Source diverse non vengono fusi automaticamente; anchor stabile attraverso edit/delete/undo/copy/paste/reload; provenance precisa senza foreign key polimorfiche non verificabili.
 
 ## FASE 17 — Immagini e figure
 
-Implementare upload di PNG/JPEG/WebP, storage locale sicuro, record Asset e nodo immagine TipTap inline/block con alt text e proprietà di visualizzazione. Consentire inserimento, spostamento, ridimensionamento previsto dalla UI, copy/paste, delete, undo/redo e reload. Collegamenti a Source, Document, Concept e occurrence restano associazioni esplicite.
+Implementare upload di PNG/JPEG/WebP, storage locale sicuro, record Asset e nodo immagine TipTap inline/block con alt text e proprietà di visualizzazione. Consentire inserimento, spostamento, ridimensionamento previsto dalla UI, copy/paste, delete, undo/redo e reload. Collegamenti verso Document, KnowledgeObject, SemanticBlock, FieldValue, Source e SourceLocator usano associazioni esplicite e verificabili; Asset non diventa Source, Entity o FieldValue.
 
 Gate: nessun base64 nel documento, MIME e limiti verificati lato server, file lifecycle recuperabile, immagini persistenti dopo reload e riferimenti integri e testati.
 
 ## FASE 18 — Commenti
 
-Thread ancorati a range tramite struttura/remapping ProseMirror, con resolve, reopen e jump.
+Distinguere thread su testo, ancorati tramite struttura/remapping ProseMirror e opzionalmente associati alla KnowledgeOccurrence nel range, da thread su oggetti strutturati riferiti con associazioni dedicate a KnowledgeObject, KnowledgeRelation, SemanticBlock o FieldValue. I commenti su oggetto non simulano un falso range testuale.
 
-Gate: anchor stabile attraverso una matrice di editing; offset assoluti non usati come unica identità.
+Gate: anchor testuale stabile attraverso una matrice di editing; subject strutturati verificati da FK; offset assoluti e target polimorfici deboli non usati come identità.
 
 ## FASE 19 — Command Palette
 
-Palette unica per ricerca e azioni già esistenti. Non introduce nuovi modelli di dominio.
+Palette unica per ricerca e azioni già esistenti, incluse creazione/apertura di Concept ed Entity, associazione a selezione, EntityType, EntityIdentifier, Template/SemanticBlock, inserimento dei riferimenti Entity/SemanticBlock, KnowledgeRelation, Source e Compare. Non introduce nuovi modelli di dominio e non duplica la logica applicativa dei comandi.
 
 Gate: accessibilità da tastiera e nessuna duplicazione della logica dei comandi.
 
 ## FASE 20 — Ipertesto, indice e formule
 
-Introdurre DocumentAnchor stabili sugli heading, indice navigabile derivato, DocumentLink verso un intero Document o un suo anchor, backlink e formule inline/block. I link usano UUIDv7 e non titoli o slug come identità; non vengono trasformati in Relation tra Concept.
+Introdurre DocumentAnchor stabili sugli heading, indice navigabile derivato, DocumentLink verso un intero Document o un suo anchor, backlink e formule inline/block. I link usano UUIDv7 e non titoli o slug come identità; DocumentLink resta distinto da KnowledgeRelation e non crea Concept o Entity. La convivenza con un mark `knowledgeOccurrence` non modifica il KnowledgeObject; Entity e SemanticBlock non usano testo, titolo o slug come identità autorevole.
 
 Gate: indice e link restano navigabili dopo rinomina, spostamento, editing, save/reload e undo; copy/paste e cut/paste rispettano le identità; target o anchor mancanti sono diagnosticati senza cascade o riscritture silenziose; formule conservano esattamente il sorgente e sopravvivono al round trip.
 
 ## FASE 21 — Document lunghi e note editoriali
 
-Introdurre la gerarchia aciclica di Document con parent, ruolo e ordine, mantenendo possibile il Document monolitico. Implementare split/move strutturale atomico, parti/capitoli/sezioni, DocumentNote a piè di pagina e finali di capitolo/Document, numerazione derivata e preview editoriale non paginata. In questa fase il body delle note supporta contenuto base, formule e DocumentLink; le citazioni bibliografiche vi entrano solo nella FASE 22. La copia di una nota rigenera anche le identità dei link incorporati.
+Introdurre la gerarchia aciclica di Document con parent, ruolo e ordine, mantenendo possibile il Document monolitico. Implementare split/move strutturale atomico, parti/capitoli/sezioni, DocumentNote a piè di pagina e finali di capitolo/Document, numerazione derivata e preview editoriale non paginata. Lo split trasferisce tutte le KnowledgeOccurrence coinvolte indipendentemente da `objectType`, oltre alle altre identità documentali; SemanticBlock resta Entity-owned e non viene duplicato. In questa fase il body delle note supporta contenuto base, formule e DocumentLink; le citazioni bibliografiche vi entrano solo nella FASE 22.
 
-Gate: un libro monolitico può essere suddiviso in Document figli senza cambiare occurrence, anchor, SourceCitation o link; cicli e ordini duplicati sono rifiutati; rollback non lascia trasferimenti parziali; footnote/endnote resistono a edit, reorder, delete, undo, copy/paste, save/reload e aggregazione del libro.
+Gate: un libro monolitico può essere suddiviso in Document figli senza cambiare KnowledgeOccurrence, anchor, SourceCitation o link e senza duplicare SemanticBlock; cicli e ordini duplicati sono rifiutati; rollback non lascia trasferimenti parziali; footnote/endnote resistono a edit, reorder, delete, undo, copy/paste, save/reload e aggregazione del libro.
 
 ## FASE 22 — Reference manager e bibliografia
 
-Costruire il reference manager locale sopra Source: CRUD e ricerca avanzata, contributor e identificatori, import/deduplicazione assistita, BibliographicCitation multi-item con locator, scelta dello stile e bibliografia derivata. Le citazioni sono abilitate sia nel contenuto principale sia nei body delle DocumentNote, con identità univoca nell'aggregato del Document. Provenance di range e citazione visibile restano distinte.
+Costruire il reference manager locale sopra Source: CRUD e ricerca avanzata, contributor e SourceIdentifier, import/deduplicazione assistita, BibliographicCitation multi-item con locator, scelta dello stile e bibliografia derivata. SourceIdentifier (DOI, ISBN, PMID) resta distinto da EntityIdentifier (ticker, CIK, LEI o identificatore clinico). Un paper/libro rappresentato sia come Source sia come Entity usa un collegamento esplicito e non fonde i lifecycle. Le citazioni sono abilitate nel contenuto principale e nelle DocumentNote; provenance di range, provenance di dati e citazione visibile restano distinte.
 
 Gate: cambiare stile rigenera citazioni e bibliografia senza alterare Source; citazioni multi-fonte e locator sono coerenti; delete non distrugge fonti condivise; merge richiede conferma ed è transazionale; bibliografia include correttamente fonti citate ed eventuali fonti aggiunte esplicitamente.
 
+## FASE 22.1 — Provider / Autocomplete Layer
+
+Introdurre in futuro un registry di Provider configurabili e mapping verso TemplateField per autocomplete di Entity, EntityIdentifier, FieldValue e metadata Source e per valorizzazioni multi-field. Ogni proposta conserva `origin`, `provider_id`, `retrieved_at` e Source/SourceLocator quando disponibile. Il core resta offline e funzionante senza provider; adapter e dipendenze devono essere gratuiti e verificati per licenza.
+
+Gate: nessun valore manuale viene sovrascritto silenziosamente; ogni import è una proposta confermabile con provenance; provider differenti condividono il contratto generico senza nuove tabelle di dominio per adapter; indisponibilità di rete non compromette il core.
+
 ## FASE 23 — Export documentale
 
-Implementare export derivato dal `document_json` verso HTML, DOCX, OpenDocument Text (`.odt`) e LaTeX (`.tex`), senza servizi a pagamento. Definire una mappatura esplicita per struttura e stili semantici, gerarchia del libro, indice, formule, immagini, footnote/endnote, citazioni, bibliografia, occurrence e link tra Document; l'export di un contenitore percorre ricorsivamente i figli.
+Implementare export derivato dal `document_json`, dai body delle note e dai record necessari verso HTML, DOCX, OpenDocument Text (`.odt`) e LaTeX (`.tex`), senza servizi a pagamento. Definire una mappatura esplicita per struttura, gerarchia, indice, formule, immagini, note, citazioni, bibliografia, KnowledgeOccurrence di entrambi i tipi, riferimenti Entity/SemanticBlock introdotti nella FASE 10.1.1, FieldValue, KnowledgeRelation, provenance e DocumentLink. SemanticBlock può essere reso come tabella/sezione o degradato con diagnostica, mai letto da `plain_text`.
 
-Gate: una fixture rappresentativa comprendente libro gerarchico, indice, formule, immagini, note, citazioni e bibliografia viene esportata nei quattro formati senza mutare i dati; link e anchor interni sono deterministici; ogni perdita o degradazione è dichiarata e testata, mai silenziosa; test e build sono verdi.
+Gate: una fixture rappresentativa comprendente libro gerarchico, dati Concept/Entity e strutturati, indice, formule, immagini, note, citazioni e bibliografia viene esportata nei quattro formati senza mutare i dati; ogni perdita o degradazione è dichiarata e testata, mai silenziosa.
 
 ## FASE 24 — Learning Layer
 
-Question, Flashcard e ReviewItem con provenance verso il knowledge layer.
+Question, Flashcard e ReviewItem possono derivare da Concept, Entity, KnowledgeOccurrence, SemanticBlock, FieldValue, KnowledgeRelation, Source e SourceLocator e conservano associazioni di provenance verificabili.
 
-Gate: nessun elemento didattico scollegato dalle fonti di conoscenza che lo hanno originato.
+Gate: nessun elemento didattico scollegato dalle fonti di conoscenza che lo hanno originato; derivazioni multi-oggetto mantengono tutti gli estremi dichiarati.
 
 ## FASE 25 — AI Layer
 
-Solo suggerimenti confermabili: Concept, Alias, Relation, sintesi, confronti, domande e lacune. Il core resta pienamente funzionante senza provider AI.
+Solo suggerimenti confermabili: Concept, Entity, EntityType, ConceptAlias, EntityIdentifier, Template, FieldValue, KnowledgeRelation, collegamento FieldValue→Concept, sintesi, confronti e field mancanti. Gli output usano `origin = ai_suggested`, conservano provenance e non sovrascrivono valori manuali. Il core resta pienamente funzionante senza provider AI.
 
 Gate: nessuna struttura permanente creata senza conferma esplicita; output con provenance.
 
 ## FASE 26 — AI Context Builder
 
-Introdurre il confine `KnowledgeRepository → ContextBuilder → LLM Provider`, con input ispezionabile e riferimenti conservabili.
+Introdurre il confine `KnowledgeRepository → ContextBuilder → LLM Provider`. Il builder seleziona Concept, Entity, KnowledgeOccurrence, EntityIdentifier, SemanticBlock, FieldValue, Context, Tag, KnowledgeRelation, Source e provenance in base al caso d'uso: Explain Concept, Analyze Entity, Compare Concepts/Entities, Review SemanticBlock o Generate Flashcards. Non passa indiscriminatamente l'intero database.
 
 Gate: il provider non interroga direttamente il database e gli output importanti dichiarano le evidenze usate.
+
+## Dipendenze vincolanti tra fasi
+
+```text
+Phase 1.1 → Highlight → KnowledgeOccurrence Concept/Entity
+→ invarianti editor → sincronizzazione → Inspectors → Document lifecycle
+
+Entity + EntityType → EntityIdentifier
+
+Template System → SemanticBlock → FieldValue
+→ Entity/SemanticBlock references → Structured Search → Entity Compare / Matrix
+
+KnowledgeRelation → provenance Relation → Knowledge Map
+
+Sources → source_reference → provenance FieldValue
+Sources + Template System + Reference Manager → Provider Layer
+```
+
+Una fase può esporre soltanto i dati già introdotti. Inspector, ricerca, compare, provenance ed export si ampliano incrementalmente senza anticipare ownership o tabelle delle fasi successive.
 
 ## Milestone prioritario
 
 Le FASI 1–6 costituiscono il primo milestone reale. Non si procede a mappe, learning layer o AI finché questa sequenza non è robusta:
 
 ```text
-crea Document → scrivi rich text → crea Concept da selezione
-→ modifica mantenendo l'Occurrence → crea seconda Occurrence
-→ ispeziona entrambe → cancella una senza perdere l'altra o il Concept
+crea Document → scrivi rich text → crea Concept o Entity da selezione
+→ modifica mantenendo la KnowledgeOccurrence → crea seconda occurrence
+→ ispeziona entrambi i sottotipi → cancella una manifestazione senza perdere il KnowledgeObject
 → salva → reload coerente
 ```

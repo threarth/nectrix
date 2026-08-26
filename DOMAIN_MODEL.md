@@ -3,13 +3,24 @@
 ## 1. Linguaggio ubiquitario
 
 ```text
-Concept  = cosa significa / di che cosa sto parlando
-Context  = in quale ambito lo sto studiando o usando
-Tag      = come voglio classificare o gestire il materiale
-Document = unità editoriale, da un testo breve fino a un libro
+KnowledgeObject = identità interrogabile che è esclusivamente Concept oppure Entity
+Concept         = conoscenza astratta / di che cosa sto parlando
+Entity          = cosa specifica sulla quale raccolgo dati
+Context         = in quale ambito lo sto studiando o usando
+Tag             = come voglio classificare o gestire il materiale
+SemanticBlock   = dati strutturati riferiti a una Entity secondo un Template
+Document        = unità editoriale, da un testo breve fino a un libro
 ```
 
-Concept, Context e Tag sono dimensioni ortogonali. L'uguaglianza del testo dei loro nomi non implica uguaglianza semantica o referenziale. Document è invece l'unità editoriale che le ospita o le organizza.
+`KnowledgeObject` è una generalizzazione chiusa usata soltanto per identità, occurrence e relazioni comuni:
+
+```text
+KnowledgeObject
+├── Concept
+└── Entity
+```
+
+Concept ed Entity sono binari paralleli: il primo rappresenta conoscenza astratta, la seconda una cosa specifica. Nessuno dei due è un Context o un Tag. Concept, Entity, Context e Tag restano dimensioni distinte; l'uguaglianza dei loro nomi non implica uguaglianza semantica o referenziale. Document è l'unità editoriale che le ospita o le organizza.
 
 ## 2. Diagramma logico iniziale
 
@@ -17,10 +28,20 @@ Concept, Context e Tag sono dimensioni ortogonali. L'uguaglianza del testo dei l
 Context (parent) 1 ──< Context (children)
 Context 1 ──< Document >──< DocumentTag >── 1 Tag
 
-Document 1 ──< Occurrence >── 1 Concept
-                              ├──< ConceptAlias
-                              ├──< Relation (source)
-                              └──< Relation (target)
+KnowledgeObject <|── Concept ──< ConceptAlias
+                <|── Entity >── 1 EntityType
+                         └──< EntityIdentifier
+
+Document 1 ──< KnowledgeOccurrence >── 1 KnowledgeObject
+KnowledgeObject 1 ──< KnowledgeRelation (source/target)
+
+Entity 1 ──< SemanticBlock >── 1 Template ──< TemplateField
+SemanticBlock 1 ──< FieldValue >── 1 TemplateField
+FieldValue ──> 0..1 Concept (collegamento semantico opzionale)
+
+Source/SourceLocator ── associazioni dedicate ──>
+  Document | KnowledgeObject | KnowledgeOccurrence |
+  SemanticBlock | FieldValue | KnowledgeRelation
 
 Document (parent) 1 ──< Document (children)
 Document 1 ──< DocumentAnchor
@@ -35,7 +56,7 @@ Document 1 ──< DocumentNote
         └──< SourceIdentifier
 ```
 
-Comment, Source, Asset, DocumentNote e citazioni bibliografiche sono definiti concettualmente, ma non entrano nello schema iniziale eseguibile.
+Comment, Source, Asset, DocumentNote e citazioni bibliografiche sono definiti concettualmente, ma non entrano nello schema eseguibile della Phase 1.1. `KnowledgeObject`, Concept, Entity, occurrence, relazioni e dati strutturati entrano invece con la migration additiva della Phase 1.1, senza API o UI premature.
 
 ## 3. Entità
 
@@ -56,33 +77,49 @@ Rappresenta un documento editabile.
 | `document_json` | JSON | fonte autorevole del contenuto |
 | `plain_text` | text | derivato dal contenuto principale e dalle note editoriali attive, non modificabile direttamente |
 | `context_id` | UUIDv7 nullable | FK verso Context; un solo Context principale |
+| `status` | enum | `active`, `archived`, `trashed`; introdotto nella FASE 6.1 |
 | `revision` | integer | parte da `0`, cresce di uno a ogni salvataggio accettato |
 | `created_at` | timestamp | immutabile |
 | `updated_at` | timestamp | aggiornato a ogni modifica persistita |
 
 `revision` fa parte del modello minimo: il client deve inviare la revisione letta e l'API deve rifiutare un update se nel frattempo il Document è cambiato.
 
-La tabella descrive il modello di arrivo, non lo schema da creare tutto insieme. La FASE 1 introduce soltanto `id`, `title`, `document_json`, `plain_text`, `revision` e timestamp. `context_id` entra nella FASE 8; `subtitle`, `document_type`, `parent_document_id`, `structural_role`, `sort_order` e `language` entrano con migrazioni nella FASE 21. Fino a quella fase `plain_text` deriva dal solo contenuto principale; dalla FASE 21 include anche le DocumentNote attive nell'ordine dei riferimenti.
+La tabella descrive il modello di arrivo, non lo schema da creare tutto insieme. La FASE 1 introduce soltanto `id`, `title`, `document_json`, `plain_text`, `revision` e timestamp. `status` entra nella FASE 6.1, `context_id` nella FASE 8; `subtitle`, `document_type`, `parent_document_id`, `structural_role`, `sort_order` e `language` entrano con migrazioni nella FASE 21. Fino a quella fase `plain_text` deriva dal solo contenuto principale; dalla FASE 21 include anche le DocumentNote attive nell'ordine dei riferimenti.
 
 Tutti i timestamp di dominio sono stringhe `TEXT` RFC 3339 in UTC con millisecondi e forma canonica `YYYY-MM-DDTHH:mm:ss.SSSZ`. `created_at` e `updated_at` coincidono alla creazione; un update accettato modifica `updated_at`, mentre un tentativo rifiutato non modifica alcun timestamp.
 
 Un Document può contenere zero o più occurrence e avere zero o più Tag. Può rappresentare un testo breve, un elaborato o un libro senza cambiare identità o tabella. I collegamenti ipertestuali usano l'ID stabile del Document, mai il titolo, come destinazione autorevole.
 
-Un Document può avere al massimo un parent e molti figli, a profondità arbitraria. La gerarchia è editoriale, non un Context: raggruppa parti e capitoli senza cambiare il significato dei Concept o l'ambito di studio. Sono vietati cicli, auto-parenting e duplicazioni dello stesso ordine tra fratelli.
+Un Document può avere al massimo un parent e molti figli, a profondità arbitraria. La gerarchia è editoriale, non un Context: raggruppa parti e capitoli senza cambiare il significato dei KnowledgeObject o l'ambito di studio. Sono vietati cicli, auto-parenting e duplicazioni dello stesso ordine tra fratelli.
+
+Archiviare o spostare nel trash un Document non elimina il contenuto né i KnowledgeObject collegati e non cambia lo stato persistente delle sue KnowledgeOccurrence. Un Document `archived` è in sola lettura nei flussi ordinari, escluso dalle liste predefinite ma ricercabile con scope esplicito; un Document `trashed` compare soltanto nella vista di recupero. Il purge fisico è un comando di manutenzione distinto, con preview, backup e verifica transazionale di figli, link, evidence e associazioni; solo allora elimina il Document e le manifestazioni Document-owned, senza eliminare KnowledgeObject, SemanticBlock o FieldValue. Non è un endpoint CRUD ordinario.
 
 Un Document senza parent usa `structural_role = standalone` e `sort_order = NULL`. Un figlio usa un ruolo strutturale non `standalone` e un ordine univoco tra i fratelli.
 
 Un libro piccolo può rimanere un singolo Document con capitoli rappresentati da heading semantici. Quando serve, un Document `book` può diventare contenitore di Document figli ordinati. Il contenuto proprio del parent, se presente, precede i figli nell'export; front matter e back matter strutturati usano preferibilmente figli con ruolo esplicito.
 
-La suddivisione di contenuto già esistente usa un comando strutturale esplicito e transazionale. Il comando sposta blocchi completi e trasferisce l'ownership di Occurrence, SourceAnchor, DocumentAnchor, DocumentLink sorgenti, DocumentNote, BibliographicCitation e CommentThread coinvolti; aggiorna inoltre `target_document_id` dei link che puntano ad anchor trasferiti. Gli ID restano invariati. Il normale cut/paste tra Document non gode di questa eccezione e segue le regole prudenti di nuova identità.
+La suddivisione di contenuto già esistente usa un comando strutturale esplicito e transazionale. Il comando sposta blocchi completi e trasferisce l'ownership di KnowledgeOccurrence di entrambi i sottotipi, SourceAnchor, DocumentAnchor, DocumentLink sorgenti, DocumentNote, BibliographicCitation e CommentThread testuali coinvolti; aggiorna inoltre `target_document_id` dei link che puntano ad anchor trasferiti. Gli ID restano invariati. SemanticBlock e FieldValue restano appartenenti alla Entity e non vengono copiati; cambiano soltanto eventuali associazioni documentali esplicite. Il normale cut/paste tra Document non gode di questa eccezione e segue le regole prudenti di nuova identità.
 
-### 3.2 Concept
+### 3.2 KnowledgeObject
 
-Rappresenta un'entità di conoscenza globale, indipendente da Document e parole usate per esprimerla.
+Super-tipo persistito e chiuso di Concept ed Entity. Conserva soltanto identità, discriminator e timestamp comuni; non contiene un nome generico né assorbe Context o Tag.
 
 | Campo | Tipo logico | Regole |
 |---|---|---|
-| `id` | UUIDv7 | primary key |
+| `id` | UUIDv7 | primary key globale del KnowledgeObject |
+| `object_type` | enum | `concept` oppure `entity`; immutabile |
+| `created_at` | timestamp | immutabile |
+| `updated_at` | timestamp | aggiornato con il relativo sottotipo |
+
+Ogni record ha esattamente un record di sottotipo coerente. Il discriminator viene ripetuto soltanto dove consente a SQLite di applicare foreign key composte e non è una scorciatoia per introdurre nuovi sottotipi.
+
+### 3.3 Concept
+
+Rappresenta conoscenza astratta globale, indipendente da Document e parole usate per esprimerla. È un sottotipo di KnowledgeObject distinto da Entity.
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key e FK verso KnowledgeObject `concept` |
 | `canonical_name` | string | obbligatorio; nome di visualizzazione |
 | `description` | text | opzionale |
 | `status` | enum | `active`, `orphan`, `archived` |
@@ -111,7 +148,7 @@ La riconciliazione non modifica automaticamente `archived`. `orphan` è quindi i
 
 Il nome canonico non è condiviso con Context o Tag. Inizialmente non viene imposta unicità globale case-insensitive tra Concept: omonimi reali e duplicati da risolvere devono essere rappresentabili. La UI deve però segnalare corrispondenze esatte e simili prima della creazione.
 
-### 3.3 ConceptAlias
+### 3.4 ConceptAlias
 
 Denominazione alternativa di un Concept; non è una occurrence.
 
@@ -123,14 +160,15 @@ Denominazione alternativa di un Concept; non è una occurrence.
 
 Lo stesso Concept non può avere due alias uguali dopo la normalizzazione definita per la ricerca. Lo stesso alias può appartenere a Concept diversi perché il linguaggio può essere ambiguo. Aggiungere o rimuovere un Alias non modifica il testo e non crea/distrugge occurrence.
 
-### 3.4 Occurrence
+### 3.5 KnowledgeOccurrence
 
-Identità persistente di un intervallo vivo di testo dichiarato istanza di un Concept.
+Identità persistente di un intervallo vivo di testo dichiarato manifestazione di un Concept oppure di una Entity. Nel linguaggio UI può essere abbreviata in “Occurrence”.
 
 | Campo | Tipo logico | Regole |
 |---|---|---|
 | `id` | UUIDv7 globale | primary key; presente nel mark |
-| `concept_id` | UUIDv7 | FK obbligatoria verso Concept; immutabile per l'identità corrente |
+| `knowledge_object_id` | UUIDv7 | FK obbligatoria verso KnowledgeObject; immutabile per l'identità corrente |
+| `object_type` | enum | `concept` o `entity`; deve coincidere con il KnowledgeObject e con il mark |
 | `document_id` | UUIDv7 | FK obbligatoria verso Document; cambia solo con un comando strutturale atomico di split/move |
 | `status` | enum | `active`, `detached`, `deleted` |
 | `created_at` | timestamp | immutabile |
@@ -138,7 +176,7 @@ Identità persistente di un intervallo vivo di testo dichiarato istanza di un Co
 
 Non contiene testo, posizione assoluta o copia autorevole del range. Il testo corrente e la posizione si estraggono dal documento del Document cercando il mark con il suo ID.
 
-Cambiare Concept a un range non muta `concept_id` in place: termina/detacha l'occurrence precedente e ne crea una nuova. L'identità esprime anche l'associazione semantica, non soltanto una decorazione visuale.
+Cambiare KnowledgeObject o passare un range da Concept a Entity non muta l'associazione in place: termina/detacha l'occurrence precedente e ne crea una nuova. L'identità esprime anche l'associazione semantica, non soltanto una decorazione visuale.
 
 Transizioni ammesse:
 
@@ -151,7 +189,133 @@ active|detached + eliminazione esplicita ─────→ deleted
 
 `deleted` non deriva mai dalla normale cancellazione editoriale ed è terminale nel modello iniziale. Un eventuale ripristino futuro dovrà creare una nuova Occurrence oppure introdurre una transizione esplicita con relativa migrazione delle invarianti.
 
-### 3.5 Context
+### 3.6 EntityType
+
+Classificazione configurabile di Entity, mai hardcoded nella UI o nel codice applicativo.
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key |
+| `name` | string | obbligatorio e univoco case-insensitive |
+| `description` | text | opzionale |
+| `status` | enum | `active` oppure `archived` |
+| `created_at` | timestamp | immutabile |
+| `updated_at` | timestamp | aggiornato a ogni modifica |
+
+Esempi sono `Company`, `Lesion`, `Drug`, `Book`, `Paper`, `Person` e `Security`. La Phase 1.1 persiste il tipo senza anticiparne il lifecycle UI; `status` e i comandi archive/restore entrano nella FASE 6. Una EntityType usata da Entity non viene cancellata: può essere archiviata per impedirne nuove assegnazioni, restando valida per le Entity esistenti. Sostituzione e merge sono comandi distinti, confermati e transazionali.
+
+### 3.7 Entity
+
+Rappresenta una cosa specifica sulla quale raccogliere dati, per esempio `Rocket Lab USA`, `Lesione #1` o `Libro Y`.
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key e FK verso KnowledgeObject `entity` |
+| `entity_type_id` | UUIDv7 | FK obbligatoria verso EntityType |
+| `name` | string | nome di visualizzazione obbligatorio |
+| `description` | text | opzionale |
+| `status` | enum | `active` oppure `archived`; non usa lo stato Concept `orphan` |
+
+Una Entity può esistere senza occurrence e senza SemanticBlock, può avere più blocchi anche dello stesso Template e non diventa automaticamente un Concept. La perdita dell'ultima occurrence non ne modifica lo stato: resta `active` finché l'utente non la archivia esplicitamente. Una Source bibliografica può in futuro essere collegata a una Entity, ma non coincide automaticamente con essa: `Libro Y` come oggetto studiato e il record Source usato per una citazione hanno lifecycle e responsabilità differenti.
+
+### 3.8 EntityIdentifier (modello per la FASE 7)
+
+Identificatore strutturato di una Entity; non è un ConceptAlias e non sostituisce un FieldValue descrittivo.
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key |
+| `entity_id` | UUIDv7 | FK obbligatoria verso Entity |
+| `scheme` | string | tipo normalizzato, per esempio `ticker`, `cik`, `lei`, `internal_clinical_id` |
+| `value` | string | forma originale validata e non vuota |
+| `normalized_value` | string | derivato per ricerca e deduplicazione |
+| `authority_or_namespace` | string nullable | autorità che rende interpretabile lo scheme, per esempio `NASDAQ` o `SEC` |
+
+La combinazione normalizzata (`entity_id`, `scheme`, `authority_or_namespace`, `normalized_value`) è univoca nella stessa Entity. `scheme` è una chiave lowercase stabile; authority assente è rappresentata da `NULL`, non da stringa vuota, ed è obbligatoria quando richiesta dallo scheme. `normalized_value` deriva da una policy versionata per scheme che dichiara anche case-sensitivity; non esiste una normalizzazione universale implicita. La stessa identità dichiarata su Entity differenti genera un candidato duplicato, mai un merge automatico. Un ticker usa l'exchange come authority/namespace; proprietà come settore o exchange visualizzato possono anche essere FieldValue, ma non diventano Alias. Creare una Entity o una KnowledgeOccurrence non crea EntityIdentifier dal testo.
+
+### 3.9 Template e TemplateField
+
+Un Template è una definizione utente di struttura riutilizzabile e globale. Dalla FASE 10.1 EntityType e Template possono avere raccomandazioni molti-a-molti ordinate per guidare la UI; non sono vincoli di compatibilità e un Template non raccomandato resta applicabile con scelta esplicita.
+
+| Campo Template | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key |
+| `name` | string | obbligatorio e univoco case-insensitive |
+| `description` | text | opzionale |
+| `status` | enum | `active` oppure `archived` |
+| `created_at`, `updated_at` | timestamp | lifecycle standard |
+
+Ogni TemplateField appartiene a un solo Template:
+
+| Campo TemplateField | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key stabile; il nome può cambiare senza cambiare i valori |
+| `template_id` | UUIDv7 | FK obbligatoria verso Template |
+| `name` | string | label utente obbligatoria |
+| `field_type` | enum | tipo immutabile quando esistono valori |
+| `is_required` | boolean | obbligatorietà applicata ai blocchi completi |
+| `is_searchable` | boolean | il valore partecipa alle viste di ricerca |
+| `is_indexed` | boolean | dichiara la necessità di indice/query efficiente |
+| `sort_order` | integer | univoco nel Template |
+| `options_json` | JSON nullable | opzioni validate per enum/multi-enum |
+| `default_value_json` | JSON nullable | configurazione tipizzata, non un FieldValue già assegnato |
+
+Tipi previsti:
+
+```text
+text, rich_text, number, boolean, enum, date, measurement,
+currency, percentage, entity_reference, concept_reference, url,
+source_reference, multi_enum, multi_entity_reference,
+multi_concept_reference
+```
+
+`source_reference` può essere dichiarato in Phase 1.1, ma un relativo FieldValue non è persistibile finché la FASE Sources non introduce una FK verificabile verso Source. Non viene accettato nel frattempo un UUID privo di vincolo.
+
+### 3.10 SemanticBlock
+
+Istanza di un Template appartenente a una sola Entity. Non è un range evidenziato, una KnowledgeOccurrence o una copia incorporata nel `document_json`. La FASE 10.1.1 può introdurre soltanto un nodo di riferimento e rendering; record SemanticBlock/FieldValue restano autorevoli.
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key |
+| `entity_id` | UUIDv7 | FK obbligatoria verso Entity |
+| `template_id` | UUIDv7 | FK obbligatoria verso Template |
+| `sort_order` | integer | ordine univoco dei blocchi nella Entity |
+| `created_at`, `updated_at` | timestamp | lifecycle standard |
+
+Una Entity può avere più SemanticBlock basati su Template differenti o ripetuti. Il blocco non duplica la definizione dei field: i suoi valori puntano agli ID stabili dei TemplateField.
+
+Dalla FASE 10.1.1 un nodo `semanticBlockReference` può riferire il blocco tramite UUID e renderizzarne una vista derivata. Ogni collocazione possiede un `referenceId` distinto; copy/paste rigenera questo ID mantenendo la destinazione. Il nodo non contiene una copia dei FieldValue e non cambia l'ownership Entity del blocco. Un analogo `entityReference` può riferire una Entity senza trasformarsi in KnowledgeOccurrence: è un riferimento atomico, non la dichiarazione che un range testuale sia una manifestazione dell'Entity.
+
+### 3.11 FieldValue
+
+Valore tipizzato e interrogabile di un TemplateField in un SemanticBlock.
+
+| Campo | Tipo logico | Regole |
+|---|---|---|
+| `id` | UUIDv7 | primary key |
+| `semantic_block_id` | UUIDv7 | FK verso SemanticBlock |
+| `template_field_id` | UUIDv7 | deve appartenere al Template del blocco |
+| `field_type` | enum | deve coincidere con il TemplateField |
+| `ordinal` | integer | `0` per tipi singoli; ordina i valori dei tipi multi |
+| payload tipizzato | colonne dedicate | esattamente la rappresentazione ammessa dal tipo |
+| `linked_concept_id` | UUIDv7 nullable | collegamento semantico opzionale a Concept |
+| `origin` | enum | `manual`, `provider`, `derived`, `ai_suggested` |
+| `provider_id` | string nullable | identificatore stabile del provider configurato futuro |
+| `retrieved_at` | timestamp nullable | obbligatorio con origin `provider` |
+| `created_at`, `updated_at` | timestamp | lifecycle standard |
+
+Testo/enum/URL, rich text JSON, numeri, boolean, date, unità di misura, valuta e reference usano colonne distinte. `measurement` è una coppia numero/unità; misure multidimensionali possono usare field distinti o una cardinalità multi definita esplicitamente dal Template, non una stringa opaca. `percentage` usa un rapporto decimale canonico (`0.125` = `12,5%`) senza limitarlo all'intervallo 0..1, così restano rappresentabili variazioni negative o superiori al 100%. I tipi multi sono rappresentati da più righe ordinate, quindi restano interrogabili.
+
+`linked_concept_id` è indipendente dal valore: per esempio `DWI = restricted` può collegarsi al Concept `Restricted diffusion`. Il collegamento è opzionale e non crea Concept automaticamente. Per `concept_reference`, invece, la reference è il valore stesso.
+
+La provenienza da Source verrà aggiunta contestualmente alla FASE Sources con una FK verificabile. Un provider non aggiorna in place un valore `manual`: propone un nuovo valore o una modifica da confermare. Provider reali, autocomplete e mapping multi-field restano fuori dalla Phase 1.1.
+
+#### Provider configurabile (modello per la FASE 22.1)
+
+`provider_id` diventerà una FK verso una configurazione Provider persistente quando il registry verrà introdotto. Un Provider dichiara tipo di adapter, stato e capacità; mapping dedicati associano le sue chiavi esterne a TemplateField senza cambiare il modello FieldValue. Configurazione precisa, segreti e credenziali restano decisioni della fase e non vengono salvati in chiaro per comodità. Il core non dipende dalla rete e nessun adapter crea tabelle di dominio proprie.
+
+### 3.12 Context
 
 Ambito gerarchico nel quale un Document viene studiato o utilizzato.
 
@@ -163,9 +327,9 @@ Ambito gerarchico nel quale un Document viene studiato o utilizzato.
 
 Sono vietati cicli e auto-parenting. La profondità non ha un limite di dominio. È raccomandata l'unicità del nome normalizzato tra fratelli (`parent_id`, nome normalizzato), mentre lo stesso nome può comparire in rami diversi. Il percorso e la profondità sono calcolati dalla gerarchia e non sono identità persistenti.
 
-Un sub-context è semplicemente un Context con `parent_id`; non richiede una seconda tabella. Un Context non definisce il significato dei Concept contenuti nei Document. Spostare un Document o un ramo Context non duplica né rinomina Concept.
+Un sub-context è semplicemente un Context con `parent_id`; non richiede una seconda tabella. Un Context non definisce il significato dei KnowledgeObject osservati nei Document. Concept, Entity, EntityType e SemanticBlock vengono raggiunti inizialmente tramite Context→Document→KnowledgeOccurrence→KnowledgeObject e, per i dati strutturati, →Entity→SemanticBlock. Spostare un Document o un ramo Context non duplica, rinomina o riassegna direttamente KnowledgeObject.
 
-### 3.6 Tag
+### 3.13 Tag
 
 Metadata libero usato per classificazione e gestione.
 
@@ -176,7 +340,7 @@ Metadata libero usato per classificazione e gestione.
 
 Un Tag non ha canonical name, Alias, occurrence o relazioni semantiche. Il nome normalizzato è unico tra i Tag. Il carattere `#` è una convenzione di presentazione e ricerca.
 
-### 3.7 DocumentTag
+### 3.14 DocumentTag
 
 Associazione molti-a-molti tra Document e Tag.
 
@@ -187,32 +351,35 @@ Associazione molti-a-molti tra Document e Tag.
 
 La coppia (`document_id`, `tag_id`) è la chiave primaria logica. La duplicazione dell'assegnazione non è ammessa.
 
-### 3.8 Relation
+### 3.15 KnowledgeRelation
 
-Arco semantico diretto tra due Concept.
+Arco semantico diretto tra due KnowledgeObject. Supporta Concept→Concept, Entity→Entity ed Entity↔Concept senza coinvolgere Context o Tag.
 
 | Campo | Tipo logico | Regole |
 |---|---|---|
 | `id` | UUIDv7 | primary key |
-| `source_concept_id` | UUIDv7 | FK verso Concept |
-| `target_concept_id` | UUIDv7 | FK verso Concept |
+| `source_knowledge_object_id` | UUIDv7 | FK verso KnowledgeObject |
+| `source_object_type` | enum | discriminator verificato della sorgente |
+| `target_knowledge_object_id` | UUIDv7 | FK verso KnowledgeObject |
+| `target_object_type` | enum | discriminator verificato della destinazione |
 | `relation_type` | string | obbligatorio; tipi noti o custom |
 | `description` | text | opzionale |
 
-Ogni Concept può partecipare a molte Relation come sorgente e destinazione. Più relazioni tra la stessa coppia sono consentite se esprimono predicati o descrizioni differenti. Direzione, simmetria e inverso sono proprietà del tipo di relazione e non vanno inferiti dal solo ordine alfabetico dei Concept.
+Ogni KnowledgeObject può partecipare a molte Relation come sorgente e destinazione. Più relazioni tra la stessa coppia sono consentite se esprimono predicati o descrizioni differenti. Direzione, simmetria e inverso sono proprietà del tipo di relazione e non vanno inferiti dal nome o dal sottotipo degli estremi.
 
 La provenance tramite occurrence verrà aggiunta in una fase successiva con un'associazione dedicata, non con una lista serializzata nel record.
 
-### 3.9 Comment (solo modello concettuale)
+### 3.16 Comment (solo modello concettuale)
 
-Un commento è una discussione ancorata a contenuto del Document, non a semplici offset assoluti. Il modello previsto separa:
+Un commento è una discussione associata a un soggetto stabile. Il modello previsto distingue:
 
-- `CommentThread`: identità, `document_id`, anchor strutturale versionata, stato `open`/`resolved`, timestamp;
+- `TextCommentThread`: identità, `document_id`, anchor strutturale versionata, eventuale associazione verificata alla KnowledgeOccurrence nel range, stato e timestamp;
+- thread su oggetto strutturato, collegati tramite associazioni dedicate a KnowledgeObject, KnowledgeRelation, SemanticBlock o FieldValue senza simulare un range testuale;
 - `CommentMessage`: identità, `thread_id`, corpo, timestamp ed eventuale autore futuro.
 
-L'anchor dovrà usare strutture ProseMirror robuste e una strategia di remapping. Il formato preciso verrà scelto nella FASE 18 dopo test dedicati. In questa fase non vengono create tabelle o API.
+L'anchor testuale dovrà usare strutture ProseMirror robuste e una strategia di remapping. I subject strutturati usano FK reali e non una coppia generica `target_type`/`target_id`. Il formato preciso verrà scelto nella FASE 18 dopo test dedicati. In questa fase non vengono create tabelle o API.
 
-### 3.10 Source e provenance (modello per la FASE 16)
+### 3.17 Source e provenance (modello per la FASE Sources)
 
 Una Source rappresenta una provenienza riutilizzabile nel catalogo personale.
 
@@ -238,7 +405,7 @@ Una Source rappresenta una provenienza riutilizzabile nel catalogo personale.
 | `created_at` | timestamp | immutabile |
 | `updated_at` | timestamp | aggiornato a ogni modifica |
 
-Il catalogo dei libri non è una seconda entità: è la vista delle Source con `type = book`. Il dialog può cercare e riusare una Source esistente oppure crearla, evitando duplicazioni bibliografiche.
+Il catalogo dei libri non è una seconda entità bibliografica: è la vista delle Source con `type = book`. Una Source può essere collegata a una Entity che rappresenta lo stesso paper/libro studiato, ma non ne condivide identità o lifecycle. Il dialog può cercare e riusare una Source esistente oppure crearla, evitando duplicazioni bibliografiche.
 
 `SourceContributor` conserva autori, curatori, traduttori e altri contributori in ordine bibliografico:
 
@@ -265,6 +432,8 @@ Ogni contributore usa o la forma personale o `literal_name`; non entrambe come r
 | `normalized_value` | string | derivato per ricerca e deduplicazione |
 
 La coppia normalizzata (`scheme`, `normalized_value`) è univoca nella stessa Source. Se compare in Source diverse viene segnalata come possibile duplicato, ma una fusione richiede sempre conferma esplicita.
+
+SourceIdentifier resta distinto da EntityIdentifier: il primo identifica un record bibliografico (`doi`, `isbn`, `pmid`), il secondo una cosa specifica nel suo namespace (`ticker/NASDAQ`, `cik/SEC`, `lei`). Se una Source e una Entity descrivono lo stesso oggetto, una loro associazione esplicita non fonde gli identificatori.
 
 `SourceLocator` identifica una porzione della Source:
 
@@ -310,11 +479,11 @@ La coppia normalizzata (`scheme`, `normalized_value`) è univoca nella stessa So
 
 `SourceAnchor`/`SourceCitation` esprimono provenance di un passaggio e restano distinti da un marcatore bibliografico visibile nel testo. Una stessa Source può essere contemporaneamente evidence di un range e item di una citazione bibliografica senza duplicare il record Source.
 
-Concept, Occurrence e Relation avranno associazioni dedicate verso Source/SourceLocator nelle fasi previste. Non si usa una foreign key polimorfica non verificabile da SQLite.
+Document, KnowledgeObject, KnowledgeOccurrence, SemanticBlock, FieldValue e KnowledgeRelation usano associazioni dedicate verso Source/SourceLocator nelle fasi previste. Le associazioni comuni a Concept/Entity possono riferire KnowledgeObject; gli altri subject hanno join table proprie. Non si usa una foreign key polimorfica non verificabile da SQLite. La FASE 16 abilita inoltre il payload FieldValue `source_reference` soltanto insieme alla FK Source verificabile.
 
-### 3.11 Asset immagine (modello per la FASE 17)
+### 3.18 Asset immagine (modello per la relativa fase)
 
-Un Asset rappresenta un file immagine locale riutilizzabile; non rappresenta automaticamente una Source o un Concept.
+Un Asset rappresenta un file immagine locale riutilizzabile; non rappresenta automaticamente una Source, un KnowledgeObject, un SemanticBlock o un FieldValue.
 
 | Campo | Tipo logico | Regole |
 |---|---|---|
@@ -328,9 +497,9 @@ Un Asset rappresenta un file immagine locale riutilizzabile; non rappresenta aut
 | `height_px` | integer | altezza intrinseca positiva |
 | `created_at` | timestamp | immutabile |
 
-Il nodo immagine nel documento conserva posizione, `assetId`, alt text, titolo e proprietà di presentazione. Più nodi possono riferirsi allo stesso Asset. La rimozione dell'ultimo nodo non cancella immediatamente il file, così undo e recupero restano possibili.
+Il nodo immagine nel documento conserva posizione, `assetId`, alt text, titolo e proprietà di presentazione. Più nodi possono riferirsi allo stesso Asset. Associazioni verso KnowledgeObject, SemanticBlock, FieldValue, Source e SourceLocator sono esplicite e verificabili. La rimozione dell'ultimo nodo non cancella immediatamente il file, così undo e recupero restano possibili.
 
-### 3.12 DocumentAnchor e DocumentLink (modello per la FASE 20)
+### 3.19 DocumentAnchor e DocumentLink (modello per la relativa fase)
 
 `DocumentAnchor` identifica una destinazione navigabile stabile all'interno di un Document. Nella prima implementazione gli anchor sono applicati agli heading; un link all'intero Document non richiede un anchor.
 
@@ -367,7 +536,7 @@ Un anchor `detached` rende non risolvibile la destinazione interna, ma non riscr
 
 Indice navigabile e formule non richiedono entità relazionali proprie. L'indice è derivato dagli heading e dai relativi DocumentAnchor; il sorgente delle formule inline o block appartiene al `document_json` e il rendering è derivato.
 
-### 3.13 DocumentNote (modello per la FASE 21)
+### 3.20 DocumentNote (modello per la relativa fase)
 
 `DocumentNote` rappresenta una nota editoriale a piè di pagina o una nota finale. È parte del contenuto di un solo Document, ma il corpo può contenere più paragrafi e richiede quindi un proprio frammento JSON autorevole.
 
@@ -389,7 +558,7 @@ Per un libro, il capitolo di una endnote con scope `chapter` è il Document ante
 
 La cancellazione del riferimento porta la DocumentNote a `detached`; undo la riattiva. Copy/paste duplica riferimento e corpo con un nuovo ID e rigenera anche gli ID delle manifestazioni incorporate, come DocumentLink e, dalla FASE 22, BibliographicCitation, mantenendone le destinazioni o Source. Un cut/paste verificato nello stesso Document conserva gli ID soltanto se non produce duplicati. Il paste tra Document crea sempre una nuova DocumentNote appartenente alla destinazione e aggiorna `source_document_id`/`document_id` dei nuovi record incorporati. DocumentNote annidate dentro `body_json` non sono ammesse nella prima versione.
 
-### 3.14 Reference manager, citazioni e bibliografia (modello per la FASE 22)
+### 3.21 Reference manager, citazioni e bibliografia (modello per la relativa fase)
 
 Il reference manager è il servizio applicativo che gestisce il catalogo Source, contributori, identificatori, deduplicazione assistita, citazioni e bibliografie. Non introduce una seconda entità “Reference” parallela a Source.
 
@@ -436,11 +605,21 @@ Copy/paste di una citazione crea una nuova BibliographicCitation che riusa le st
 - Document → Context: molti Document possono avere lo stesso Context; ogni Document ne ha al massimo uno.
 - Document → Document: ogni Document ha al massimo un parent e può avere figli ordinati a profondità arbitraria.
 - Context → Context: ogni Context ha al massimo un parent e può avere molti figli.
+- KnowledgeObject → Concept|Entity: specializzazione totale ed esclusiva determinata da `object_type`.
 - Concept → ConceptAlias: uno-a-molti.
-- Concept → Occurrence: uno-a-molti; anche zero.
-- Document → Occurrence: uno-a-molti; anche zero.
+- EntityType → Entity: uno-a-molti; ogni Entity ha esattamente un EntityType.
+- EntityType ↔ Template: molti-a-molti ordinato come raccomandazione UI, senza vincolo di compatibilità.
+- Entity → EntityIdentifier: uno-a-molti; anche zero, con unicità normalizzata nello scope della Entity.
+- KnowledgeObject → KnowledgeOccurrence: uno-a-molti; anche zero.
+- Document → KnowledgeOccurrence: uno-a-molti; anche zero.
+- Entity → SemanticBlock: uno-a-molti; anche zero.
+- Template → TemplateField: uno-a-molti ordinato.
+- Template → SemanticBlock: uno-a-molti.
+- Document.document_json → Entity/SemanticBlock: riferimenti editoriali dalla FASE 10.1.1, con identità di collocazione distinta dalla destinazione.
+- SemanticBlock → FieldValue: uno-a-molti tipizzato e ordinato per i field multi.
+- FieldValue → Concept: zero-o-uno come collegamento semantico opzionale, oltre alle reference che costituiscono il valore.
 - Document ↔ Tag: molti-a-molti tramite DocumentTag.
-- Concept ↔ Concept: molti-a-molti diretto e tipizzato tramite Relation.
+- KnowledgeObject ↔ KnowledgeObject: molti-a-molti diretto e tipizzato tramite KnowledgeRelation.
 - Document ↔ Source: molti-a-molti tramite DocumentSource.
 - Document → SourceAnchor → SourceCitation → Source: provenienza di range testuali, anche con più fonti per range.
 - Document.document_json → Asset: molti nodi possono riusare lo stesso file immagine.
@@ -452,28 +631,39 @@ Copy/paste di una citazione crea una nuova BibliographicCitation che riusa le st
 - Document → BibliographySettings: zero-o-uno.
 - Source → SourceContributor: uno-a-molti ordinato.
 - Source → SourceIdentifier: uno-a-molti.
+- Source/SourceLocator → Document, KnowledgeObject, KnowledgeOccurrence, SemanticBlock, FieldValue e KnowledgeRelation: associazioni dedicate e verificabili per ciascuna famiglia di subject.
 
 ## 5. Query fondamentali
 
 ### Per Concept
 
-Si seleziona il Concept per ID, canonical name o Alias e si seguono le Occurrence attive verso i Document. Il testo non determina l'identità.
+Si seleziona il Concept per ID, canonical name o Alias e si seguono le KnowledgeOccurrence attive di tipo `concept` verso i Document. Si includono separatamente FieldValue collegati e KnowledgeRelation esplicite. Il testo non determina l'identità.
+
+### Per Entity
+
+Si seleziona la Entity per ID, nome, EntityType o EntityIdentifier e si combinano tre percorsi dichiarati: occurrence testuali attive, FieldValue/linked Concept dei suoi SemanticBlock e KnowledgeRelation esplicite. Un match lungo un percorso non crea record sugli altri. L'uguaglianza di un Identifier tra Entity differenti segnala un candidato duplicato, non autorizza un merge.
+
+### Strutturata
+
+Si selezionano Template, TemplateField e payload tipizzati. I filtri su numero, boolean, data, enum e reference operano sulle colonne corrispondenti, non su rendering testuali. Full text, Concept/Entity, Context e Tag possono aggiungersi con join espliciti e ogni risultato dichiara il percorso di match.
 
 ### Per Context
 
-Si selezionano Document assegnati al Context; una query può includere esplicitamente i discendenti. Da quei Document si ricavano testo, Concept e occurrence.
+Si selezionano Document assegnati al Context; una query può includere esplicitamente i discendenti. Da quei Document si ricavano testo e KnowledgeOccurrence, quindi Concept/Entity e, attraverso le Entity, SemanticBlock/FieldValue. Il risultato è derivato: Context non viene assegnato direttamente a questi oggetti.
 
 ### Per Tag
 
-Si selezionano Document via DocumentTag. Non vengono creati collegamenti semantici impliciti.
+Si selezionano Document via DocumentTag e da essi si raggiungono eventualmente KnowledgeObject e dati strutturati tramite KnowledgeOccurrence. Non vengono create assegnazioni dirette o relazioni semantiche implicite.
 
-### Combinata Concept × Context × Tag
+### Combinata full text × knowledge × structured × Context × Tag
 
 Un Document/Occurrence soddisfa il filtro se:
 
-1. contiene un'Occurrence attiva del Concept richiesto;
+1. contiene una KnowledgeOccurrence attiva del Concept/Entity richiesto oppure soddisfa il percorso semantico esplicitamente selezionato;
 2. il Document appartiene al Context richiesto secondo la modalità exact/subtree scelta;
 3. il Document possiede il Tag richiesto.
+
+I filtri strutturati selezionano Entity tramite SemanticBlock/FieldValue; il full text seleziona Document tramite il `plain_text` derivato. Per combinare Entity e Document serve un collegamento dichiarato, normalmente una KnowledgeOccurrence attiva di tipo `entity` nel Document o una futura associazione esplicita, non l'uguaglianza del nome.
 
 Il risultato deve indicare separatamente quale dimensione ha prodotto ogni match.
 
@@ -482,13 +672,28 @@ Il risultato deve indicare separatamente quale dimensione ha prodotto ogni match
 | Scenario | Supporto del modello |
 |---|---|
 | Concept senza occurrence | cardinalità 0..n e stato `active`/`orphan` |
-| più occurrence dello stesso Concept | record Occurrence distinti con stesso `concept_id` |
+| Entity senza occurrence | cardinalità 0..n, senza trasformazione in Concept |
+| EntityType configurabile | tabella EntityType e FK obbligatoria da Entity |
+| Template raccomandati per EntityType | relazione molti-a-molti ordinata e non restrittiva |
+| identificatori di Entity | EntityIdentifier distinti da Alias, FieldValue e SourceIdentifier |
+| occurrence Concept ed Entity | KnowledgeOccurrence comune con FK/discriminator verificati |
+| più occurrence dello stesso Concept | KnowledgeOccurrence distinte con stesso `knowledge_object_id` |
 | più Alias | relazione Concept 1:n ConceptAlias |
 | testo occurrence diverso dagli Alias | testo solo nel documento; nessun vincolo di uguaglianza |
-| relazioni molti-a-molti | Relation con due FK verso Concept |
+| relazioni molti-a-molti | KnowledgeRelation comune tra combinazioni Concept/Entity |
+| più blocchi per Entity | SemanticBlock distinti, ciascuno istanza di un Template |
+| Entity/SemanticBlock nel documento | nodi di riferimento senza copia dei dati autorevoli |
+| field definiti dall'utente | TemplateField ordinati, tipizzati e configurabili |
+| query strutturate | payload FieldValue in colonne tipizzate indicizzabili |
+| valore collegato a Concept | `linked_concept_id` opzionale e mai creato automaticamente |
+| provenance provider | origin/provider/retrieved_at senza overwrite automatico dei manuali |
+| Context/Tag su Entity e blocchi | filtri derivati da Document→KnowledgeOccurrence, non ownership diretta |
+| Source su dati semantici | associazioni dedicate con FK verso ogni famiglia di subject |
+| commenti testuali e strutturati | anchor ProseMirror per range, FK dedicate per object subject |
 | Context gerarchici | `parent_id` con controllo anti-ciclo |
 | ricerca distinta | tabelle e percorsi query distinti |
-| Concept × Context × Tag | join Occurrence → Document → Context/DocumentTag |
+| Concept × Context × Tag | join KnowledgeOccurrence → Document → Context/DocumentTag |
+| Entity × Context × Tag | stesso percorso con `object_type = entity`, senza assegnazione diretta |
 | stessa stringa in ruoli diversi | namespace e ID indipendenti |
 | corpo e stili strutturali | paragraph “Normale”, heading, liste e blockquote nel documento |
 | indice navigabile | vista derivata dagli heading con DocumentAnchor stabili |
@@ -529,9 +734,29 @@ La clipboard standard non garantisce una prova affidabile dell'intenzione dell'u
 
 La formattazione interna può produrre più text node con gli stessi attributi. L'estrattore raggruppa frammenti contigui nello stesso textblock; il modello iniziale non permette a una occurrence di attraversare più textblock, vieta il riuso dello stesso ID in intervalli disgiunti e vieta overlap.
 
-### `conceptId` duplicato tra documento e DB
+### Occurrence comune o tabelle separate
 
-La ridondanza può divergere. `Occurrence.concept_id` è canonico; il mark è un'asserzione validata. I conflitti bloccano il salvataggio con errore di integrità e non vengono sanati silenziosamente.
+ConceptOccurrence ed EntityOccurrence avrebbero foreign key semplici e API esplicite, ma duplicherebbero integralmente lifecycle TipTap/ProseMirror, riconciliazione, clipboard e test, rendendo più facile una divergenza futura. La Phase 1.1 adotta quindi `KnowledgeOccurrence` e un solo mark futuro `knowledgeOccurrence`, con `knowledgeObjectId`, `objectType` e `occurrenceId`. La coppia ID/discriminator è verificata da una foreign key composta verso KnowledgeObject; il discriminator nel mark è ridondante e un mismatch blocca il salvataggio. Il super-tipo resta chiuso a Concept/Entity, quindi non diventa una generica label.
+
+### Relation comune o tabelle separate
+
+Tre famiglie separate di Relation garantirebbero gli estremi tramite FK ma replicherebbero predicati, provenance e query. `KnowledgeRelation` comune usa invece due coppie ID/discriminator verificate verso KnowledgeObject e copre Concept↔Concept, Entity↔Entity ed Entity↔Concept. Context, Tag, DocumentLink e SourceCitation non entrano in questa tabella.
+
+### Valori tipizzati e modifica dei Template
+
+Un unico JSON per blocco sarebbe semplice da serializzare ma indebolirebbe vincoli e query strutturate. FieldValue usa colonne tipizzate e righe ordinate per i tipi multi; foreign key composte garantiscono che blocco, TemplateField e `field_type` concordino. Rinominare un field conserva l'ID; cambiarne il tipo quando esistono valori viene bloccato e richiederà una migrazione applicativa esplicita e atomica.
+
+### Identificatori, Alias e proprietà
+
+Alias, EntityIdentifier e FieldValue rispondono a domande differenti. ConceptAlias è una denominazione alternativa; EntityIdentifier individua una Entity secondo scheme e authority; FieldValue descrive una proprietà in un Template. Tenerli separati consente normalizzazione e deduplicazione prudenti senza trasformare ticker, DOI, ISBN o exchange in sinonimi testuali.
+
+### Associazioni trasversali verificabili
+
+Un generico `target_type`/`target_id` semplificherebbe provenance, commenti e Asset, ma SQLite non potrebbe verificare l'esistenza e il sottotipo del target. Si usano quindi KnowledgeObject quando Concept/Entity condividono davvero il contratto e join table dedicate per Document, KnowledgeOccurrence, SemanticBlock, FieldValue e KnowledgeRelation. La ripetizione controllata dello schema è preferita a riferimenti non verificabili.
+
+### Identità del KnowledgeObject duplicata tra documento e DB
+
+La ridondanza può divergere. `KnowledgeOccurrence.knowledge_object_id` e `object_type` sono canonici; il mark è un'asserzione validata. I conflitti bloccano il salvataggio con errore di integrità e non vengono sanati silenziosamente.
 
 ### Titoli o slug come destinazioni ipertestuali
 

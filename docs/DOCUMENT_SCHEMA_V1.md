@@ -2,6 +2,8 @@
 
 Questo documento definisce l'allowlist JSON accettata dall'editor e dall'API nella FASE 1. `Document.document_json` è autorevole; contenuti fuori allowlist vengono rifiutati con errore `422` e non vengono corretti o eliminati silenziosamente.
 
+La Phase 1.1 aggiunge soltanto tabelle relazionali. Non abilita `knowledgeOccurrence`, SemanticBlock o altri nodi/mark: questa allowlist e il round trip della FASE 1 restano invariati.
+
 ## Nodi
 
 | Nodo | Contenuto | Attributi |

@@ -34,6 +34,10 @@ docs/                contratti eseguibili documentati
 
 L'API espone nella FASE 1 health, list, create, get e update di Document. `PUT` richiede `baseRevision`; non esiste ancora un endpoint di cancellazione. Il database predefinito è `data/nectrix.sqlite`, sostituibile tramite `NECTRIX_DB_PATH`. Il runner PHP è intenzionalmente dependency-free; Vitest copre lo schema editoriale reale nel DOM simulato.
 
+Le API future restano tipizzate per aggregate: Concept, Entity, EntityType, Template e altri modelli non vengono nascosti dietro un endpoint polimorfico universale. La ricerca può aggregare risultati categorizzati. Creazione e riconciliazione delle KnowledgeOccurrence appartengono al salvataggio transazionale del Document; non esiste un CRUD indipendente che possa divergere dai mark. La FASE 3 introduce soltanto create/search/read minimi per Concept, Entity ed EntityType; inspector e CRUD degli altri aggregate entrano nelle rispettive fasi.
+
+La Phase 1.1 aggiunge una migration relazionale per KnowledgeObject, Concept, Entity, EntityType, Template, TemplateField, SemanticBlock, FieldValue, KnowledgeOccurrence e KnowledgeRelation. Non aggiunge endpoint, comandi editor, mark abilitati o UI: il contratto Document e l'allowlist V1 restano identici, così i flussi della FASE 1 non dipendono dal nuovo schema.
+
 ## 2. Fonti di verità
 
 La proprietà dei dati è deliberatamente separata.
@@ -41,10 +45,15 @@ La proprietà dei dati è deliberatamente separata.
 | Informazione | Fonte autorevole | Rappresentazione derivata |
 |---|---|---|
 | contenuto e formattazione principale del Document | `Document.document_json` TipTap | parte principale di `Document.plain_text`, preview, indice FTS |
+| lifecycle visibile del Document | `Document.status` dalla FASE 6.1 | filtri active/archive/trash |
 | gerarchia editoriale del libro | `Document.parent_document_id`, ruolo e ordine | indice aggregato e sequenza di export |
-| identità e appartenenza di una occurrence | record `Occurrence` | attributi del mark nel documento |
+| identità e sottotipo Concept/Entity | `KnowledgeObject` + record di sottotipo | viste e label specifiche |
+| identità e appartenenza di una occurrence | record `KnowledgeOccurrence` | attributi del mark nel documento |
 | testo corrente di una occurrence | intervallo marcato nel documento | estrazione temporanea per UI/ricerca |
-| Concept, Alias, Context, Tag, Relation | database relazionale | indici e viste di ricerca |
+| Concept, Entity, Alias, Context, Tag, KnowledgeRelation | database relazionale | indici e viste di ricerca |
+| identificatori strutturati di una Entity | `EntityIdentifier` con scheme/authority/value normalizzati | label, lookup e candidati duplicati |
+| definizione della struttura utente | `Template` e `TemplateField` | form e viste configurate |
+| dati strutturati di una Entity | `SemanticBlock` e `FieldValue` | card, popover e risultati strutturati |
 | catalogo e metadata delle fonti | record `Source` e `SourceLocator` | label e risultati di ricerca |
 | ancoraggio di una fonte a un range | record `SourceAnchor` + mark nel documento | testo corrente estratto dal documento |
 | file immagine e metadata tecnici | record `Asset` + file locale | nodo immagine nel documento |
@@ -57,7 +66,7 @@ La proprietà dei dati è deliberatamente separata.
 
 Il testo di una occurrence non viene memorizzato come copia autorevole nel database. Quando serve, viene estratto dal `document_json` corrente. Un eventuale indice testuale delle occurrence è una cache ricostruibile e deve includere la revisione del documento da cui deriva.
 
-Il mark contiene sia `occurrenceId` sia `conceptId`. Il secondo è una ridondanza utile a rendering e ispezione offline, non può cambiare l'associazione canonica registrata nel database. Un conflitto tra mark e record DB è un errore di consistenza da segnalare, non da correggere silenziosamente.
+Il mark semantico futuro contiene `occurrenceId`, `knowledgeObjectId` e `objectType`. ID e discriminator sono ridondanze utili a rendering e ispezione offline, ma non possono cambiare l'associazione canonica registrata nel database. Un conflitto tra mark e record DB è un errore di consistenza da segnalare, non da correggere silenziosamente.
 
 ## 3. Identificatori
 
@@ -72,21 +81,28 @@ La generazione client-side è necessaria in particolare per le occurrence perch�
 
 L'API valida forma e unicità dell'UUID, ma non ne interpreta timestamp o ordinamento come dato di dominio.
 
+### 3.1 Alias, EntityIdentifier e SourceIdentifier
+
+ConceptAlias è una denominazione alternativa, EntityIdentifier identifica una Entity in uno scheme/authority e SourceIdentifier identifica un record bibliografico. Non condividono tabella o namespace. Per EntityIdentifier la chiave di deduplicazione comprende almeno Entity, scheme, authority/namespace e valore normalizzato; una collisione tra Entity produce un candidato duplicato, non un merge. `scheme` è lowercase stabile, authority assente è `NULL` e ogni scheme dichiara una policy versionata di normalizzazione e case-sensitivity. Ticker, CIK, LEI, DOI e ISBN non vengono inferiti dal testo di una occurrence.
+
 ## 4. Documento editoriale
 
-`document_json` è un documento TipTap JSON valido. La FASE 1 abilita soltanto i nodi e mark definiti in `docs/DOCUMENT_SCHEMA_V1.md`; frontend e API applicano la stessa allowlist concettuale e il server rifiuta campi non riconosciuti. L'highlight della FASE 2 è un mark puramente visuale e non condivide attributi o lifecycle con `conceptOccurrence`.
+`document_json` è un documento TipTap JSON valido. La FASE 1 abilita soltanto i nodi e mark definiti in `docs/DOCUMENT_SCHEMA_V1.md`; frontend e API applicano la stessa allowlist concettuale e il server rifiuta campi non riconosciuti. L'highlight della FASE 2 è un mark puramente visuale e non condivide attributi o lifecycle con `knowledgeOccurrence`.
 
-Il modello di dominio è prospettico, ma lo schema eseguibile è incrementale: la FASE 1 crea solo i campi e i vincoli necessari ai flussi minimi di creazione, lettura e aggiornamento del Document. Context, gerarchia editoriale, note, link e citazioni entrano esclusivamente con le migrazioni delle rispettive fasi.
+Il modello di dominio è prospettico, ma lo schema eseguibile è incrementale: la FASE 1 crea solo i campi e i vincoli necessari ai flussi minimi di creazione, lettura e aggiornamento del Document. La Phase 1.1 aggiunge soltanto tabelle nuove e indici per predisporre il dominio esteso. Context, gerarchia editoriale, note, link e citazioni entrano esclusivamente con le migrazioni delle rispettive fasi.
+
+SemanticBlock e FieldValue restano fuori dal documento editoriale autorevole: appartengono alla Entity nel database e non vengono estratti da highlight o occurrence. La FASE 10.1.1 introduce nodi `entityReference` e `semanticBlockReference` con `referenceId` proprio e ID verificabile della destinazione. Sono soltanto riferimenti/rendering derivati: non copiano payload strutturati. Copy/paste rigenera `referenceId`; cut/paste interno verificato può conservarlo senza duplicati.
 
 Il corpo “Normale” è rappresentato da `paragraph`. Heading, liste e blockquote descrivono struttura e significato editoriale; bold, italic e underline sono formattazioni inline. Font, dimensioni, interlinea, margini e colori ordinari appartengono al tema di presentazione e non vengono copiati su ogni nodo. Eventuali stili nominati aggiuntivi richiederanno una allowlist semantica e una mappatura esplicita per editor ed export, non CSS arbitrario persistito nel documento.
 
-Il mark semantico pianificato è:
+Il mark semantico comune pianificato è:
 
 ```json
 {
-  "type": "conceptOccurrence",
+  "type": "knowledgeOccurrence",
   "attrs": {
-    "conceptId": "opaque-id",
+    "knowledgeObjectId": "opaque-id",
+    "objectType": "concept|entity",
     "occurrenceId": "opaque-id"
   }
 }
@@ -110,7 +126,7 @@ Queste regole richiedono configurazione esplicita dell'inclusività del mark e t
 
 ### 5.1 Stati persistenti
 
-`Occurrence.status` assume i valori:
+`KnowledgeOccurrence.status` assume i valori:
 
 - `active`: l'ID è presente una volta nel Document assegnato;
 - `detached`: l'ID non è più presente nell'ultima revisione salvata, ma il record è conservato per undo, diagnostica e ripristino;
@@ -122,9 +138,9 @@ La rimozione fisica è una futura operazione di garbage collection con retention
 
 ### 5.2 Creazione atomica
 
-Il comando “crea Concept” prepara un nuovo Concept, una nuova Occurrence e il mark corrispondente come unica unità logica. Il salvataggio API deve essere transazionale: non deve lasciare un record `active` privo di mark né un mark accettato senza record corrispondente.
+Il comando futuro “crea Concept” prepara KnowledgeObject, Concept, nuova KnowledgeOccurrence e mark come unica unità logica. L'analogo comando Entity prepara KnowledgeObject, Entity con EntityType e occurrence. Il salvataggio API deve essere transazionale: non deve lasciare un record `active` privo di mark né un mark accettato senza record corrispondente.
 
-Per associare un Concept esistente viene creato soltanto un nuovo record Occurrence e un nuovo mark. Il testo selezionato non viene trasformato automaticamente in Alias.
+Per associare un KnowledgeObject esistente viene creato soltanto un nuovo record KnowledgeOccurrence e un nuovo mark. Il testo selezionato non viene trasformato automaticamente in Alias, Concept o Entity.
 
 ### 5.3 Undo e redo
 
@@ -139,9 +155,9 @@ La revisione monotona del Document (`revision`) è parte del modello minimo e im
 
 ### 5.4 Copy/paste
 
-Il copy serializza il contenuto ma il paste deve riscrivere **ogni** `occurrenceId` in ingresso con un nuovo ID, mantenendo `conceptId`. La riscrittura avviene una volta per ciascun vecchio ID: frammenti contigui appartenenti alla stessa occurrence copiata ricevono lo stesso nuovo ID.
+Il copy serializza il contenuto ma il paste deve riscrivere **ogni** `occurrenceId` in ingresso con un nuovo ID, mantenendo `knowledgeObjectId` e `objectType`. La riscrittura avviene una volta per ciascun vecchio ID: frammenti contigui appartenenti alla stessa occurrence copiata ricevono lo stesso nuovo ID.
 
-Il paste non deve fidarsi degli ID presenti in HTML, JSON o clipboard esterni. Se il Concept non esiste, il client rimuove soltanto il mark `conceptOccurrence`, conserva testo e formattazione ordinaria e mostra un avviso non bloccante. Non viene mai creato implicitamente un Concept.
+Il paste non deve fidarsi degli ID presenti in HTML, JSON o clipboard esterni. Se il KnowledgeObject non esiste o il discriminator non coincide, il client rimuove soltanto il mark `knowledgeOccurrence`, conserva testo e formattazione ordinaria e mostra un avviso non bloccante. Non viene mai creato implicitamente un Concept o una Entity.
 
 ### 5.5 Cut/paste
 
@@ -162,20 +178,22 @@ Il salvataggio di un Document deve essere un'unica transazione SQLite e ricevere
 
 - ID e revisione base del Document;
 - titolo e documento JSON completi;
-- operazioni/record nuovi necessari per Concept e Occurrence creati nel client.
+- operazioni/record nuovi necessari per KnowledgeObject e KnowledgeOccurrence creati nel client.
 
 Pipeline prevista:
 
 1. validare lo schema TipTap supportato;
-2. estrarre gli intervalli `conceptOccurrence` normalizzando i text node contigui;
+2. estrarre gli intervalli `knowledgeOccurrence` normalizzando i text node contigui;
 3. rifiutare ID duplicati in intervalli disgiunti, overlap e attributi incompleti;
-4. verificare che ciascun ID esistente appartenga allo stesso Document e allo stesso Concept;
+4. verificare che ciascun ID esistente appartenga allo stesso Document, KnowledgeObject e sottotipo;
 5. creare in modo idempotente i nuovi record dichiarati;
 6. marcare `active` gli ID validi presenti;
 7. marcare `detached` gli ID prima attivi e ora assenti;
 8. aggiornare `document_json`, derivare `plain_text`, incrementare `revision` e aggiornare FTS;
-9. aggiornare lo stato `orphan` dei Concept interessati secondo le regole di dominio;
+9. aggiornare lo stato `orphan` dei soli Concept interessati secondo le regole di dominio; le Entity non usano tale stato;
 10. eseguire commit o rollback dell'intera operazione.
+
+La perdita dell'ultima occurrence di una Entity non ne cambia lo stato e non la elimina: resta `active` fino a un comando esplicito di archiviazione.
 
 Non si inferiscono nuovi record da un mark sconosciuto senza una manifestazione esplicita della creazione. Questo impedisce che documenti manipolati creino entità silenziosamente.
 
@@ -187,7 +205,7 @@ Sono errori bloccanti del salvataggio:
 
 - due range disgiunti con lo stesso `occurrenceId`;
 - lo stesso ID presente in Document diversi;
-- `conceptId` del mark diverso da quello dell'Occurrence registrata;
+- `knowledgeObjectId` o `objectType` del mark diverso dalla KnowledgeOccurrence registrata;
 - occurrence sovrapposte;
 - riferimento a entità inesistente senza una creazione valida nella stessa transazione;
 - revisione base obsoleta.
@@ -196,19 +214,63 @@ L'API restituisce `409 Conflict` per revisione obsoleta e `422 Unprocessable Con
 
 ## 8. Ricerca e dimensioni indipendenti
 
-Concept, Context e Tag hanno tabelle, endpoint e filtri separati. Non esiste una tabella generica `labels` né un ID condiviso.
+Concept, Entity, Context e Tag hanno tabelle, endpoint e filtri separati. KnowledgeObject è una base chiusa ai soli Concept/Entity, non una tabella generica `labels`; Context e Tag non ne condividono gli ID.
 
-La combinazione `Concept × Context × Tag` si ottiene con join espliciti:
+La combinazione `KnowledgeObject × Context × Tag` si ottiene con join espliciti:
 
 ```text
-Concept
-  ← Occurrence → Document → Context (principale, inclusi discendenti se richiesto)
+Concept | Entity
+  ← KnowledgeOccurrence → Document → Context (principale, inclusi discendenti se richiesto)
                       ↘ DocumentTag → Tag
 ```
 
-Il filtro Concept seleziona Document/occurrence tramite identità semantica, non tramite uguaglianza testuale. Il filtro Context seleziona l'ambito assegnato al Document. Il filtro Tag seleziona metadata organizzativi. Una stringa uguale in tutte e tre le tabelle produce tre risultati distinti.
+Il filtro Concept o Entity seleziona Document/occurrence tramite identità semantica, non tramite uguaglianza testuale. Il filtro Context seleziona l'ambito assegnato al Document. Il filtro Tag seleziona metadata organizzativi. Una stringa uguale nelle quattro tabelle produce quattro risultati distinti.
 
-FTS5 indicizza una volta il `Document.plain_text` aggregato, che dalla FASE 21 comprende i body delle DocumentNote attive in ordine di riferimento. `DocumentNote.plain_text` resta un derivato utile alla composizione e alla diagnostica, ma non viene indicizzato anche separatamente nello stesso indice evitando risultati e conteggi duplicati. Un eventuale indice per-nota futuro dovrà essere distinto esplicitamente. Le ricerche per canonical name, alias, Context, Tag e Relation restano query strutturate; la UI potrà aggregarne i risultati senza fonderne il significato.
+FTS5 indicizza inizialmente titolo e `Document.plain_text`. Dalla fase DocumentNote il plain text aggregato comprende i body attivi in ordine di riferimento; commenti e rich-text FieldValue entrano soltanto dopo le fasi che ne definiscono ownership e regole di indicizzazione. `DocumentNote.plain_text` resta un derivato utile alla composizione e alla diagnostica, ma non viene indicizzato anche separatamente nello stesso indice evitando risultati duplicati. Le ricerche per Concept, Entity, Alias, EntityIdentifier, EntityType, Context, Tag, KnowledgeRelation e FieldValue restano query strutturate e categorizzate.
+
+La FASE 10 non conserva inizialmente una copia del testo per KnowledgeOccurrence: FTS individua il Document e il range corrente viene estratto dal `document_json`. Un'eventuale cache futura è ammessa soltanto se interamente ricostruibile e associata a occurrence, Document e revisione che l'ha prodotta.
+
+### 8.1 Dati strutturati
+
+Il percorso strutturato è relazionale e resta combinabile con full text e filtri semantici:
+
+```text
+Entity → SemanticBlock → Template
+                    └─→ FieldValue → TemplateField
+                                      ├─ payload tipizzato
+                                      └─ 0..1 linked Concept
+```
+
+`template_id` e `field_type` vengono ripetuti in FieldValue per consentire foreign key composte: un valore non può usare un field di un altro Template né mentire sul tipo. I payload sono colonne mutuamente esclusive. I tipi multi usano righe ordinate, mentre i tipi singoli ammettono solo ordinal `0`; `percentage` usa un rapporto decimale canonico. Indici distinti su testo, numero, boolean, data e reference sostengono query strutturate senza cast testuali.
+
+Template resta globale. Una join table molti-a-molti ordinata può raccomandare Template per EntityType nella FASE 10.1, ma non applica un vincolo di compatibilità: la UI può chiedere conferma per un Template non raccomandato senza rifiutarne il SemanticBlock.
+
+`source_reference` è ammesso come tipo di definizione ma resta non istanziabile finché Source non esiste nello schema: la fase Sources aggiungerà il payload e la FK con una migration incrementale. Analogamente, l'associazione di provenance di FieldValue a Source viene aggiunta allora; non si conserva oggi un UUID non verificabile.
+
+Context e Tag restano owned dal Document. I filtri trasversali usano percorsi espliciti:
+
+```text
+Context/Tag → Document → KnowledgeOccurrence → KnowledgeObject
+                                             └→ Entity → SemanticBlock → FieldValue
+```
+
+Il percorso produce risultati di query, non `context_id` o DocumentTag copiati su Entity, EntityType, SemanticBlock o FieldValue. Associazioni dirette non appartengono alla roadmap corrente; richiederebbero un nuovo caso d'uso e una nuova decisione su ownership, cardinalità, conflitti e lifecycle.
+
+### 8.2 Provider e precedenza
+
+La Phase 1.1 conserva su FieldValue `origin`, `provider_id` e `retrieved_at`, ma non implementa registry, rete, autocomplete o mapping. Nella FASE 22.1 `provider_id` diventa riferimento a una configurazione Provider e mapping dedicati collegano chiavi esterne a TemplateField. Un valore `manual` non viene aggiornato in place da provider, derivazioni o AI: l'import prepara una proposta separata e solo una conferma utente può sostituire il valore in una transazione. Il core resta operativo offline; la provenance verso Source viene aggiunta quando Source ha una FK reale.
+
+### 8.3 Popover futuri
+
+Le API future compongono il popover Concept da Concept, Alias e conteggio KnowledgeOccurrence; quello Entity da EntityType, EntityIdentifier, SemanticBlock e occurrence. Ogni inspector mostra soltanto famiglie già implementate e viene ampliato da Context, Relation e Source nelle rispettive fasi. Il testo dei range continua a essere estratto dal Document autorevole; nessun dato di presentazione viene duplicato.
+
+### 8.4 Relazioni comuni
+
+`KnowledgeRelation` usa per ciascun estremo ID e discriminator con FK composta verso KnowledgeObject. È preferita a tre tabelle perché predicato, direzione, provenance e query hanno lo stesso lifecycle per Concept ed Entity; il vincolo composto evita la debolezza tipica di una foreign key polimorfica. La tabella non è estendibile implicitamente a Context, Tag, Source o Document: DocumentLink e provenance restano modelli separati.
+
+### 8.5 Associazioni trasversali e provenance
+
+KnowledgeObject è usato come target comune soltanto per Concept/Entity. Document, KnowledgeOccurrence, SemanticBlock, FieldValue e KnowledgeRelation ricevono join table dedicate per Source, Asset, commenti o evidence. Il pattern nominale è `<subject>_sources`, `<subject>_assets`, `<subject>_comments` o `<derived>_<evidence>_evidence`; ogni tabella contiene FK reali verso le due famiglie coinvolte. Questo duplica poche colonne ma mantiene FK verificabili; una generica coppia `target_type`/`target_id` non è ammessa. Prima della FASE 16 la provenance può riferire Document, occurrence e dati strutturati già presenti; Source/SourceLocator ampliano le associazioni soltanto dopo la loro introduzione.
 
 ## 9. Context gerarchici
 
@@ -230,6 +292,8 @@ La cancellazione ordinaria è consentita solo per un Context foglia senza Docume
 ## 10. Fonti e citazioni
 
 `Source` è un elemento riutilizzabile del reference manager. Un libro viene registrato una sola volta con metadata strutturati, contributor ordinati e identificatori normalizzati; il dialog “Aggiungi fonte” cerca innanzitutto nel catalogo per tipo, titolo, contributor e identificatore. Dal dialog l'utente può selezionare una Source esistente oppure crearla e usarla immediatamente. Deduplicazione e merge sono sempre assistiti e confermati.
+
+Source e Entity restano identità diverse anche quando descrivono lo stesso paper, libro, società o studio: Source risponde della provenance/catalogazione bibliografica, Entity dell'oggetto specifico studiato. Un'associazione dedicata può collegarle senza fondere SourceIdentifier ed EntityIdentifier o sincronizzarne automaticamente il lifecycle.
 
 La provenienza è separata in tre livelli:
 
@@ -258,6 +322,12 @@ Un copy/paste crea un nuovo `sourceAnchorId` e duplica le associazioni alle stes
 
 La provenance di range (`SourceCitation`) e la citazione bibliografica visibile (`BibliographicCitation`) hanno scopi diversi. La prima documenta l'evidence di un passaggio; la seconda produce un richiamo formattato e alimenta la bibliografia. Entrambe riusano Source e SourceLocator senza duplicarli.
 
+Provenance verso KnowledgeObject, KnowledgeOccurrence, SemanticBlock, FieldValue e KnowledgeRelation usa associazioni dedicate; ogni locator appartiene alla Source della propria associazione. Nella stessa fase il payload `source_reference` diventa valido con FK verso Source. Nessun UUID Source viene conservato prima che possa essere verificato.
+
+### 10.1 Commenti testuali e commenti su oggetto
+
+I commenti su testo usano un anchor ProseMirror versionato e, se applicabile, un'associazione verificata alla KnowledgeOccurrence nel range. I commenti su KnowledgeObject, KnowledgeRelation, SemanticBlock o FieldValue usano join table dedicate e non creano un anchor fittizio. Messaggi, stato resolve/reopen e thread restano condivisibili a livello applicativo, ma il subject conserva vincoli specifici.
+
 ## 11. Immagini inline
 
 Le immagini nel testo sono nodi TipTap/ProseMirror che contengono soltanto riferimenti e proprietà editoriali:
@@ -279,6 +349,8 @@ Il file binario non viene incorporato come base64 nel `document_json`. Viene con
 La prima versione accetta PNG, JPEG e WebP dopo verifica del contenuto reale, applica limiti configurabili di byte e pixel e non accetta SVG attivi. Eliminare un nodo immagine non elimina immediatamente l'Asset: l'asset non più referenziato diventa candidato a garbage collection dopo un periodo di retention. Undo deve poterlo ripristinare.
 
 Copiare un'immagine già presente in Nectrix può riusare lo stesso `assetId`, perché un Asset è una risorsa immutabile condivisibile e non un'occurrence. Incollare o caricare un nuovo file crea invece un nuovo Asset. Un'immagine può successivamente essere collegata a una Source/figura senza fondere `Asset` (file) e `Source` (provenienza).
+
+Associazioni dedicate possono inoltre collegare Asset a KnowledgeObject, SemanticBlock, FieldValue e SourceLocator. Il collegamento non trasforma il file in Entity, dato strutturato o evidence e non modifica il lifecycle del binario.
 
 ## 12. Ipertesto, indice, formule ed export
 
@@ -315,7 +387,7 @@ Un collegamento nel testo usa il mark:
 }
 ```
 
-`DocumentLink` è canonico per sorgente, destinazione e lifecycle; il mark è validato e conserva gli attributi necessari alla navigazione e al rendering offline. Il testo visibile resta nel documento. Il mark può convivere con formattazioni inline e `conceptOccurrence`: un collegamento editoriale non crea una Relation tra Concept e non trasforma un Document in Concept.
+`DocumentLink` è canonico per sorgente, destinazione e lifecycle; il mark è validato e conserva gli attributi necessari alla navigazione e al rendering offline. Il testo visibile resta nel documento. Il mark può convivere con formattazioni inline e `knowledgeOccurrence`: un collegamento editoriale non crea una KnowledgeRelation e non trasforma un Document in KnowledgeObject.
 
 Il salvataggio estrae e riconcilia i link nella stessa transazione del Document, considerando insieme `document_json` e i `body_json` delle DocumentNote attive. Rifiuta ID duplicati nello stesso o in differenti contenitori, mismatch con il record, target inesistenti e anchor appartenenti a un altro Document. `source_document_id` identifica il Document aggregato; il contenitore effettivo del mark si ricava dalla fonte JSON autorevole e non viene duplicato nel record. Copy/paste genera nuovi `documentLinkId`; un cut/paste verificato nello stesso Document può conservarli con la policy prudente già adottata per le occurrence. I backlink si ottengono interrogando i record attivi e sono ricostruibili dal contenuto autorevole.
 
@@ -333,7 +405,7 @@ Un `Document` con `document_type = book` può essere monolitico oppure radice di
 
 La gerarchia Document è aciclica e separata dalla gerarchia Context. Context e Tag non si ereditano implicitamente dal parent: eventuali viste aggregate dichiarano esplicitamente se includono i discendenti. Un parent con figli non viene cancellato a cascata e un figlio non può comparire sotto più parent.
 
-L'indice di un libro composto concatena ricorsivamente i Document secondo `sort_order` e poi gli heading interni; ogni voce continua a puntare a UUID stabili. Editing e revisione restano isolati per Document. Lo split/move strutturale preserva gli ID solo attraverso il comando transazionale dedicato descritto nella sezione 6; il normale clipboard tra Document crea nuove identità quando previsto dalle invarianti.
+L'indice di un libro composto concatena ricorsivamente i Document secondo `sort_order` e poi gli heading interni; ogni voce continua a puntare a UUID stabili. Editing e revisione restano isolati per Document. Lo split/move strutturale preserva gli ID di tutte le KnowledgeOccurrence, indipendentemente da `objectType`, solo attraverso il comando transazionale dedicato descritto nella sezione 6; SemanticBlock e FieldValue restano Entity-owned e non vengono duplicati. Il normale clipboard tra Document crea nuove identità quando previsto dalle invarianti.
 
 Il riferimento a footnote/endnote è un nodo inline atomico:
 
@@ -354,7 +426,7 @@ Copy/paste duplica body e riferimento con un nuovo UUID e rigenera ricorsivament
 
 ### 12.5 Reference manager e bibliografia
 
-Il reference manager è un modulo del monolite, non un servizio esterno. Usa `Source` come record bibliografico unico, `SourceContributor` per persone/enti e ruoli, `SourceIdentifier` per ISBN/DOI e altri identificatori, e `SourceLocator` per pagine o sezioni. Import e deduplicazione propongono candidati ma non fondono record senza conferma.
+Il reference manager è un modulo del monolite, non un servizio esterno. Usa `Source` come record bibliografico unico, `SourceContributor` per persone/enti e ruoli, `SourceIdentifier` per ISBN/DOI e altri identificatori, e `SourceLocator` per pagine o sezioni. SourceIdentifier non sostituisce EntityIdentifier; il collegamento Source↔Entity è esplicito. Import e deduplicazione propongono candidati ma non fondono record senza conferma.
 
 Nel testo una citazione usa un nodo atomico:
 
@@ -384,7 +456,7 @@ I formati previsti sono:
 - OpenDocument Text (`.odt`, formato testuale della famiglia ODF);
 - LaTeX (`.tex`).
 
-Ogni exporter dichiara una mappatura per nodi, mark, stili semantici, parti/capitoli, indice, formule, immagini, footnote/endnote, citazioni, bibliografia, occurrence e link interni. Un elemento non rappresentabile non viene eliminato silenziosamente: l'export fallisce oppure produce una diagnostica esplicita secondo il profilo scelto.
+Ogni exporter dichiara una mappatura per nodi, mark, stili semantici, parti/capitoli, indice, formule, immagini, footnote/endnote, citazioni, bibliografia, KnowledgeOccurrence Concept/Entity, riferimenti Entity/SemanticBlock, FieldValue, KnowledgeRelation, provenance e link interni. SemanticBlock e FieldValue vengono letti dai record autorevoli, mai ricostruiti dal `plain_text`. Un elemento non rappresentabile non viene eliminato silenziosamente: l'export fallisce oppure produce una diagnostica esplicita secondo il profilo scelto.
 
 Per l'export di un singolo Document, i link verso Document esterni all'artefatto restano riferimenti diagnosticati e non vengono inventati URL pubblici. L'export di un Document contenitore percorre ricorsivamente i figli nell'ordine autorevole ed equivale a un export multi-Document. Destinazioni e anchor vengono convertiti in link relativi, bookmark o label del formato. Il bundle conserva una mappa di export senza trasformarla in identità di dominio.
 
@@ -395,7 +467,7 @@ La scelta di librerie avviene solo nella fase di export, dopo verifica di licenz
 - foreign key SQLite abilitate per ogni connessione;
 - transazioni per ogni modifica multi-entità;
 - timestamp `TEXT` RFC 3339 UTC canonici con millisecondi (`YYYY-MM-DDTHH:mm:ss.SSSZ`);
-- nessuna cancellazione a cascata da Concept verso Document o testo;
+- nessuna cancellazione a cascata da KnowledgeObject verso Document, testo, KnowledgeOccurrence, SemanticBlock o FieldValue;
 - validazione server-side anche quando il client ha già validato;
 - backup e migrazioni prima di introdurre operazioni distruttive;
 - file caricati fuori dal percorso pubblico, serviti da un endpoint che valida l'Asset richiesto;
@@ -403,24 +475,35 @@ La scelta di librerie avviene solo nella fase di export, dopo verifica di licenz
 
 I log diagnostici non devono diventare una seconda fonte di verità.
 
-## 14. Decisioni differite
+### 13.1 Lifecycle dei Document e retention
 
-Restano intenzionalmente fuori dalla FASE 0:
+La FASE 6.1 aggiunge `active`, `archived` e `trashed`. Archive e trash sono reversibili, non eliminano contenuto o conoscenza collegata e non cambiano lo stato persistente delle occurrence. Gli archiviati sono in sola lettura e inclusi soltanto con scope esplicito; i trashed compaiono solo nella vista di recupero. Il purge fisico è un comando di manutenzione separato con preview, backup, controllo di figli, riferimenti entranti ed evidence. Solo dopo tali verifiche elimina in una transazione il Document e le manifestazioni Document-owned, senza cascade verso KnowledgeObject o dati Entity-owned.
 
-- schema eseguibile e forma precisa degli endpoint;
-- libreria per migration e test PHP;
-- ancoraggio robusto dei Comment;
-- retention degli oggetti `detached`;
-- indicizzazione derivata del testo delle occurrence;
-- multi-context per Document;
-- forma precisa degli endpoint di upload e limiti dimensionali predefiniti;
-- retention e garbage collection di SourceAnchor e Asset non referenziati;
-- renderer della Knowledge Map;
-- qualsiasi integrazione AI;
-- sintassi e renderer delle formule;
-- forma del trasformatore intermedio e librerie di export;
-- profili content-only/metadata e packaging multi-Document;
-- soglie e strategia UI per suggerire lo split di Document molto grandi;
-- stile di numerazione e raggruppamento visuale delle endnote nell'export di un libro composto.
+I record `detached` non vengono eliminati automaticamente nella prima versione. Un purge futuro deve dimostrare che nessun riferimento, evidence o possibilità di recupero richiesta dipende dal record; soglie specifiche per SourceAnchor e Asset vengono stabilite nelle rispettive fasi.
 
-Queste decisioni devono essere prese nella fase che le richiede, senza invalidare le invarianti qui definite.
+I test in browser reale diventano parte del gate dalla FASE 3 e coprono la sequenza critica delle FASI 3–6: creazione, editing, clipboard, salvataggio, reload e inspector delle KnowledgeOccurrence. La FASE 2 resta coperta da test editor/API vicini alle trasformazioni, salvo comportamenti che jsdom non possa rappresentare affidabilmente.
+
+## 14. Dipendenze incrementali
+
+```text
+Phase 1.1 → Highlight → KnowledgeOccurrence Concept/Entity
+→ invarianti editor → sincronizzazione → Inspectors → Document lifecycle
+
+Entity + EntityType → EntityIdentifier
+
+Template System → SemanticBlock → FieldValue
+→ Entity/SemanticBlock references → Structured Search → Entity Compare / Matrix
+
+KnowledgeRelation → evidence verificabile → Knowledge Map
+
+Sources → source_reference e provenance FieldValue
+Sources + Template System + Reference Manager → Provider Layer
+```
+
+Inspector, ricerca, compare, provenance, commenti ed export si ampliano quando il dato proprietario è disponibile. Una fase non crea placeholder persistenti o FK non verificabili per simulare entità di una fase successiva.
+
+## 15. Registro delle decisioni
+
+Le decisioni trasversali adottate e le sole questioni ancora programmate sono registrate in `DECISIONS.md`. Endpoint semantici, retention generale dei record `detached`, normalizzazione EntityIdentifier, raccomandazioni Template↔EntityType, ownership Context/Tag, riferimenti editoriali ai SemanticBlock e lifecycle dei Document sono decisioni già chiuse e non restano in una lista generica di elementi differiti.
+
+Ogni decisione `scheduled` deve essere chiusa prima della fase indicata nel registro. La roadmap non può iniziare quella fase finché la voce non passa ad `adopted` e dominio, invarianti e test previsti non sono stati aggiornati.
