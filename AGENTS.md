@@ -43,7 +43,13 @@ Ogni cambiamento a Concept, ConceptAlias, Occurrence o al mark `conceptOccurrenc
 
 Ogni cambiamento alla distinzione Concept/Context/Tag richiede una decisione architetturale esplicita. La somiglianza dei nomi non è una ragione valida per unificarli.
 
-Ogni cambiamento a Source, SourceLocator, SourceAnchor, SourceCitation o Asset deve preservare la distinzione tra provenienza, ancoraggio editoriale e file binario e aggiornare `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili.
+Ogni cambiamento a Document, gerarchia editoriale, DocumentNote o al nodo `documentNoteReference` deve aggiornare `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili. Uno split/move tra Document deve essere atomico e preservare tutte le identità trasferite; non può essere simulato con un normale copy/paste.
+
+Ogni cambiamento a Source, SourceContributor, SourceIdentifier, SourceLocator, SourceAnchor, SourceCitation, BibliographicCitation, BibliographySettings o Asset deve preservare la distinzione tra catalogo bibliografico, provenance, citazione visibile, ancoraggio editoriale e file binario e aggiornare `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili.
+
+Ogni cambiamento a DocumentAnchor, DocumentLink, al mark `documentLink`, agli heading ancorati o alle formule deve aggiornare `DOMAIN_MODEL.md`, `ARCHITECTURE.md`, `INVARIANTS.md` e i test applicabili. Un DocumentLink resta distinto da una Relation tra Concept; titolo, slug, testo e offset non diventano identità autorevoli della destinazione.
+
+Ogni exporter deve leggere `document_json`, `DocumentNote.body_json` e i record semantici/bibliografici necessari, dichiarare le degradazioni e rispettare `INV-EXP-*`; non può usare `plain_text` come sostituto del contenuto né introdurre servizi di conversione a pagamento.
 
 Le ambiguità che possono cambiare identità, lifecycle, cancellazione o significato dei dati devono essere segnalate prima di codificare. Proporre una soluzione e descriverne i trade-off.
 
@@ -73,7 +79,12 @@ Ogni bug editoriale deve avere un test regressivo. Non affidarsi al solo test ma
 
 ## Dipendenze e dati
 
+- Il codice originale di Nectrix è distribuito con licenza `AGPL-3.0-or-later`. I nuovi file sorgente devono riportare `SPDX-License-Identifier: AGPL-3.0-or-later` quando il formato consente commenti.
 - Aggiungere una dipendenza solo quando riduce concretamente rischio o complessità della fase corrente.
+- Usare esclusivamente dipendenze e servizi gratuiti, senza canoni, abbonamenti, licenze o funzionalità che richiedano pagamento. Un eventuale cambio di policy richiede prima una decisione esplicita del proprietario e l'aggiornamento di `THIRD_PARTY_LICENSES.md`; non può essere implicito nell'aggiunta di una dipendenza.
+- Prima di aggiungere o aggiornare una dipendenza, verificare la licenza alla fonte ufficiale, accertarne la compatibilità con il progetto e aggiornare `THIRD_PARTY_LICENSES.md` nello stesso intervento.
+- Indicare nella documentazione di consegna le licenze delle dipendenze introdotte o aggiornate e segnalare obblighi di attribuzione, distribuzione o pubblicazione del codice.
+- Non confondere un componente open source gratuito con servizi cloud, estensioni, piani hosted o feature commerciali offerti dallo stesso fornitore.
 - Usare Composer solo se offre un beneficio dimostrabile; non è un requisito del bootstrap.
 - Abilitare le foreign key SQLite su ogni connessione.
 - Usare transazioni per modifiche che coinvolgono documento e record semantici.

@@ -12,11 +12,11 @@ Il progetto distingue tre dimensioni indipendenti:
 
 La stessa stringa può essere il nome di un Concept, di un Context e di un Tag senza creare alcuna identità condivisa tra le tre entità.
 
-I Context formano gerarchie di profondità arbitraria. La roadmap include inoltre un catalogo riutilizzabile di fonti collegabili a intere note o a range testuali e immagini inline conservate come asset locali sicuri.
+I Context formano gerarchie di profondità arbitraria. L'unità editoriale è il **Document**: può essere un testo autonomo oppure un contenitore gerarchico per un libro composto da parti e capitoli. La roadmap include note a piè di pagina e finali, indice navigabile, formule, collegamenti ipertestuali, immagini locali sicure, un reference manager con citazioni e bibliografia ed export HTML, DOCX, ODT e LaTeX.
 
 ## Stato del progetto
 
-La **FASE 0 — Architettura** è completata. Il repository non contiene ancora frontend, backend o schema eseguibile; la prossima fase prevista è il bootstrap minimale.
+La **FASE 1 — Bootstrap minimale** è completata. Il repository contiene editor Svelte/TipTap, API PHP minimale, migrazione SQLite incrementale e test del round trip documentale. La prossima fase prevista è la FASE 2 — Highlight normale.
 
 I documenti normativi sono:
 
@@ -24,7 +24,9 @@ I documenti normativi sono:
 - [DOMAIN_MODEL.md](DOMAIN_MODEL.md): entità, attributi, relazioni e regole di dominio;
 - [INVARIANTS.md](INVARIANTS.md): proprietà che ogni implementazione deve preservare;
 - [ROADMAP.md](ROADMAP.md): fasi, gate e criteri di completamento;
-- [AGENTS.md](AGENTS.md): regole operative per chi modifica il repository.
+- [BACKLOG.md](BACKLOG.md): punto di ripresa e prossimo lavoro, subordinato alla roadmap;
+- [AGENTS.md](AGENTS.md): regole operative per chi modifica il repository;
+- [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md): policy economica e inventario verificato delle licenze di terze parti.
 
 In caso di conflitto, le invarianti di dominio hanno precedenza sulle scorciatoie implementative. Ogni cambiamento al modello Concept/Occurrence richiede un aggiornamento contestuale di `INVARIANTS.md`.
 
@@ -37,6 +39,48 @@ In caso di conflitto, le invarianti di dominio hanno precedenza sulle scorciatoi
 
 Le dipendenze devono essere introdotte solo nella fase che le richiede.
 
+Il progetto usa esclusivamente componenti e servizi gratuiti. Ogni dipendenza effettivamente introdotta deve avere una licenza verificata e deve essere registrata in `THIRD_PARTY_LICENSES.md`; servizi cloud, estensioni e funzionalità a pagamento non sono ammessi senza autorizzazione esplicita del proprietario del progetto.
+
+## Licenza
+
+Nectrix è software libero distribuito secondo la [GNU Affero General Public License, versione 3 o successiva](LICENSE) (`AGPL-3.0-or-later`). Chi distribuisce una versione modificata o la rende disponibile agli utenti attraverso una rete deve offrire anche il relativo codice sorgente secondo i termini della licenza.
+
+## Avvio locale
+
+Requisiti: Node.js compatibile con Vite 8, PHP 8.2 o successivo con `pdo_sqlite`, e SQLite 3.37 o successivo.
+
+```bash
+npm install
+npm run dev:api
+```
+
+In un secondo terminale:
+
+```bash
+npm run dev
+```
+
+L'interfaccia è disponibile su `http://127.0.0.1:5173`; Vite inoltra `/api` a `http://127.0.0.1:8080`. Il database applicativo viene creato in `data/nectrix.sqlite` ed è escluso da Git. Il percorso può essere sostituito con la variabile `NECTRIX_DB_PATH` per test o installazioni locali differenti.
+
+Comandi di verifica:
+
+```bash
+npm run check
+npm test
+npm run build
+npm run licenses
+```
+
+## API della FASE 1
+
+- `GET /api/health` — stato dell'API;
+- `GET /api/documents` — elenco dei Document;
+- `POST /api/documents` — creazione;
+- `GET /api/documents/{uuid}` — apertura;
+- `PUT /api/documents/{uuid}` — salvataggio con `baseRevision`.
+
+La cancellazione non appartiene alla FASE 1. Lo schema editoriale accettato è documentato in [docs/DOCUMENT_SCHEMA_V1.md](docs/DOCUMENT_SCHEMA_V1.md).
+
 ## Primo milestone applicativo
 
-Il primo milestone termina quando una nota rich-text può contenere più occurrence persistenti dello stesso Concept e le loro identità restano coerenti durante modifica, cancellazione, undo/redo, copia/incolla, salvataggio e reload. Mappe, AI, flashcard e altre funzioni avanzate restano fuori ambito fino a quel momento.
+Il primo milestone termina quando un Document rich-text può contenere più occurrence persistenti dello stesso Concept e le loro identità restano coerenti durante modifica, cancellazione, undo/redo, copia/incolla, salvataggio e reload. Mappe, AI, flashcard e altre funzioni avanzate restano fuori ambito fino a quel momento.
