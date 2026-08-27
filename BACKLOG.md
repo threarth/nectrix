@@ -7,6 +7,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 0 — Architettura: completata.
 - FASE 1 — Bootstrap minimale: completata.
 - Phase 1.1 — Domain Model Extension and Alignment: completata.
+- FASE 2 — Highlight normale: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
 - API PHP minimale e database SQLite in `data/nectrix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
@@ -15,20 +16,19 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 2 — Highlight normale
+### FASE 3 — KnowledgeObject e Semantic Occurrences
 
-Introdurre esclusivamente un mark visuale di highlight, senza creare o modificare KnowledgeObject, KnowledgeOccurrence o dati strutturati.
+Introdurre il mark comune `knowledgeOccurrence` per Concept ed Entity, con creazione/associazione atomica e mark validato. Questa fase non deve introdurre Alias o EntityIdentifier automatici.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- modifica interna e ai bordi del mark;
-- cancellazione parziale e totale;
-- undo/redo;
-- copy/paste e cut/paste;
-- serializzazione, salvataggio e reload;
-- assenza di scritture nelle tabelle KnowledgeObject, Concept, Entity, KnowledgeOccurrence, SemanticBlock e FieldValue.
+- creazione e associazione a Concept/Entity;
+- creazione Entity con EntityType configurabile;
+- persistenza coerente di `occurrenceId`, `knowledgeObjectId` e `objectType`;
+- test end-to-end browser per i flussi critici;
+- nessuna conversione automatica Concept↔Entity né promozione del testo ad Alias o Identifier.
 
-Gate: comportamento stabile e nessuna scrittura nelle tabelle semantiche.
+Gate: creazione atomica, rendering e persistenza coerenti per entrambi i sottotipi.
 
 ## Decisioni
 

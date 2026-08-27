@@ -9,7 +9,8 @@ namespace Nectrix;
 final class DocumentValidator
 {
     private const MAX_DEPTH = 32;
-    private const MARKS = ['bold', 'italic', 'underline'];
+    private const MARKS = ['bold', 'italic', 'underline', 'highlight', 'knowledgeOccurrence'];
+    private const LEGACY_HIGHLIGHT_COLORS = ['yellow', 'green', 'blue', 'pink'];
     private const BLOCKS = ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList'];
 
     /** @param array<string, mixed> $document */
@@ -85,15 +86,53 @@ final class DocumentValidator
         foreach ($marks as $index => $markValue) {
             $markPath = "{$path}.marks[{$index}]";
             $mark = $this->assertObject($markValue, $markPath);
-            $this->assertKeys($mark, ['type'], ['type'], $markPath);
+            $this->assertKeys($mark, ['type', 'attrs'], ['type'], $markPath);
             $type = $mark['type'];
             if (!is_string($type) || !in_array($type, self::MARKS, true)) {
                 $this->invalid($markPath . '.type', 'Mark non supportato.');
+            }
+            if ($type === 'highlight') {
+                $this->validateHighlight($mark, $markPath);
+            } elseif ($type === 'knowledgeOccurrence') {
+                $this->validateKnowledgeOccurrence($mark, $markPath);
+            } elseif (array_key_exists('attrs', $mark)) {
+                $this->invalid($markPath . '.attrs', 'Il mark non supporta attributi.');
             }
             if (isset($seen[$type])) {
                 $this->invalid($markPath, 'Mark duplicato sullo stesso nodo text.');
             }
             $seen[$type] = true;
+        }
+    }
+
+    /** @param array<string, mixed> $mark */
+    private function validateHighlight(array $mark, string $path): void
+    {
+        if (!array_key_exists('attrs', $mark)) {
+            return;
+        }
+        $attrs = $this->assertObject($mark['attrs'], $path . '.attrs');
+        $this->assertKeys($attrs, ['color'], ['color'], $path . '.attrs');
+        if (!is_string($attrs['color']) || (!preg_match('/^#[0-9a-fA-F]{6}$/', $attrs['color']) && !in_array($attrs['color'], self::LEGACY_HIGHLIGHT_COLORS, true))) {
+            $this->invalid($path . '.attrs.color', 'Colore highlight non supportato.');
+        }
+    }
+
+    /** @param array<string, mixed> $mark */
+    private function validateKnowledgeOccurrence(array $mark, string $path): void
+    {
+        if (!array_key_exists('attrs', $mark)) {
+            $this->invalid($path . '.attrs', 'knowledgeOccurrence richiede attributi.');
+        }
+        $attrs = $this->assertObject($mark['attrs'], $path . '.attrs');
+        $this->assertKeys($attrs, ['occurrenceId', 'knowledgeObjectId', 'objectType'], ['occurrenceId', 'knowledgeObjectId', 'objectType'], $path . '.attrs');
+        foreach (['occurrenceId', 'knowledgeObjectId'] as $key) {
+            if (!is_string($attrs[$key]) || !UuidV7::isValid($attrs[$key])) {
+                $this->invalid($path . '.attrs.' . $key, 'ID occurrence non valido.');
+            }
+        }
+        if (!is_string($attrs['objectType']) || !in_array($attrs['objectType'], ['concept', 'entity'], true)) {
+            $this->invalid($path . '.attrs.objectType', 'objectType occurrence non supportato.');
         }
     }
 

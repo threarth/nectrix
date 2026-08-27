@@ -4,6 +4,7 @@ node_modules/
 dist/
 .vite/
 coverage/
+test-results/
 data/*.sqlite
 data/*.sqlite-*
 *.log

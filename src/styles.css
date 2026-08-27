@@ -134,6 +134,23 @@ button:disabled {
   font-size: 10px;
 }
 
+.document-rename {
+  margin: 4px 0;
+  padding: 6px 8px;
+  border-radius: 9px;
+  background: #383b32;
+}
+
+.document-rename input {
+  width: 100%;
+  padding: 5px 4px;
+  border: 0;
+  border-bottom: 1px solid #a9c09f;
+  outline: 0;
+  color: #fff;
+  background: transparent;
+}
+
 .muted,
 .empty-state {
   color: #aaa99f;
@@ -189,6 +206,8 @@ button:disabled {
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(28px, 4vw, 43px);
   line-height: 1.1;
+  resize: none;
+  overflow: hidden;
 }
 
 .title-input:focus {
@@ -225,6 +244,7 @@ button:disabled {
 }
 
 .editor-shell {
+  position: relative;
   max-width: 1060px;
   min-height: 68vh;
   margin: 0 auto;
@@ -316,6 +336,119 @@ button:disabled {
   padding-left: 1.2em;
   border-left: 3px solid #97aa8e;
   color: #55594f;
+}
+
+.editor-content .tiptap mark.nectrix-highlight {
+  padding: 0 0.08em;
+  border-radius: 0.14em;
+  color: inherit;
+  background: #f6dd79;
+}
+
+.highlight-popover {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  max-width: min(420px, calc(100% - 24px));
+  min-height: 42px;
+  padding: 6px 8px;
+  border: 1px solid #d0c8ba;
+  border-radius: 9px;
+  color: #41433d;
+  background: #fffdf8;
+  box-shadow: 0 8px 24px rgb(57 52 41 / 18%);
+}
+
+.highlight-popover-label {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.highlight-colors {
+  display: flex;
+  gap: 5px;
+}
+
+.highlight-colors button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: #f6dd79;
+}
+
+.highlight-colors button.active {
+  border-color: #2e3e2a;
+  box-shadow: 0 0 0 1px #fffdf8 inset;
+}
+
+.highlight-palette-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #ddd7cd;
+  color: #4b4c45;
+  background: #f7f4ed;
+  font-size: 12px;
+}
+
+.highlight-palette-selector label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.highlight-palette-colors {
+  display: flex;
+  gap: 5px;
+}
+
+.highlight-palette-colors label {
+  width: 27px;
+  height: 27px;
+  border: 1px solid #d0c8ba;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.highlight-palette-colors input {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.highlight-palette-selector button,
+.highlight-palette-selector select {
+  min-height: 27px;
+  padding: 3px 6px;
+  border: 1px solid #d5cec2;
+  border-radius: 5px;
+  color: #454740;
+  background: #fff;
+  font-size: 12px;
+}
+
+.highlight-remove {
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 0;
+  border-left: 1px solid #ded7cc;
+  color: #8a3e35;
+  background: transparent;
+  font-size: 12px;
+}
+
+.highlight-remove:hover {
+  color: #63251e;
+  background: #f8ebe7;
 }
 
 .editor-content .tiptap ul,

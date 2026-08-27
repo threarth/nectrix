@@ -2,7 +2,7 @@
   // SPDX-License-Identifier: AGPL-3.0-or-later
 
   import type { JSONContent } from '@tiptap/core'
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import DocumentEditor from './components/DocumentEditor.svelte'
   import {
     ApiError,
@@ -11,7 +11,7 @@
     listDocuments,
     saveDocument,
     type DocumentRecord,
-    type DocumentSummary,
+    type DocumentSummary, type OccurrenceCreate,
   } from './lib/api'
 
   let documents = $state<DocumentSummary[]>([])
@@ -22,6 +22,10 @@
   let loading = $state(true)
   let saving = $state(false)
   let error = $state('')
+  let occurrenceCreates = $state<OccurrenceCreate[]>([])
+  let sidebarRename = $state<{ id: string; title: string } | null>(null)
+  let sidebarRenameInput = $state<HTMLInputElement | undefined>(undefined)
+  let titleInput = $state<HTMLTextAreaElement | undefined>(undefined)
 
   onMount(() => {
     void initialise()
@@ -69,7 +73,7 @@
     saving = true
     error = ''
     try {
-      const saved = await saveDocument(selected, draftTitle, draftJson)
+      const saved = await saveDocument(selected, draftTitle, draftJson, occurrenceCreates)
       applyDocument(saved)
       documents = [saved, ...documents.filter((document) => document.id !== saved.id)]
     } catch (cause) {
@@ -84,16 +88,86 @@
     draftTitle = document.title
     draftJson = document.documentJson
     dirty = false
+    occurrenceCreates = []
+    void tick().then(resizeTitleInput)
   }
 
   function changeTitle(value: string): void {
     draftTitle = value
     dirty = true
+    void tick().then(resizeTitleInput)
   }
 
   function changeContent(content: JSONContent): void {
     draftJson = content
     dirty = true
+  }
+
+  function addOccurrenceCreate(create: OccurrenceCreate): void {
+    occurrenceCreates = [...occurrenceCreates, create]
+    dirty = true
+  }
+
+  async function beginSidebarRename(document: DocumentSummary): Promise<void> {
+    sidebarRename = {
+      id: document.id,
+      title: selected?.id === document.id ? draftTitle : document.title,
+    }
+    await tick()
+    sidebarRenameInput?.focus()
+    sidebarRenameInput?.select()
+  }
+
+  async function confirmSidebarRename(id: string): Promise<void> {
+    const rename = sidebarRename
+    if (!rename || rename.id !== id || saving) return
+
+    if (selected?.id === id && draftJson) {
+      changeTitle(rename.title)
+      sidebarRename = null
+      await persist()
+      return
+    }
+
+    saving = true
+    error = ''
+    try {
+      const document = await getDocument(id)
+      const saved = await saveDocument(document, rename.title, document.documentJson)
+      documents = [saved, ...documents.filter((item) => item.id !== saved.id)]
+      sidebarRename = null
+    } catch (cause) {
+      showError(cause)
+    } finally {
+      saving = false
+    }
+  }
+
+  function confirmTitleFromDocument(event: KeyboardEvent): void {
+    if (event.key !== 'Enter') return
+
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault()
+      const input = event.currentTarget as HTMLTextAreaElement
+      const start = input.selectionStart
+      const end = input.selectionEnd
+      const nextTitle = `${draftTitle.slice(0, start)}\n${draftTitle.slice(end)}`
+      changeTitle(nextTitle)
+      void tick().then(() => {
+        input.selectionStart = start + 1
+        input.selectionEnd = start + 1
+      })
+      return
+    }
+
+    event.preventDefault()
+    void persist()
+  }
+
+  function resizeTitleInput(): void {
+    if (!titleInput) return
+    titleInput.style.height = 'auto'
+    titleInput.style.height = `${titleInput.scrollHeight}px`
   }
 
   function showError(cause: unknown): void {
@@ -128,15 +202,39 @@
         <p class="empty-state">Non ci sono ancora documenti.</p>
       {:else}
         {#each documents as document (document.id)}
-          <button
-            type="button"
-            class="document-item"
-            class:active={selected?.id === document.id}
-            onclick={() => openDocument(document.id)}
-          >
-            <span>{document.title || 'Senza titolo'}</span>
-            <small>rev. {document.revision}</small>
-          </button>
+          {#if sidebarRename?.id === document.id}
+            <form
+              class="document-rename"
+              class:active={selected?.id === document.id}
+              onsubmit={(event) => {
+                event.preventDefault()
+                void confirmSidebarRename(document.id)
+              }}
+            >
+              <input
+                bind:this={sidebarRenameInput}
+                aria-label="Rinomina documento"
+                value={sidebarRename.title}
+                oninput={(event) => {
+                  if (sidebarRename?.id === document.id) sidebarRename.title = event.currentTarget.value
+                }}
+                onkeydown={(event) => {
+                  if (event.key === 'Escape') sidebarRename = null
+                }}
+              />
+            </form>
+          {:else}
+            <button
+              type="button"
+              class="document-item"
+              class:active={selected?.id === document.id}
+              onclick={() => openDocument(document.id)}
+              ondblclick={() => void beginSidebarRename(document)}
+            >
+              <span>{document.title || 'Senza titolo'}</span>
+              <small>rev. {document.revision}</small>
+            </button>
+          {/if}
         {/each}
       {/if}
     </nav>
@@ -152,13 +250,16 @@
 
     {#if selected && draftJson}
       <header class="document-header">
-        <input
+        <textarea
+          bind:this={titleInput}
           class="title-input"
           aria-label="Titolo documento"
+          rows="1"
           value={draftTitle}
           oninput={(event) => changeTitle(event.currentTarget.value)}
+          onkeydown={confirmTitleFromDocument}
           placeholder="Titolo del documento"
-        />
+        ></textarea>
         <div class="save-area">
           <span class:dirty class="save-status">{dirty ? 'Modifiche non salvate' : `Revisione ${selected.revision}`}</span>
           <button class="save-button" type="button" disabled={!dirty || saving} onclick={persist}>
@@ -168,7 +269,7 @@
       </header>
 
       {#key selected.id}
-        <DocumentEditor initialContent={draftJson} onChange={changeContent} />
+        <DocumentEditor initialContent={draftJson} onChange={changeContent} onOccurrenceCreate={addOccurrenceCreate} />
       {/key}
     {:else if !loading}
       <section class="welcome">

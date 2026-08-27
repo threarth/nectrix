@@ -18,6 +18,8 @@ final class DocumentService
         private readonly DocumentRepository $repository,
         private readonly DocumentValidator $validator,
         private readonly PlainTextExtractor $plainTextExtractor,
+        private readonly KnowledgeOccurrenceExtractor $occurrenceExtractor,
+        private readonly KnowledgeRepository $knowledgeRepository,
     ) {
     }
 
@@ -47,7 +49,7 @@ final class DocumentService
     public function update(string $id, array $input): array
     {
         $this->validateId($id);
-        $this->assertOnlyKeys($input, ['baseRevision', 'title', 'documentJson']);
+        $this->assertOnlyKeys($input, ['baseRevision', 'title', 'documentJson', 'occurrenceCreates']);
         foreach (['baseRevision', 'title', 'documentJson'] as $required) {
             if (!array_key_exists($required, $input)) {
                 throw new ApiException(422, 'invalid_request', "Campo obbligatorio mancante: {$required}.");
@@ -58,12 +60,16 @@ final class DocumentService
         }
 
         $document = $this->document($input['documentJson']);
+        $creates = $input['occurrenceCreates'] ?? [];
+        if (!is_array($creates) || !array_is_list($creates)) throw new ApiException(422, 'invalid_request', 'occurrenceCreates deve essere una lista.');
+        $marks = $this->occurrenceExtractor->extract($document);
         return $this->repository->update(
             $id,
             $input['baseRevision'],
             $this->title($input['title']),
             $document,
             $this->plainTextExtractor->extract($document),
+            fn (string $documentId) => $this->knowledgeRepository->assertAndCreateOccurrences($documentId, $marks, $creates),
         );
     }
 

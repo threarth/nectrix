@@ -86,6 +86,8 @@ Rappresenta un documento editabile.
 
 La tabella descrive il modello di arrivo, non lo schema da creare tutto insieme. La FASE 1 introduce soltanto `id`, `title`, `document_json`, `plain_text`, `revision` e timestamp. `status` entra nella FASE 6.1, `context_id` nella FASE 8; `subtitle`, `document_type`, `parent_document_id`, `structural_role`, `sort_order` e `language` entrano con migrazioni nella FASE 21. Fino a quella fase `plain_text` deriva dal solo contenuto principale; dalla FASE 21 include anche le DocumentNote attive nell'ordine dei riferimenti.
 
+Dalla FASE 2 il JSON può contenere il mark `highlight` con il solo attributo visuale opzionale `color` come `#RRGGBB`; assenza e valori storici `yellow`, `green`, `blue`, `pink` restano leggibili. La palette configurabile dell'editor è una preferenza locale da 4 a 10 colori, non un'entità di dominio. Highlight non possiede identità di dominio, foreign key o lifecycle separato; il suo testo continua a contribuire normalmente a `plain_text`.
+
 Tutti i timestamp di dominio sono stringhe `TEXT` RFC 3339 in UTC con millisecondi e forma canonica `YYYY-MM-DDTHH:mm:ss.SSSZ`. `created_at` e `updated_at` coincidono alla creazione; un update accettato modifica `updated_at`, mentre un tentativo rifiutato non modifica alcun timestamp.
 
 Un Document può contenere zero o più occurrence e avere zero o più Tag. Può rappresentare un testo breve, un elaborato o un libro senza cambiare identità o tabella. I collegamenti ipertestuali usano l'ID stabile del Document, mai il titolo, come destinazione autorevole.
@@ -736,7 +738,7 @@ La formattazione interna può produrre più text node con gli stessi attributi. 
 
 ### Occurrence comune o tabelle separate
 
-ConceptOccurrence ed EntityOccurrence avrebbero foreign key semplici e API esplicite, ma duplicherebbero integralmente lifecycle TipTap/ProseMirror, riconciliazione, clipboard e test, rendendo più facile una divergenza futura. La Phase 1.1 adotta quindi `KnowledgeOccurrence` e un solo mark futuro `knowledgeOccurrence`, con `knowledgeObjectId`, `objectType` e `occurrenceId`. La coppia ID/discriminator è verificata da una foreign key composta verso KnowledgeObject; il discriminator nel mark è ridondante e un mismatch blocca il salvataggio. Il super-tipo resta chiuso a Concept/Entity, quindi non diventa una generica label.
+ConceptOccurrence ed EntityOccurrence avrebbero foreign key semplici e API esplicite, ma duplicherebbero integralmente lifecycle TipTap/ProseMirror, riconciliazione, clipboard e test, rendendo più facile una divergenza futura. La FASE 3 adotta quindi `KnowledgeOccurrence` e un solo mark `knowledgeOccurrence`, con `knowledgeObjectId`, `objectType` e `occurrenceId`. La coppia ID/discriminator è verificata da una foreign key composta verso KnowledgeObject; il discriminator nel mark è ridondante e un mismatch blocca il salvataggio. Il super-tipo resta chiuso a Concept/Entity, quindi non diventa una generica label.
 
 ### Relation comune o tabelle separate
 

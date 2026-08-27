@@ -10,6 +10,9 @@ use Nectrix\DocumentRepository;
 use Nectrix\DocumentService;
 use Nectrix\DocumentValidator;
 use Nectrix\Migrator;
+use Nectrix\KnowledgeOccurrenceExtractor;
+use Nectrix\KnowledgeRepository;
+use Nectrix\KnowledgeService;
 use Nectrix\PlainTextExtractor;
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -47,11 +50,15 @@ try {
     $databasePath = getenv('NECTRIX_DB_PATH') ?: dirname(__DIR__, 2) . '/data/nectrix.sqlite';
     $pdo = Database::connect($databasePath);
     (new Migrator($pdo, dirname(__DIR__) . '/migrations'))->migrate();
+    $knowledgeRepository = new KnowledgeRepository($pdo);
     $service = new DocumentService(
         new DocumentRepository($pdo),
         new DocumentValidator(),
         new PlainTextExtractor(),
+        new KnowledgeOccurrenceExtractor(),
+        $knowledgeRepository,
     );
+    $knowledge = new KnowledgeService($knowledgeRepository);
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -61,6 +68,15 @@ try {
     }
     if ($method === 'GET' && $path === '/api/documents') {
         respond(200, ['documents' => $service->list()]);
+    }
+    if ($method === 'GET' && $path === '/api/knowledge/search') {
+        respond(200, ['results' => $knowledge->search((string) ($_GET['q'] ?? ''))]);
+    }
+    if ($method === 'GET' && $path === '/api/entity-types') {
+        respond(200, ['entityTypes' => $knowledge->entityTypes()]);
+    }
+    if ($method === 'POST' && $path === '/api/entity-types') {
+        respond(201, ['entityType' => $knowledge->createEntityType(requestBody())]);
     }
     if ($method === 'POST' && $path === '/api/documents') {
         respond(201, ['document' => $service->create(requestBody())]);

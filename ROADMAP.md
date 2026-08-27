@@ -60,17 +60,19 @@ Decisioni vincolanti:
 
 Gate: migration additiva e ripetibile; vincoli di sottotipo, tipo dei FieldValue e Relation coperti da test; schema/API/editor Document invariati; tutti i test FASE 1, type-check e build verdi.
 
-## FASE 2 — Highlight normale
+## FASE 2 — Highlight normale (completata)
 
-Introdurre solo il mark visuale di highlight. Testare editing interno e ai bordi, delete parziale/totale, undo/redo, copy/paste, cut/paste e reload. Highlight resta formattazione e non è una KnowledgeOccurrence, un SemanticBlock o un FieldValue; non crea Concept, Entity o dati strutturati.
+Introdotto il solo mark visuale di Highlight, con il solo attributo opzionale `color` in forma `#RRGGBB`; la palette editoriale locale è modificabile da 4 a 10 colori senza diventare dato di dominio. L'input interno estende il mark, quello esattamente ai bordi resta non evidenziato; delete parziale conserva la formattazione sul testo residuo e delete totale la rimuove. Sono coperti editing, undo/redo, copy/paste, cut/paste, serializzazione, salvataggio e reload. Highlight resta formattazione e non è una KnowledgeOccurrence, un SemanticBlock o un FieldValue; non crea Concept, Entity o dati strutturati.
 
-Gate: comportamento stabile e nessuna scrittura nelle tabelle KnowledgeObject, Concept, Entity, KnowledgeOccurrence, SemanticBlock o FieldValue.
+Gate soddisfatto: comportamento stabile e nessuna scrittura nelle tabelle KnowledgeObject, Concept, Entity, KnowledgeOccurrence, SemanticBlock o FieldValue.
 
-## FASE 3 — KnowledgeObject e Semantic Occurrences
+## FASE 3 — KnowledgeObject e Semantic Occurrences (completata)
 
 Introdurre il mark comune `knowledgeOccurrence` per entrambi i sottotipi. Da una selezione l'utente può creare un nuovo Concept, associare un Concept esistente cercato per canonical name/Alias, creare una nuova Entity con EntityType configurabile oppure associare una Entity esistente. Ogni associazione crea un nuovo ID KnowledgeOccurrence; `knowledgeObjectId` e `objectType = concept|entity` vengono validati insieme.
 
-Gate: creazione atomica di KnowledgeObject, sottotipo, occurrence e mark; persistenza e rendering coerenti per entrambi i discriminator; nessuna conversione automatica Concept↔Entity e nessuna promozione del testo ad Alias o EntityIdentifier. Da questa fase i flussi critici sono coperti anche da test end-to-end in browser reale.
+Completato: il mark comune `knowledgeOccurrence` è validato lato editor/API; i comandi creano Concept o Entity con EntityType configurabile, oppure associano un oggetto esistente. Il salvataggio crea Document, KnowledgeObject/sottotipo e occurrence nella stessa transazione e rifiuta mark non persistiti o incoerenti senza modifiche parziali. La ricerca minima di Concept/Entity e la gestione minima EntityType sono disponibili. Test Playwright in browser reale coprono Concept e Entity con save/reload.
+
+Gate soddisfatto: creazione atomica di KnowledgeObject, sottotipo, occurrence e mark; persistenza e rendering coerenti per entrambi i discriminator; nessuna conversione automatica Concept↔Entity e nessuna promozione del testo ad Alias o EntityIdentifier; flussi critici coperti da test end-to-end in browser reale.
 
 ## FASE 4 — Invarianti delle KnowledgeOccurrence
 

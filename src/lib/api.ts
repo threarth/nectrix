@@ -15,6 +15,18 @@ export interface DocumentRecord extends DocumentSummary {
   plainText: string
 }
 
+export interface OccurrenceCreate {
+  occurrenceId: string
+  knowledgeObjectId: string
+  objectType: 'concept' | 'entity'
+  newObject: boolean
+  name?: string
+  entityTypeId?: string
+}
+
+export interface EntityType { id: string; name: string; description: string | null }
+export interface KnowledgeSearchResult { id: string; object_type: 'concept' | 'entity'; name: string; entity_type_name: string | null }
+
 interface ApiErrorPayload {
   error?: {
     code?: string
@@ -77,6 +89,7 @@ export async function saveDocument(
   document: Pick<DocumentRecord, 'id' | 'revision'>,
   title: string,
   documentJson: JSONContent,
+  occurrenceCreates: OccurrenceCreate[] = [],
 ): Promise<DocumentRecord> {
   const payload = await request<{ document: DocumentRecord }>(`/api/documents/${encodeURIComponent(document.id)}`, {
     method: 'PUT',
@@ -84,7 +97,20 @@ export async function saveDocument(
       baseRevision: document.revision,
       title,
       documentJson,
+      occurrenceCreates,
     }),
   })
   return payload.document
+}
+
+export async function createEntityType(name: string): Promise<EntityType> {
+  const payload = await request<{ entityType: EntityType }>('/api/entity-types', {
+    method: 'POST', body: JSON.stringify({ name }),
+  })
+  return payload.entityType
+}
+
+export async function searchKnowledge(query: string): Promise<KnowledgeSearchResult[]> {
+  const payload = await request<{ results: KnowledgeSearchResult[] }>(`/api/knowledge/search?q=${encodeURIComponent(query)}`)
+  return payload.results
 }

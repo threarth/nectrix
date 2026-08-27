@@ -29,6 +29,7 @@ Le versioni sono fissate esattamente in `package.json` e `package-lock.json`. Ne
 | svelte-check | 4.7.6 | sviluppo/type-check | MIT | [sveltejs/language-tools](https://github.com/sveltejs/language-tools) | gratuito |
 | Vitest | 4.1.11 | test frontend | MIT | [vitest-dev/vitest](https://github.com/vitest-dev/vitest) | gratuito |
 | jsdom | 30.0.1 | ambiente test DOM | MIT | [jsdom/jsdom](https://github.com/jsdom/jsdom) | gratuito |
+| Playwright Test | 1.62.1 | test end-to-end browser | Apache-2.0 | [microsoft/playwright](https://github.com/microsoft/playwright) | gratuito; browser locale, nessun servizio hosted |
 
 ## Dipendenze transitive
 

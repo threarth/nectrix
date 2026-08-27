@@ -46,6 +46,17 @@ Archive e trash non eliminano contenuto, KnowledgeObject o dati collegati e non 
 **INV-DOC-14 — Riferimenti prima del purge**
 Un Document con figli, link entranti, evidence o altre associazioni attive non viene eliminato fisicamente finché ogni riferimento non è stato gestito esplicitamente. Il purge rimuove le manifestazioni Document-owned soltanto dopo le verifiche e non applica cascade ai KnowledgeObject o ai dati Entity-owned.
 
+## A.1 Highlight normale
+
+**INV-HLT-01 — Sola formattazione**
+`highlight` è un mark visuale nel `document_json`; il solo attributo ammesso è `color` in formato `#RRGGBB` (assenza e quattro valori storici restano compatibili). La palette UI locale può contenere da 4 a 10 colori e non crea, modifica o riferisce KnowledgeObject, Concept, Entity, KnowledgeOccurrence, SemanticBlock o FieldValue.
+
+**INV-HLT-02 — Lifecycle editoriale**
+Input interno conserva/estende Highlight; input esattamente ai bordi resta non evidenziato. Delete parziale conserva Highlight sul testo residuo, delete totale lo rimuove. Undo/redo, copy/paste, cut/paste, serializzazione e reload preservano il comportamento del mark senza identità aggiuntive.
+
+**INV-HLT-03 — Persistenza neutra**
+Save/reload conserva semanticamente Highlight e il suo colore nel JSON e nel rendering. `plain_text` non cambia per effetto del mark e il salvataggio non scrive tabelle semantiche.
+
 ## B. Concept e Alias
 
 **INV-CON-01 — Globalità**  
@@ -424,6 +435,8 @@ Quando le relative fasi saranno implementate, devono esistere almeno questi test
 | Caso | Livello minimo | Invarianti |
 |---|---|---|
 | round trip documento formattato | frontend + API | DOC-01..05 |
+| Highlight: bordi, delete, undo/redo, clipboard e reload | editor + API | HLT-01..03, DOC-03 |
+| Highlight: nessuna scrittura semantica | integrazione | HLT-01, 03, DOC-05 |
 | modifica interna occurrence | editor | OCC-03, 06, 12 |
 | cancellazione parziale | editor + sync | OCC-07 |
 | cancellazione totale e save, per Concept ed Entity | integrazione | OCC-08, CON-03, ENT-03 |

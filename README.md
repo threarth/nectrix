@@ -17,7 +17,7 @@ I Context formano gerarchie di profondità arbitraria. L'unità editoriale è il
 
 ## Stato del progetto
 
-La **FASE 1 — Bootstrap minimale** e la **Phase 1.1 — Domain Model Extension and Alignment** sono completate. Il repository contiene editor Svelte/TipTap, API PHP minimale, migrazioni SQLite incrementali, schema predisposto per Concept/Entity e dati strutturati, e test del round trip documentale. La prossima fase prevista è la FASE 2 — Highlight normale.
+La **FASE 1 — Bootstrap minimale**, la **Phase 1.1 — Domain Model Extension and Alignment**, la **FASE 2 — Highlight normale** e la **FASE 3 — KnowledgeObject e Semantic Occurrences** sono completate. Il repository contiene editor Svelte/TipTap, API PHP/SQLite, Highlight visuale persistente e flussi atomici per creare o associare KnowledgeOccurrence di Concept ed Entity. La prossima fase prevista è la FASE 4 — Invarianti delle KnowledgeOccurrence.
 
 I documenti normativi sono:
 

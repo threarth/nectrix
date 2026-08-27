@@ -9,6 +9,8 @@ use Nectrix\Database;
 use Nectrix\DocumentRepository;
 use Nectrix\DocumentService;
 use Nectrix\DocumentValidator;
+use Nectrix\KnowledgeOccurrenceExtractor;
+use Nectrix\KnowledgeRepository;
 use Nectrix\Migrator;
 use Nectrix\PlainTextExtractor;
 use Nectrix\UuidV7;
@@ -130,6 +132,21 @@ function richDocument(): array
     ];
 }
 
+/** @return array<string, mixed> */
+function highlightedDocument(): array
+{
+    return [
+        'type' => 'doc',
+        'content' => [[
+            'type' => 'paragraph',
+            'content' => [
+                ['type' => 'text', 'text' => 'Testo '],
+                ['type' => 'text', 'marks' => [['type' => 'highlight', 'attrs' => ['color' => '#b8dff4']]], 'text' => 'evidenziato'],
+            ],
+        ]],
+    ];
+}
+
 $pdo = Database::connect(':memory:');
 $migrator = new Migrator($pdo, dirname(__DIR__) . '/migrations');
 $migrator->migrate();
@@ -137,7 +154,7 @@ $migrator->migrate();
 $validator = new DocumentValidator();
 $extractor = new PlainTextExtractor();
 $repository = new DocumentRepository($pdo);
-$service = new DocumentService($repository, $validator, $extractor);
+$service = new DocumentService($repository, $validator, $extractor, new KnowledgeOccurrenceExtractor(), new KnowledgeRepository($pdo));
 $suite = new TestSuite();
 
 $suite->test('la connessione SQLite abilita sempre le foreign key', static function () use ($pdo): void {
@@ -260,7 +277,7 @@ $suite->test('UUIDv7 è canonico, lowercase e non collide nel campione', static 
     assertTrue(!UuidV7::isValid(strtoupper(array_key_first($ids))), 'Un UUID uppercase non deve essere accettato.');
 });
 
-$suite->test('allowlist e plain text coprono tutti i nodi e mark della FASE 1', static function () use ($validator, $extractor): void {
+$suite->test('allowlist e plain text coprono tutti i nodi e mark fino alla FASE 2', static function () use ($validator, $extractor): void {
     $document = richDocument();
     $validator->validate($document);
     assertSameValue(
@@ -287,7 +304,7 @@ $suite->test('nodi e mark fuori allowlist vengono rifiutati con il path', static
     } catch (ApiException $error) {
         assertSameValue(422, $error->status);
         assertSameValue('invalid_document', $error->errorCode);
-        assertSameValue('$.content[0].content[0].marks[0].attrs', $error->details['path']);
+        assertSameValue('$.content[0].content[0].marks[0].type', $error->details['path']);
     }
 });
 
@@ -306,6 +323,90 @@ $suite->test('create, get e list preservano semanticamente il JSON rich text', s
     );
 });
 
+$suite->test('Highlight persiste come sola formattazione senza scritture semantiche', static function () use ($pdo, $service): void {
+    $tables = ['knowledge_objects', 'concepts', 'entities', 'knowledge_occurrences', 'semantic_blocks', 'field_values'];
+    $before = [];
+    foreach ($tables as $table) {
+        $before[$table] = (int) $pdo->query("SELECT COUNT(*) FROM {$table}")->fetchColumn();
+    }
+
+    $document = highlightedDocument();
+    $createdHighlight = $service->create(['title' => 'Solo highlight', 'documentJson' => $document]);
+    assertSameValue($document, $createdHighlight['documentJson']);
+    assertSameValue('Testo evidenziato', $createdHighlight['plainText']);
+
+    $savedHighlight = $service->update($createdHighlight['id'], [
+        'baseRevision' => 0,
+        'title' => 'Solo highlight',
+        'documentJson' => $document,
+    ]);
+    assertSameValue($document, $savedHighlight['documentJson']);
+    assertSameValue($savedHighlight, $service->get($createdHighlight['id']));
+
+    foreach ($tables as $table) {
+        assertSameValue($before[$table], (int) $pdo->query("SELECT COUNT(*) FROM {$table}")->fetchColumn(), "Highlight ha scritto in {$table}.");
+    }
+});
+
+$suite->test('Highlight accetta colori esadecimali e rifiuta valori non sicuri', static function () use ($validator): void {
+    $validator->validate(highlightedDocument());
+    $invalid = highlightedDocument();
+    $invalid['content'][0]['content'][1]['marks'][0]['attrs']['color'] = 'not-a-color';
+    try {
+        $validator->validate($invalid);
+        throw new RuntimeException('Un colore Highlight non supportato è stato accettato.');
+    } catch (ApiException $error) {
+        assertSameValue(422, $error->status);
+        assertSameValue('$.content[0].content[1].marks[0].attrs.color', $error->details['path']);
+    }
+});
+
+$suite->test('crea atomically Concept e KnowledgeOccurrence insieme al Document', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Occurrence atomica']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $json = ['type' => 'doc', 'content' => [[
+        'type' => 'paragraph',
+        'content' => [['type' => 'text', 'text' => 'Backlog', 'marks' => [[
+            'type' => 'knowledgeOccurrence',
+            'attrs' => ['occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept'],
+        ]]]],
+    ]]];
+    $saved = $service->update($document['id'], [
+        'baseRevision' => 0, 'title' => 'Occurrence atomica', 'documentJson' => $json,
+        'occurrenceCreates' => [[
+            'occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $conceptId,
+            'objectType' => 'concept', 'newObject' => true, 'name' => 'Backlog',
+        ]],
+    ]);
+    assertSameValue(1, $saved['revision']);
+    assertSameValue('Backlog', $pdo->query("SELECT canonical_name FROM concepts WHERE id = '{$conceptId}'")->fetchColumn());
+    assertSameValue('active', $pdo->query("SELECT status FROM knowledge_occurrences WHERE id = '{$occurrenceId}'")->fetchColumn());
+});
+
+$suite->test('un mark occurrence non dichiarato causa rollback atomico', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Rollback occurrence']);
+    $conceptId = UuidV7::generate();
+    $declaredId = UuidV7::generate();
+    $missingId = UuidV7::generate();
+    $json = ['type' => 'doc', 'content' => [[
+        'type' => 'paragraph', 'content' => [
+            ['type' => 'text', 'text' => 'Uno', 'marks' => [['type' => 'knowledgeOccurrence', 'attrs' => ['occurrenceId' => $declaredId, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept']]]],
+            ['type' => 'text', 'text' => ' Due', 'marks' => [['type' => 'knowledgeOccurrence', 'attrs' => ['occurrenceId' => $missingId, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept']]]],
+        ],
+    ]]];
+    try {
+        $service->update($document['id'], ['baseRevision' => 0, 'title' => 'Rollback occurrence', 'documentJson' => $json, 'occurrenceCreates' => [[
+            'occurrenceId' => $declaredId, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept', 'newObject' => true, 'name' => 'Uno',
+        ]]]);
+        throw new RuntimeException('Salvataggio incoerente accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('occurrence_not_persisted', $error->errorCode);
+    }
+    assertSameValue(0, (int) $pdo->query("SELECT COUNT(*) FROM knowledge_objects WHERE id = '{$conceptId}'")->fetchColumn());
+    assertSameValue(0, (int) $pdo->query("SELECT COUNT(*) FROM knowledge_occurrences WHERE document_id = '{$document['id']}'")->fetchColumn());
+});
+
 $suite->test('KnowledgeOccurrence usa lo stesso lifecycle relazionale per Concept ed Entity', static function () use ($pdo, &$created, &$domainFixture): void {
     $timestamp = '2026-08-26T12:30:00.000Z';
     foreach (['concept', 'entity'] as $objectType) {
@@ -315,7 +416,9 @@ $suite->test('KnowledgeOccurrence usa lo stesso lifecycle relazionale per Concep
             'created' => $timestamp, 'updated' => $timestamp,
         ]);
     }
-    assertSameValue(2, (int) $pdo->query('SELECT COUNT(*) FROM knowledge_occurrences')->fetchColumn());
+    $count = $pdo->prepare('SELECT COUNT(*) FROM knowledge_occurrences WHERE document_id = :document_id');
+    $count->execute(['document_id' => $created['id']]);
+    assertSameValue(2, (int) $count->fetchColumn());
 
     assertThrows(static function () use ($pdo, &$created, &$domainFixture, $timestamp): void {
         executeStatement($pdo, 'INSERT INTO knowledge_occurrences (id, knowledge_object_id, object_type, document_id, created_at, updated_at) VALUES (:id, :object_id, :object_type, :document_id, :created, :updated)', [

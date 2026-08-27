@@ -59,7 +59,7 @@ final class DocumentRepository
     }
 
     /** @return array<string, mixed> */
-    public function update(string $id, int $baseRevision, string $title, array $documentJson, string $plainText): array
+    public function update(string $id, int $baseRevision, string $title, array $documentJson, string $plainText, ?callable $beforeUpdate = null): array
     {
         $this->pdo->beginTransaction();
         try {
@@ -72,6 +72,7 @@ final class DocumentRepository
                     ['currentRevision' => $current['revision']],
                 );
             }
+            if ($beforeUpdate !== null) $beforeUpdate($id);
 
             $updatedAt = Clock::after($current['updatedAt']);
             $statement = $this->pdo->prepare(

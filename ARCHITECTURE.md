@@ -87,7 +87,9 @@ ConceptAlias è una denominazione alternativa, EntityIdentifier identifica una E
 
 ## 4. Documento editoriale
 
-`document_json` è un documento TipTap JSON valido. La FASE 1 abilita soltanto i nodi e mark definiti in `docs/DOCUMENT_SCHEMA_V1.md`; frontend e API applicano la stessa allowlist concettuale e il server rifiuta campi non riconosciuti. L'highlight della FASE 2 è un mark puramente visuale e non condivide attributi o lifecycle con `knowledgeOccurrence`.
+`document_json` è un documento TipTap JSON valido. Fino alla FASE 2 abilita soltanto i nodi e mark definiti in `docs/DOCUMENT_SCHEMA_V1.md`; frontend e API applicano la stessa allowlist concettuale e il server rifiuta campi non riconosciuti. L'highlight della FASE 2 è un mark puramente visuale con il solo attributo opzionale `color` in forma `#RRGGBB`; la palette UI locale (4–10 colori) non limita i valori già persistiti. Non condivide identità, attributi di dominio o lifecycle con `knowledgeOccurrence`.
+
+Il mark Highlight è non inclusivo ai bordi: digitare nel suo intervallo lo estende, mentre digitare esattamente prima o dopo inserisce testo non evidenziato. Delete parziale conserva il mark sul testo residuo; delete totale lo rimuove. Undo/redo, copy/paste, cut/paste e save/reload seguono il normale lifecycle ProseMirror del mark e non producono operazioni verso tabelle semantiche.
 
 Il modello di dominio è prospettico, ma lo schema eseguibile è incrementale: la FASE 1 crea solo i campi e i vincoli necessari ai flussi minimi di creazione, lettura e aggiornamento del Document. La Phase 1.1 aggiunge soltanto tabelle nuove e indici per predisporre il dominio esteso. Context, gerarchia editoriale, note, link e citazioni entrano esclusivamente con le migrazioni delle rispettive fasi.
 
