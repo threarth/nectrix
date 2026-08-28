@@ -20,6 +20,8 @@
   } from '../lib/highlightPalette'
   import { uuidV7 } from '../lib/uuid'
   import { createEntityType, resolveKnowledgeObjects, searchKnowledge } from '../lib/api'
+  import { editorStrings, highlightPopoverStrings, palettePanelStrings } from '../lib/strings'
+  import ToolbarButton from './ToolbarButton.svelte'
 
   let {
     documentId,
@@ -234,109 +236,122 @@
 
 <div class="editor-shell" bind:this={editorShell}>
   {#if editorState.editor}
-    <div class="toolbar" role="toolbar" aria-label="Formattazione documento">
-      <button
-        type="button"
-        class:active={editorState.editor.isActive('paragraph')}
-        aria-pressed={editorState.editor.isActive('paragraph')}
+    <div class="toolbar" role="toolbar" aria-label={editorStrings.toolbarLabel}>
+      <ToolbarButton
+        command={editorStrings.paragraph}
+        toggle
+        active={editorState.editor.isActive('paragraph')}
         onclick={() => run((editor) => editor.chain().focus().setParagraph().run())}
-      >Normale</button>
+      />
       {#each [1, 2, 3] as level}
-        <button
-          type="button"
-          class:active={editorState.editor.isActive('heading', { level })}
-          aria-pressed={editorState.editor.isActive('heading', { level })}
-          aria-label={`Titolo ${level}`}
+        <ToolbarButton
+          command={editorStrings.heading(level)}
+          toggle
+          active={editorState.editor.isActive('heading', { level })}
           onclick={() => run((editor) => editor.chain().focus().toggleHeading({ level: level as 1 | 2 | 3 }).run())}
-        >H{level}</button>
+        />
       {/each}
       <span class="toolbar-divider" aria-hidden="true"></span>
-      <button
-        type="button"
-        class:active={editorState.editor.isActive('bold')}
-        aria-pressed={editorState.editor.isActive('bold')}
-        aria-label="Grassetto"
+      <ToolbarButton
+        command={editorStrings.bold}
+        toggle
+        active={editorState.editor.isActive('bold')}
         onclick={() => run((editor) => editor.chain().focus().toggleBold().run())}
-      ><strong>G</strong></button>
-      <button
-        type="button"
-        class:active={editorState.editor.isActive('italic')}
-        aria-pressed={editorState.editor.isActive('italic')}
-        aria-label="Corsivo"
+      ><strong>{editorStrings.bold.label}</strong></ToolbarButton>
+      <ToolbarButton
+        command={editorStrings.italic}
+        toggle
+        active={editorState.editor.isActive('italic')}
         onclick={() => run((editor) => editor.chain().focus().toggleItalic().run())}
-      ><em>C</em></button>
-      <button
-        type="button"
-        class:active={editorState.editor.isActive('underline')}
-        aria-pressed={editorState.editor.isActive('underline')}
-        aria-label="Sottolineato"
+      ><em>{editorStrings.italic.label}</em></ToolbarButton>
+      <ToolbarButton
+        command={editorStrings.underline}
+        toggle
+        active={editorState.editor.isActive('underline')}
         onclick={() => run((editor) => editor.chain().focus().toggleUnderline().run())}
-      ><u>S</u></button>
-      <button
-        type="button"
-        class:active={editorState.editor.isActive('highlight')}
-        aria-pressed={editorState.editor.isActive('highlight')}
-        aria-label="Evidenzia"
+      ><u>{editorStrings.underline.label}</u></ToolbarButton>
+      <ToolbarButton
+        command={editorStrings.highlight}
+        toggle
+        active={editorState.editor.isActive('highlight')}
         onclick={() => run((editor) => editor.chain().focus().toggleMark('highlight').run())}
-      >Evidenzia</button>
-      <button type="button" disabled={editorState.editor.state.selection.empty} onclick={createConceptFromSelection}>Crea Concept</button>
-      <button type="button" disabled={editorState.editor.state.selection.empty} onclick={() => void createEntityFromSelection()}>Crea Entity</button>
-      <button type="button" disabled={editorState.editor.state.selection.empty} onclick={() => void attachExistingFromSelection()}>Associa esistente</button>
-      <button
-        type="button"
-        class:active={paletteSelectorOpen}
-        aria-pressed={paletteSelectorOpen}
+      />
+      <ToolbarButton
+        command={editorStrings.createConcept}
+        disabled={editorState.editor.state.selection.empty}
+        onclick={createConceptFromSelection}
+      />
+      <ToolbarButton
+        command={editorStrings.createEntity}
+        disabled={editorState.editor.state.selection.empty}
+        onclick={() => void createEntityFromSelection()}
+      />
+      <ToolbarButton
+        command={editorStrings.attachExisting}
+        disabled={editorState.editor.state.selection.empty}
+        onclick={() => void attachExistingFromSelection()}
+      />
+      <ToolbarButton
+        command={editorStrings.palette}
+        toggle
+        active={paletteSelectorOpen}
         onclick={() => (paletteSelectorOpen = !paletteSelectorOpen)}
-      >Palette</button>
+      />
       <span class="toolbar-divider" aria-hidden="true"></span>
-      <button
-        type="button"
-        class:active={editorState.editor.isActive('bulletList')}
-        aria-pressed={editorState.editor.isActive('bulletList')}
+      <ToolbarButton
+        command={editorStrings.bulletList}
+        toggle
+        active={editorState.editor.isActive('bulletList')}
         onclick={() => run((editor) => editor.chain().focus().toggleBulletList().run())}
-      >Elenco •</button>
-      <button
-        type="button"
-        class:active={editorState.editor.isActive('orderedList')}
-        aria-pressed={editorState.editor.isActive('orderedList')}
+      />
+      <ToolbarButton
+        command={editorStrings.orderedList}
+        toggle
+        active={editorState.editor.isActive('orderedList')}
         onclick={() => run((editor) => editor.chain().focus().toggleOrderedList().run())}
-      >Elenco 1.</button>
-      <button
-        type="button"
-        class:active={editorState.editor.isActive('blockquote')}
-        aria-pressed={editorState.editor.isActive('blockquote')}
+      />
+      <ToolbarButton
+        command={editorStrings.blockquote}
+        toggle
+        active={editorState.editor.isActive('blockquote')}
         onclick={() => run((editor) => editor.chain().focus().toggleBlockquote().run())}
-      >Citazione</button>
+      />
       <span class="toolbar-divider" aria-hidden="true"></span>
-      <button
-        type="button"
+      <ToolbarButton
+        command={editorStrings.undo}
         disabled={!editorState.editor.can().chain().focus().undo().run()}
         onclick={() => run((editor) => editor.chain().focus().undo().run())}
-      >Annulla</button>
-      <button
-        type="button"
+      />
+      <ToolbarButton
+        command={editorStrings.redo}
         disabled={!editorState.editor.can().chain().focus().redo().run()}
         onclick={() => run((editor) => editor.chain().focus().redo().run())}
-      >Ripeti</button>
+      />
     </div>
     {#if paletteSelectorOpen}
-      <div class="highlight-palette-selector" aria-label="Configura palette Highlight">
-        <label>
-          Colori
+      <div class="highlight-palette-selector" aria-label={palettePanelStrings.panelLabel}>
+        <label title={palettePanelStrings.sizeDescription}>
+          {palettePanelStrings.sizeLabel}
           <select value={String(highlightPalette.length)} onchange={(event) => changePaletteSize(event.currentTarget.value)}>
             {#each Array.from({ length: MAX_HIGHLIGHT_COLORS - MIN_HIGHLIGHT_COLORS + 1 }, (_, index) => MIN_HIGHLIGHT_COLORS + index) as size}
               <option value={String(size)}>{size}</option>
             {/each}
           </select>
         </label>
-        <div class="highlight-palette-colors" aria-label="Modifica colori palette">
+        <div class="highlight-palette-colors" aria-label={palettePanelStrings.colorsLabel}>
           {#each highlightPalette as color, index}
-            <label aria-label={`Modifica colore ${index + 1}`} style={`background-color: ${color}`}>
+            <label
+              aria-label={palettePanelStrings.colorDescription(index + 1)}
+              title={palettePanelStrings.colorDescription(index + 1)}
+              style={`background-color: ${color}`}
+            >
               <input type="color" value={color} oninput={(event) => updatePaletteColor(index, event.currentTarget.value)} />
             </label>
           {/each}
         </div>
-        <button type="button" onclick={resetHighlightPalette}>Ripristina predefiniti</button>
+        <button type="button" title={palettePanelStrings.reset.description} onclick={resetHighlightPalette}>
+          {palettePanelStrings.reset.label}
+        </button>
       </div>
     {/if}
   {/if}
@@ -351,24 +366,31 @@
     <div
       class="highlight-popover"
       role="dialog"
-      aria-label="Opzioni evidenziazione"
+      aria-label={highlightPopoverStrings.dialogLabel}
       style={`left: ${highlightPopover.left}px; top: ${highlightPopover.top}px`}
     >
-      <span class="highlight-popover-label">Colore</span>
-      <div class="highlight-colors" aria-label="Scegli colore highlight" role="group">
+      <span class="highlight-popover-label">{highlightPopoverStrings.colorLabel}</span>
+      <div class="highlight-colors" aria-label={highlightPopoverStrings.colorsGroupLabel} role="group">
         {#each highlightPalette as color}
           <button
             type="button"
             class:active={highlightPopover.color === color}
             style={`background-color: ${color}`}
-            aria-label={`Usa highlight ${color}`}
+            aria-label={highlightPopoverStrings.colorDescription(color)}
+            title={highlightPopoverStrings.colorDescription(color)}
             aria-pressed={highlightPopover.color === color}
             onpointerdown={keepSelection}
             onclick={() => changeHighlightColor(color)}
           ></button>
         {/each}
       </div>
-      <button type="button" class="highlight-remove" onpointerdown={keepSelection} onclick={removeHighlight}>Rimuovi</button>
+      <button
+        type="button"
+        class="highlight-remove"
+        title={highlightPopoverStrings.remove.description}
+        onpointerdown={keepSelection}
+        onclick={removeHighlight}
+      >{highlightPopoverStrings.remove.label}</button>
     </div>
   {/if}
 </div>
