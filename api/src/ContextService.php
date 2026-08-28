@@ -19,6 +19,7 @@ final class ContextService
     public function __construct(
         private readonly ContextRepository $repository,
         private readonly DocumentRepository $documents,
+        private readonly KnowledgeRepository $knowledge,
     ) {
     }
 
@@ -118,10 +119,16 @@ final class ContextService
         return $mode === 'exact' ? [$contextId] : $this->repository->subtreeIds($contextId);
     }
 
+    /** @return list<string> */
+    public function documentIds(string $contextId, string $mode): array
+    {
+        return $this->repository->documentIds($this->selectedIds($contextId, $mode));
+    }
+
     /** @return list<array<string, mixed>> */
     public function knowledgeObjects(string $contextId, string $mode): array
     {
-        return $this->repository->knowledgeObjects($this->selectedIds($contextId, $mode));
+        return $this->knowledge->objectsInDocuments($this->documentIds($contextId, $mode));
     }
 
     /** @return array<string, mixed> */

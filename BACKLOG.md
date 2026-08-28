@@ -15,6 +15,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 6.1 — Lifecycle e cancellazione dei Document: completata.
 - FASE 7 — ConceptAlias ed EntityIdentifier: completata.
 - FASE 8 — Context: completata.
+- FASE 9 — Tag: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
 - API PHP minimale e database SQLite in `data/nectrix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
@@ -23,21 +24,21 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 9 — Tag
+### FASE 10 — Full text e semantic search
 
-CRUD e assegnazione dei Tag ai Document, ricerca e filtro, sempre separati da Concept, Entity, EntityType, Template e FieldValue.
+Ricerca full text sul `plain_text` derivato e ricerca semantica su Concept ed Entity, combinabili con Context e Tag.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- query singole e combinate KnowledgeObject × Context × Tag;
-- filtro dei KnowledgeObject derivato tramite Document e KnowledgeOccurrence, senza assegnazioni dirette;
-- nomi uguali nelle dimensioni distinte che restano cose diverse.
+- risultati che indicano quale dimensione ha prodotto il match;
+- nessuna copia autorevole del testo delle occurrence usata come sorgente;
+- combinazione con Context e Tag senza duplicare i risultati.
 
-Gate: query singole e combinate `KnowledgeObject × Context × Tag` corrette per Concept ed Entity, incluso il caso di nomi uguali nelle dimensioni distinte.
+Gate: definito nella sezione FASE 10 di `ROADMAP.md`.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 9.
+Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 10.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

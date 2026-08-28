@@ -222,6 +222,33 @@ final class KnowledgeRepository
     }
 
     /**
+     * Concept and Entity reached from a set of Document through their active occurrence. The path
+     * is always explicit: no KnowledgeObject carries a Context or a Tag of its own, and an object
+     * present in several of those Document is listed once.
+     *
+     * @param list<string> $documentIds
+     * @return list<array<string, mixed>>
+     */
+    public function objectsInDocuments(array $documentIds): array
+    {
+        if ($documentIds === []) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($documentIds), '?'));
+        $statement = $this->pdo->prepare(
+            'SELECT DISTINCT o.id, o.object_type, coalesce(c.canonical_name, e.name) AS name ' .
+            'FROM knowledge_occurrences k ' .
+            'JOIN knowledge_objects o ON o.id = k.knowledge_object_id ' .
+            'LEFT JOIN concepts c ON c.id = o.id ' .
+            'LEFT JOIN entities e ON e.id = o.id ' .
+            "WHERE k.status = 'active' AND k.document_id IN ({$placeholders}) " .
+            'ORDER BY name COLLATE NOCASE'
+        );
+        $statement->execute($documentIds);
+        return $statement->fetchAll();
+    }
+
+    /**
      * Renames a KnowledgeObject and rewrites its description. Identity, occurrence, alias and
      * identifier restano invariati: cambia soltanto come lo chiami.
      */

@@ -17,6 +17,9 @@ use Nectrix\KnowledgeRepository;
 use Nectrix\KnowledgeService;
 use Nectrix\OccurrenceTextExtractor;
 use Nectrix\PlainTextExtractor;
+use Nectrix\QueryService;
+use Nectrix\TagRepository;
+use Nectrix\TagService;
 
 require dirname(__DIR__) . '/bootstrap.php';
 
@@ -63,7 +66,9 @@ try {
     );
     $knowledge = new KnowledgeService($knowledgeRepository, new OccurrenceTextExtractor());
     $documentRepository = new DocumentRepository($pdo);
-    $contexts = new ContextService(new ContextRepository($pdo), $documentRepository);
+    $contexts = new ContextService(new ContextRepository($pdo), $documentRepository, $knowledgeRepository);
+    $tags = new TagService(new TagRepository($pdo), $documentRepository);
+    $query = new QueryService($contexts, $tags, $service, $knowledgeRepository);
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -72,11 +77,48 @@ try {
         respond(200, ['status' => 'ok']);
     }
     if ($method === 'GET' && $path === '/api/documents') {
-        $contextId = isset($_GET['contextId']) ? (string) $_GET['contextId'] : null;
-        $contextIds = $contextId === null || $contextId === ''
-            ? null
-            : $contexts->selectedIds($contextId, (string) ($_GET['contextMode'] ?? 'subtree'));
-        respond(200, ['documents' => $service->list((string) ($_GET['scope'] ?? 'active'), $contextIds)]);
+        respond(200, ['documents' => $query->documents(
+            (string) ($_GET['scope'] ?? 'active'),
+            isset($_GET['contextId']) ? (string) $_GET['contextId'] : null,
+            (string) ($_GET['contextMode'] ?? 'subtree'),
+            (string) ($_GET['tagIds'] ?? ''),
+        )]);
+    }
+    if ($method === 'GET' && $path === '/api/knowledge-objects/derived') {
+        respond(200, ['objects' => $query->knowledgeObjects(
+            (string) ($_GET['scope'] ?? 'active'),
+            isset($_GET['contextId']) ? (string) $_GET['contextId'] : null,
+            (string) ($_GET['contextMode'] ?? 'subtree'),
+            (string) ($_GET['tagIds'] ?? ''),
+        )]);
+    }
+    if ($method === 'GET' && $path === '/api/tags') {
+        respond(200, ['tags' => $tags->list()]);
+    }
+    if ($method === 'POST' && $path === '/api/tags') {
+        respond(201, ['tag' => $tags->create(requestBody())]);
+    }
+    if (preg_match('#^/api/tags/([^/]+)$#', (string) $path, $matches) === 1) {
+        $tagId = rawurldecode($matches[1]);
+        if ($method === 'PUT') {
+            respond(200, ['tag' => $tags->rename($tagId, requestBody())]);
+        }
+        if ($method === 'DELETE') {
+            $tags->delete($tagId);
+            respond(200, ['deleted' => true]);
+        }
+    }
+    if (preg_match('#^/api/documents/([^/]+)/tags$#', (string) $path, $matches) === 1) {
+        $documentId = rawurldecode($matches[1]);
+        if ($method === 'GET') {
+            respond(200, ['tags' => $tags->documentTags($documentId)]);
+        }
+        if ($method === 'POST') {
+            respond(200, ['tags' => $tags->assign($documentId, requestBody())]);
+        }
+    }
+    if ($method === 'DELETE' && preg_match('#^/api/documents/([^/]+)/tags/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, ['tags' => $tags->unassign(rawurldecode($matches[1]), rawurldecode($matches[2]))]);
     }
     if ($method === 'GET' && $path === '/api/contexts') {
         respond(200, ['contexts' => $contexts->list()]);

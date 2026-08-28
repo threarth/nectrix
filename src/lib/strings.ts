@@ -279,7 +279,37 @@ export const contextStrings = {
 
   derived: {
     label: 'Concept ed Entity qui',
-    empty: 'Nessun Concept o Entity nei documenti di questo contesto.',
-    description: 'Ricavati dai documenti del contesto attraverso le loro occurrence, non assegnati direttamente',
+    empty: 'Nessun Concept o Entity nei documenti filtrati.',
+    description: 'Ricavati dai documenti selezionati attraverso le loro occurrence, non assegnati direttamente a contesti o tag',
   },
+} as const
+
+export const tagStrings = {
+  panelLabel: 'Tag',
+  empty: 'Nessun tag: creane uno per classificare i documenti.',
+  nameLabel: 'Nome del tag',
+  placeholder: 'Senza cancelletto, per esempio da rileggere',
+  filterDescription: 'Filtra i documenti che hanno questo tag; il numero indica quanti sono',
+  allRequired: 'Con più tag selezionati compaiono solo i documenti che li hanno tutti.',
+
+  create: {
+    label: 'Nuovo',
+    description: 'Crea un tag. Un tag resta separato da Concept, Entity ed EntityType',
+    dialogTitle: 'Nuovo tag',
+    hint: 'Un tag classifica i documenti e non crea conoscenza: non diventa un Concept.',
+  },
+  rename: {
+    label: 'Rinomina',
+    description: 'Cambia il nome del tag selezionato',
+    dialogTitle: 'Rinomina tag',
+  },
+  remove: {
+    label: 'Elimina',
+    description: 'Possibile solo se il tag non è assegnato a nessun documento',
+  },
+
+  documentLabel: 'Tag del documento',
+  addToDocument: 'Aggiungi tag',
+  removeFromDocument: 'Togli il tag dal documento',
+  none: 'Nessun tag',
 } as const

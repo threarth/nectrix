@@ -4,7 +4,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 test('crea un Concept da selezione e lo conserva dopo save/reload', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Backlog', 'Backlog')
   await page.getByRole('button', { name: 'Salva' }).click()
   await page.reload()
@@ -13,7 +13,7 @@ test('crea un Concept da selezione e lo conserva dopo save/reload', async ({ pag
 
 test('crea una Entity con EntityType da selezione e la conserva dopo save/reload', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab USA', 'Company')
   await page.getByRole('button', { name: 'Salva' }).click()
   await page.reload()
@@ -56,6 +56,12 @@ async function conceptWithTail(page: Page): Promise<void> {
 
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+}
+
+/** Creates a Document and waits until it is the one open, so what follows lands on it. */
+async function newDocument(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await expect(page.locator('.save-status')).toHaveText('Revisione 0')
 }
 
 /** Toolbar command, distinguished from the same command offered on the selection. */
@@ -101,7 +107,7 @@ async function createEntityFrom(page: Page, text: string, name: string, entityTy
 
 test('INV-OCC-10: il copy/paste crea una seconda occurrence con ID nuovo e stesso Concept', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Backlog', 'Backlog')
 
   await page.locator('.tiptap').press('Control+A')
@@ -127,7 +133,7 @@ test('INV-OCC-10: il copy/paste crea una seconda occurrence con ID nuovo e stess
 
 test('INV-OCC-11: il cut/paste nello stesso documento conserva l’occurrenceId', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Roadmap', 'Roadmap')
 
   await page.getByRole('button', { name: 'Salva' }).click()
@@ -150,7 +156,7 @@ test('INV-OCC-11: il cut/paste nello stesso documento conserva l’occurrenceId'
 
 test('INV-OCC-09: undo della creazione non lascia una creazione fantasma al salvataggio', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Provvisorio', 'Provvisorio')
 
   await page.locator('.tiptap').press('Control+Z')
@@ -167,7 +173,7 @@ test('INV-OCC-09: undo della creazione non lascia una creazione fantasma al salv
 
 test('INV-OCC-08 e INV-OCC-09: l’occurrence salvata torna attiva dopo cancellazione, salvataggio e undo', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Riconciliazione', 'Riconciliazione')
 
   await page.getByRole('button', { name: 'Salva' }).click()
@@ -193,7 +199,7 @@ test('INV-OCC-08 e INV-OCC-09: l’occurrence salvata torna attiva dopo cancella
 
 test('INV-OCC-09: un Concept creato, cancellato e ripristinato con undo viene creato al salvataggio', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Mai salvato', 'Mai salvato')
 
   await page.locator('.tiptap').press('Control+A')
@@ -220,7 +226,7 @@ async function openInspectorFromOccurrence(page: Page, label: string): Promise<v
 
 test('FASE 6: il popover di un Concept apre il Concept Inspector con le sue occurrence', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Backlog', 'Backlog')
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
@@ -236,7 +242,7 @@ test('FASE 6: il popover di un Concept apre il Concept Inspector con le sue occu
 
 test('FASE 6: archive e restore di un Concept cambiano solo lo stato', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Archiviabile', 'Archiviabile')
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
@@ -254,7 +260,7 @@ test('FASE 6: archive e restore di un Concept cambiano solo lo stato', async ({ 
 
 test('FASE 6: il popover di una Entity apre l’Entity Inspector con il suo EntityType', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab USA', 'Azienda')
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
@@ -275,7 +281,7 @@ test('FASE 6: il popover di una Entity apre l’Entity Inspector con il suo Enti
 
 test('FASE 6.1: archiviare un Document lo rende in sola lettura e lo toglie dagli attivi', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Archiviato', 'Archiviato')
   const title = 'Documento archiviato'
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill(title)
@@ -301,7 +307,7 @@ test('FASE 6.1: archiviare un Document lo rende in sola lettura e lo toglie dagl
 
 test('FASE 6.1: il cestino è una vista di recupero e non elimina nulla', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Cestinato', 'Cestinato')
   const title = 'Documento nel cestino'
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill(title)
@@ -324,12 +330,12 @@ test('FASE 6.1: il cestino è una vista di recupero e non elimina nulla', async 
 
 test('la dialog di associazione cerca e collega un Concept esistente a un altro Document', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Metodo scientifico', 'Metodo scientifico')
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   const editor = page.locator('.tiptap')
   await editor.click()
   await page.keyboard.type('Qui parlo del metodo')
@@ -354,7 +360,7 @@ test('la dialog di associazione cerca e collega un Concept esistente a un altro 
 
 test('FASE 7: gli alias di un Concept si aggiungono e si rimuovono senza toccare le occurrence', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Metodo', 'Metodo scientifico')
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
@@ -375,7 +381,7 @@ test('FASE 7: gli alias di un Concept si aggiungono e si rimuovono senza toccare
 
 test('FASE 7: un identificatore duplicato su un’altra Entity produce un candidato, non una fusione', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createEntityFrom(page, 'Prima', 'Prima società', 'Azienda')
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
@@ -389,7 +395,7 @@ test('FASE 7: un identificatore duplicato su un’altra Entity produce un candid
   await expect(inspector.locator('.inspector-list li').first()).toContainText('lei')
   await expect(inspector.locator('.inspector-duplicates')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createEntityFrom(page, 'Seconda', 'Seconda società', 'Azienda')
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
@@ -406,7 +412,7 @@ test('FASE 7: un identificatore duplicato su un’altra Entity produce un candid
 
 test('le maniglie correggono il confine dell’occurrence mantenendo lo stesso ID', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   const editor = page.locator('.tiptap')
   await conceptWithTail(page)
   const [before] = await occurrenceIds(page)
@@ -426,7 +432,7 @@ test('le maniglie correggono il confine dell’occurrence mantenendo lo stesso I
 
 test('il pannello mostra il confine corretto subito dopo il trascinamento, prima del salvataggio', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   const editor = page.locator('.tiptap')
   await conceptWithTail(page)
 
@@ -445,7 +451,7 @@ test('il pannello mostra il confine corretto subito dopo il trascinamento, prima
 
 test('la barra dei comandi compare sulla selezione e crea il Concept senza passare dalla toolbar', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   const editor = page.locator('.tiptap')
   await editor.click()
   await expect(editor).toBeFocused()
@@ -532,7 +538,7 @@ test('un Concept resta visibile anche sopra una evidenziazione già salvata', as
 
 test('creare un Concept toglie l’evidenziazione dal suo intervallo', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   const editor = page.locator('.tiptap')
   await editor.click()
   await expect(editor).toBeFocused()
@@ -556,7 +562,7 @@ test('creare un Concept toglie l’evidenziazione dal suo intervallo', async ({ 
 
 test('evidenziare un paragrafo che contiene un Concept lascia il Concept intatto', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   const editor = page.locator('.tiptap')
   await conceptWithTail(page)
 
@@ -571,13 +577,13 @@ test('evidenziare un paragrafo che contiene un Concept lascia il Concept intatto
 
 test('Concept ed Entity si distinguono a colpo d’occhio', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Idea', 'Idea')
   const concept = await occurrenceColours(page)
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createEntityFrom(page, 'Cosa', 'Cosa specifica', 'Oggetto')
   const entity = await occurrenceColours(page)
 
@@ -588,7 +594,7 @@ test('Concept ed Entity si distinguono a colpo d’occhio', async ({ page }) => 
 
 test('CRUD: rinominare un Concept dall’inspector non tocca occurrence e alias', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Bozza', 'Nome provvisorio')
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
@@ -631,7 +637,7 @@ test('FASE 8: i Context filtrano i documenti e ne derivano Concept ed Entity', a
   await expect(panel.getByRole('button', { name: 'Psicologia' })).toBeVisible()
 
   // Un documento con un Concept, assegnato al sotto-contesto.
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await createConceptFrom(page, 'Inconscio', 'Inconscio collettivo')
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Appunti di psicologia')
   await page.getByRole('button', { name: 'Salva' }).click()
@@ -641,15 +647,15 @@ test('FASE 8: i Context filtrano i documenti e ne derivano Concept ed Entity', a
   // Il ramo vede il documento, il solo padre no.
   await panel.getByRole('button', { name: 'Università' }).click()
   await expect(page.locator('.sidebar nav')).toContainText('Appunti di psicologia')
-  await expect(panel.getByText('Inconscio collettivo')).toBeVisible()
+  await expect(page.getByLabel('Concept ed Entity qui')).toContainText('Inconscio collettivo')
 
   await panel.getByRole('button', { name: 'Solo questo' }).click()
   await expect(page.locator('.sidebar nav')).not.toContainText('Appunti di psicologia')
-  await expect(panel.getByText('Nessun Concept o Entity')).toBeVisible()
+  await expect(page.getByLabel('Concept ed Entity qui')).toContainText('Nessun Concept o Entity')
 
   await panel.getByRole('button', { name: 'Psicologia' }).click()
   await expect(page.locator('.sidebar nav')).toContainText('Appunti di psicologia')
-  await expect(panel.getByText('Inconscio collettivo')).toBeVisible()
+  await expect(page.getByLabel('Concept ed Entity qui')).toContainText('Inconscio collettivo')
 })
 
 test('FASE 8: un Context con documenti non si elimina e non può diventare figlio di sé stesso', async ({ page }) => {
@@ -662,7 +668,7 @@ test('FASE 8: un Context con documenti non si elimina e non può diventare figli
   await dialog.getByRole('button', { name: 'Nuovo' }).click()
   await panel.getByRole('button', { name: 'Con documenti' }).click()
 
-  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await newDocument(page)
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento legato')
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
@@ -673,4 +679,60 @@ test('FASE 8: un Context con documenti non si elimina e non può diventare figli
 
   await expect(page.getByRole('alert')).toContainText('riassegnali prima di eliminarlo')
   await expect(panel.getByRole('button', { name: 'Con documenti' })).toBeVisible()
+})
+
+test('FASE 9: i Tag filtrano i documenti e restano separati dai Concept', async ({ page }) => {
+  await page.goto('/')
+  const tagPanel = page.getByLabel('Tag', { exact: true })
+
+  await tagPanel.getByRole('button', { name: 'Nuovo' }).click()
+  let dialog = page.getByRole('dialog', { name: 'Nuovo tag' })
+  await dialog.getByLabel('Nome del tag').fill('#Da rileggere')
+  await dialog.getByRole('button', { name: 'Nuovo' }).click()
+  await expect(tagPanel.getByRole('button', { name: /Da rileggere/ })).toBeVisible()
+
+  await newDocument(page)
+  await createConceptFrom(page, 'Sincronicità', 'Sincronicità')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento con tag')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.getByLabel('Aggiungi tag').selectOption({ label: 'Da rileggere' })
+  await expect(page.locator('.document-tag')).toContainText('Da rileggere')
+
+  await newDocument(page)
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento senza tag')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await tagPanel.getByRole('button', { name: /Da rileggere/ }).click()
+  await expect(page.locator('.sidebar nav')).toContainText('Documento con tag')
+  await expect(page.locator('.sidebar nav')).not.toContainText('Documento senza tag')
+  await expect(page.getByLabel('Concept ed Entity qui').getByText('Sincronicità')).toBeVisible()
+
+  await tagPanel.getByRole('button', { name: /Da rileggere/ }).click()
+  await expect(page.locator('.sidebar nav')).toContainText('Documento senza tag')
+})
+
+test('FASE 9: un Tag assegnato non si elimina finché resta sui documenti', async ({ page }) => {
+  await page.goto('/')
+  const tagPanel = page.getByLabel('Tag', { exact: true })
+
+  await tagPanel.getByRole('button', { name: 'Nuovo' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Nuovo tag' })
+  await dialog.getByLabel('Nome del tag').fill('Assegnato')
+  await dialog.getByRole('button', { name: 'Nuovo' }).click()
+
+  await newDocument(page)
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento del tag')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.getByLabel('Aggiungi tag').selectOption({ label: 'Assegnato' })
+  await expect(page.locator('.document-tag')).toContainText('Assegnato')
+
+  await tagPanel.getByRole('button', { name: /Assegnato/ }).click()
+  await tagPanel.getByRole('button', { name: 'Elimina' }).click()
+  await expect(page.getByRole('alert')).toContainText('rimuovilo prima di eliminarlo')
+
+  await page.locator('.document-tag button').click()
+  await expect(page.locator('.document-tag')).toHaveCount(0)
 })

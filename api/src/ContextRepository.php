@@ -111,30 +111,20 @@ final class ContextRepository
     }
 
     /**
-     * KnowledgeObject reached through the explicit path Context→Document→KnowledgeOccurrence.
-     * Nothing receives a context_id: the result is derived, and one object listed once even when
-     * several of its occurrence fall in the same Context.
+     * Document assigned to any of the given Context. The KnowledgeObject derivation starts from
+     * here: Context reaches them only through Document and KnowledgeOccurrence.
      *
      * @param list<string> $contextIds
-     * @return list<array<string, mixed>>
+     * @return list<string>
      */
-    public function knowledgeObjects(array $contextIds): array
+    public function documentIds(array $contextIds): array
     {
         if ($contextIds === []) {
             return [];
         }
         $placeholders = implode(',', array_fill(0, count($contextIds), '?'));
-        $statement = $this->pdo->prepare(
-            "SELECT DISTINCT o.id, o.object_type, coalesce(c.canonical_name, e.name) AS name " .
-            'FROM knowledge_occurrences k ' .
-            'JOIN documents d ON d.id = k.document_id ' .
-            'JOIN knowledge_objects o ON o.id = k.knowledge_object_id ' .
-            'LEFT JOIN concepts c ON c.id = o.id ' .
-            'LEFT JOIN entities e ON e.id = o.id ' .
-            "WHERE k.status = 'active' AND d.context_id IN ({$placeholders}) " .
-            'ORDER BY name COLLATE NOCASE'
-        );
+        $statement = $this->pdo->prepare("SELECT id FROM documents WHERE context_id IN ({$placeholders})");
         $statement->execute($contextIds);
-        return $statement->fetchAll();
+        return array_column($statement->fetchAll(), 'id');
     }
 }

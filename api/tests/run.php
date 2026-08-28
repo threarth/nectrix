@@ -19,6 +19,9 @@ use Nectrix\KnowledgeService;
 use Nectrix\OccurrenceTextExtractor;
 use Nectrix\Migrator;
 use Nectrix\PlainTextExtractor;
+use Nectrix\QueryService;
+use Nectrix\TagRepository;
+use Nectrix\TagService;
 use Nectrix\UuidV7;
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -173,7 +176,7 @@ $suite->test('le migrazioni estendono lo schema Document senza rimuovere le colo
 
     assertSameValue($phaseOne, array_slice($columns, 0, count($phaseOne)));
     assertSameValue(['status', 'context_id'], array_slice($columns, count($phaseOne)));
-    assertSameValue(6, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(7, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
 });
 
 $domainFixture = [];
@@ -506,7 +509,7 @@ $suite->test('la migration Phase 1.1 aggiorna un database FASE 1 senza perdere D
 
     assertSameValue(1, (int) $upgradePdo->query('SELECT COUNT(*) FROM documents')->fetchColumn());
     assertSameValue('Documento preesistente', $upgradePdo->query('SELECT title FROM documents')->fetchColumn());
-    assertSameValue(6, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(7, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
     assertSameValue('field_values', $upgradePdo->query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'field_values'")->fetchColumn());
 });
 
@@ -1358,7 +1361,7 @@ $suite->test('un nome vuoto o un campo non previsto vengono rifiutati', static f
 /** Context service sharing the test database. */
 function contextService(PDO $pdo): ContextService
 {
-    return new ContextService(new ContextRepository($pdo), new DocumentRepository($pdo));
+    return new ContextService(new ContextRepository($pdo), new DocumentRepository($pdo), new KnowledgeRepository($pdo));
 }
 
 $suite->test('i Context formano una gerarchia con breadcrumb derivato', static function () use ($pdo): void {
@@ -1501,6 +1504,158 @@ $suite->test('un Document non riceve un Context per effetto collaterale del salv
 
     saveRevision($service, $document['id'], 1, emptyDocument());
     assertSameValue($context['id'], $service->get($document['id'])['contextId']);
+});
+
+function tagService(PDO $pdo): TagService
+{
+    return new TagService(new TagRepository($pdo), new DocumentRepository($pdo));
+}
+
+function queryService(PDO $pdo, DocumentService $service): QueryService
+{
+    return new QueryService(contextService($pdo), tagService($pdo), $service, new KnowledgeRepository($pdo));
+}
+
+$suite->test('i Tag hanno nome unico normalizzato e ignorano il cancelletto', static function () use ($pdo): void {
+    $tags = tagService($pdo);
+
+    $created = $tags->create(['name' => '  #Metodo  ']);
+    assertSameValue('Metodo', $created['name']);
+
+    try {
+        $tags->create(['name' => 'metodo']);
+        throw new RuntimeException('Tag duplicato accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('tag_duplicate', $error->errorCode);
+    }
+
+    $renamed = $tags->rename($created['id'], ['name' => 'Metodologia']);
+    assertSameValue('Metodologia', $renamed['name']);
+});
+
+$suite->test('l’assegnazione di un Tag è idempotente e la rimozione non elimina il Tag', static function () use ($pdo, $service): void {
+    $tags = tagService($pdo);
+    $tag = $tags->create(['name' => 'Da rileggere']);
+    $document = $service->create(['title' => 'Con tag']);
+
+    $tags->assign($document['id'], ['tagId' => $tag['id']]);
+    $assigned = $tags->assign($document['id'], ['tagId' => $tag['id']]);
+    assertSameValue(1, count($assigned));
+
+    try {
+        $tags->delete($tag['id']);
+        throw new RuntimeException('Tag assegnato eliminato.');
+    } catch (ApiException $error) {
+        assertSameValue('tag_assigned', $error->errorCode);
+    }
+
+    assertSameValue([], $tags->unassign($document['id'], $tag['id']));
+    assertSameValue(1, count(array_filter($tags->list(), static fn (array $row): bool => $row['id'] === $tag['id'])));
+    $tags->delete($tag['id']);
+});
+
+$suite->test('il filtro combinato richiede tutti i Tag chiesti e rispetta il Context', static function () use ($pdo, $service): void {
+    $tags = tagService($pdo);
+    $contexts = contextService($pdo);
+    $query = queryService($pdo, $service);
+    $context = $contexts->create(['name' => 'Corso combinato']);
+    $other = $contexts->create(['name' => 'Fuori corso']);
+    $primo = $tags->create(['name' => 'Primo tag']);
+    $secondo = $tags->create(['name' => 'Secondo tag']);
+
+    $entrambi = $service->create(['title' => 'Con entrambi']);
+    $soloPrimo = $service->create(['title' => 'Con il primo']);
+    $fuori = $service->create(['title' => 'Fuori contesto']);
+    foreach ([[$entrambi, [$primo, $secondo], $context], [$soloPrimo, [$primo], $context], [$fuori, [$primo, $secondo], $other]] as [$document, $applied, $where]) {
+        foreach ($applied as $tag) {
+            $tags->assign($document['id'], ['tagId' => $tag['id']]);
+        }
+        $contexts->assignDocument($document['id'], ['contextId' => $where['id']]);
+    }
+
+    $byTags = array_column($query->documents('active', null, 'subtree', "{$primo['id']},{$secondo['id']}"), 'id');
+    assertSameValue(2, count($byTags));
+    assertTrue(!in_array($soloPrimo['id'], $byTags, true), 'Il filtro deve richiedere tutti i Tag chiesti.');
+
+    $combined = array_column($query->documents('active', $context['id'], 'subtree', "{$primo['id']},{$secondo['id']}"), 'id');
+    assertSameValue([$entrambi['id']], $combined);
+
+    $onlyContext = array_column($query->documents('active', $context['id'], 'subtree', ''), 'id');
+    assertSameValue(2, count($onlyContext));
+});
+
+$suite->test('KnowledgeObject × Context × Tag deriva Concept ed Entity senza duplicarli', static function () use ($pdo, $service): void {
+    $tags = tagService($pdo);
+    $contexts = contextService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $query = queryService($pdo, $service);
+    $context = $contexts->create(['name' => 'Ricerca combinata']);
+    $tag = $tags->create(['name' => 'Rilevante']);
+    $entityType = $knowledge->createEntityType(['name' => 'Autore']);
+
+    $conceptId = UuidV7::generate();
+    $entityId = UuidV7::generate();
+    $first = $service->create(['title' => 'Primo combinato']);
+    $second = $service->create(['title' => 'Secondo combinato']);
+    $firstOccurrence = UuidV7::generate();
+    $secondOccurrence = UuidV7::generate();
+    $entityOccurrence = UuidV7::generate();
+
+    saveRevision($service, $first['id'], 0, documentOfParagraphs([occurrenceText('Idea', $firstOccurrence, $conceptId)]), [
+        conceptCreate($firstOccurrence, $conceptId, 'Idea ricorrente'),
+    ]);
+    saveRevision($service, $second['id'], 0, documentOfParagraphs([
+        occurrenceText('Idea', $secondOccurrence, $conceptId),
+        ['type' => 'text', 'text' => ' e '],
+        occurrenceText('Jung', $entityOccurrence, $entityId, 'entity'),
+    ]), [
+        ['occurrenceId' => $secondOccurrence, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept', 'newObject' => false],
+        ['occurrenceId' => $entityOccurrence, 'knowledgeObjectId' => $entityId, 'objectType' => 'entity', 'newObject' => true, 'name' => 'Carl Jung', 'entityTypeId' => $entityType['id']],
+    ]);
+    foreach ([$first, $second] as $document) {
+        $contexts->assignDocument($document['id'], ['contextId' => $context['id']]);
+        $tags->assign($document['id'], ['tagId' => $tag['id']]);
+    }
+
+    $objects = $query->knowledgeObjects('active', $context['id'], 'subtree', $tag['id']);
+    $ids = array_column($objects, 'id');
+
+    assertSameValue(2, count($ids));
+    assertSameValue(2, count(array_unique($ids)));
+    assertTrue(in_array($conceptId, $ids, true) && in_array($entityId, $ids, true), 'Devono comparire entrambi i sottotipi.');
+    assertSameValue(1, count($query->knowledgeObjects('active', null, 'subtree', $tag['id'])) - 1);
+});
+
+$suite->test('lo stesso nome in dimensioni diverse resta cose diverse', static function () use ($pdo, $service): void {
+    $tags = tagService($pdo);
+    $contexts = contextService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $query = queryService($pdo, $service);
+
+    $tag = $tags->create(['name' => 'Omonimo']);
+    $context = $contexts->create(['name' => 'Omonimo']);
+    $conceptId = conceptWithOccurrence($service, 'Omonimo');
+
+    // Il Concept omonimo vive in un Document senza quel Tag e senza quel Context.
+    assertSameValue([], $query->knowledgeObjects('active', null, 'subtree', $tag['id']));
+    assertSameValue([], $query->knowledgeObjects('active', $context['id'], 'subtree', ''));
+    assertSameValue('Omonimo', $knowledge->object($conceptId)['name']);
+    assertSameValue('Omonimo', $tag['name']);
+    assertSameValue('Omonimo', $context['name']);
+});
+
+$suite->test('un Document archiviato non accetta assegnazioni di Tag', static function () use ($pdo, $service): void {
+    $tags = tagService($pdo);
+    $tag = $tags->create(['name' => 'Su archiviato']);
+    $document = $service->create(['title' => 'Archiviato per tag']);
+    $service->archive($document['id']);
+
+    try {
+        $tags->assign($document['id'], ['tagId' => $tag['id']]);
+        throw new RuntimeException('Tag assegnato a un Document archiviato.');
+    } catch (ApiException $error) {
+        assertSameValue('document_read_only', $error->errorCode);
+    }
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

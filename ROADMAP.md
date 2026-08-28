@@ -134,11 +134,15 @@ Concept ed Entity si raggiungono attraverso il percorso esplicito Context→Docu
 
 Gate soddisfatto: lo stesso Concept in due Context diversi restituito una volta sola; query derivate per entrambi i sottotipi, ricorsione su breadcrumb e subtree, move di ramo, anti-ciclo, filtro exact/subtree e cancellazione prudente coperti da test backend, più due end-to-end sul filtro e sul rifiuto della cancellazione.
 
-## FASE 9 — Tag
+## FASE 9 — Tag (completata)
 
 CRUD e assegnazione/rimozione Tag ai Document, ricerca e filtro, sempre separati da Concept, Entity, EntityType, Template e FieldValue. Il filtro di KnowledgeObject è derivato tramite Document e KnowledgeOccurrence; SemanticBlock e FieldValue entrano dopo il Template System. Un'assegnazione diretta richiederebbe una nuova decisione architetturale.
 
-Gate: query singole e combinate `KnowledgeObject × Context × Tag` corrette per Concept ed Entity, incluso il caso di nomi uguali nelle dimensioni distinte.
+Completato: la migration 007 aggiunge `tags` e l'associazione `document_tags` con chiave primaria sulla coppia. Il nome è unico normalizzato, il cancelletto è solo convenzione di scrittura e viene rimosso. L'assegnazione è idempotente, la rimozione non elimina il Tag e l'eliminazione è prudente: un Tag ancora assegnato va prima tolto dai Document. Un Document archiviato o nel cestino non accetta assegnazioni.
+
+Il filtro per Tag richiede tutti i Tag selezionati e si combina con quello per Context sulla stessa lista di Document. I KnowledgeObject restano derivati: si raggiungono dai Document filtrati attraverso le occurrence attive, senza alcuna assegnazione diretta. La sidebar espone i Tag come chip con il numero di Document, e l'intestazione del documento permette di assegnarli e rimuoverli.
+
+Gate soddisfatto: query per Tag, per Context e combinate verificate su Concept ed Entity, con lo stesso oggetto presente in più Document restituito una sola volta; il caso dei nomi uguali in dimensioni diverse è coperto da un test in cui Tag, Context e Concept si chiamano allo stesso modo e restano cose separate.
 
 ## FASE 10 — Full text e semantic search
 

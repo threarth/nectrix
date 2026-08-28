@@ -10,8 +10,15 @@
     getDocument,
     getKnowledgeObject,
     assignDocumentContext,
-    contextKnowledgeObjects,
+    assignTag,
     createContext,
+    createTag,
+    deleteTag,
+    derivedKnowledgeObjects,
+    listDocumentTags,
+    listTags,
+    renameTag,
+    unassignTag,
     deleteContext,
     listContexts,
     listDocuments,
@@ -27,6 +34,8 @@
     removeConceptAlias,
     removeEntityIdentifier,
     type ContextMode,
+    type Tag,
+    type TagSummary,
     type DocumentRecord,
     type DocumentStatus,
     type DocumentSummary,
@@ -36,9 +45,12 @@
     type KnowledgeOccurrenceView,
   } from './lib/api'
   import ContextPanel from './components/ContextPanel.svelte'
+  import DerivedObjects from './components/DerivedObjects.svelte'
+  import DocumentTags from './components/DocumentTags.svelte'
+  import TagPanel from './components/TagPanel.svelte'
   import KnowledgeInspector from './components/KnowledgeInspector.svelte'
   import { contextPathLabel, orderContexts, type ContextNode } from './lib/contexts'
-  import { contextStrings, documentStrings } from './lib/strings'
+  import { contextStrings, documentStrings, tagStrings } from './lib/strings'
   import {
     collectOccurrences,
     deriveOccurrenceCreates,
@@ -52,6 +64,9 @@
   let selectedContextId = $state<string | null>(null)
   let contextMode = $state<ContextMode>('subtree')
   let contextObjects = $state<{ id: string; object_type: 'concept' | 'entity'; name: string }[]>([])
+  let tags = $state<TagSummary[]>([])
+  let selectedTagIds = $state<string[]>([])
+  let documentTags = $state<Tag[]>([])
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
@@ -80,7 +95,8 @@
     error = ''
     try {
       contexts = await listContexts()
-      documents = await listDocuments(scope, selectedContextId, contextMode)
+      tags = await listTags()
+      documents = await listDocuments(scope, selectedContextId, contextMode, selectedTagIds)
       if (documents.length > 0) {
         await openDocument(documents[0].id)
       }
@@ -132,27 +148,64 @@
     return [restore]
   }
 
-  /** Reloads list and derived objects together: both depend on the selected Context. */
-  async function refreshContextView(): Promise<void> {
+  /** Context and Tag are separate dimensions: both narrow the same list of Document. */
+  async function refreshFilters(): Promise<void> {
     error = ''
     try {
-      documents = await listDocuments(scope, selectedContextId, contextMode)
-      contextObjects = selectedContextId === null
+      documents = await listDocuments(scope, selectedContextId, contextMode, selectedTagIds)
+      contextObjects = selectedContextId === null && selectedTagIds.length === 0
         ? []
-        : await contextKnowledgeObjects(selectedContextId, contextMode)
+        : await derivedKnowledgeObjects(selectedContextId, contextMode, selectedTagIds)
     } catch (cause) {
       showError(cause)
     }
   }
 
+  async function toggleTag(tagId: string): Promise<void> {
+    selectedTagIds = selectedTagIds.includes(tagId)
+      ? selectedTagIds.filter((id) => id !== tagId)
+      : [...selectedTagIds, tagId]
+    await refreshFilters()
+  }
+
+  async function withTags(operation: () => Promise<void>): Promise<void> {
+    error = ''
+    try {
+      await operation()
+      tags = await listTags()
+      await refreshFilters()
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
+  async function changeDocumentTag(tagId: string, assign: boolean): Promise<void> {
+    const document = selected
+    if (!document) return
+    await withTags(async () => {
+      documentTags = assign
+        ? await assignTag(document.id, tagId)
+        : await unassignTag(document.id, tagId)
+    })
+  }
+
+  async function addNewDocumentTag(name: string): Promise<void> {
+    const document = selected
+    if (!document) return
+    await withTags(async () => {
+      const tag = await createTag(name)
+      documentTags = await assignTag(document.id, tag.id)
+    })
+  }
+
   async function selectContext(contextId: string | null): Promise<void> {
     selectedContextId = contextId
-    await refreshContextView()
+    await refreshFilters()
   }
 
   async function changeContextMode(mode: ContextMode): Promise<void> {
     contextMode = mode
-    await refreshContextView()
+    await refreshFilters()
   }
 
   async function withContexts(operation: () => Promise<void>): Promise<void> {
@@ -160,7 +213,7 @@
     try {
       await operation()
       contexts = await listContexts()
-      await refreshContextView()
+      await refreshFilters()
     } catch (cause) {
       showError(cause)
     }
@@ -174,7 +227,7 @@
     error = ''
     try {
       applyDocument(await assignDocumentContext(document.id, contextId))
-      await refreshContextView()
+      await refreshFilters()
     } catch (cause) {
       showError(cause)
     } finally {
@@ -210,7 +263,11 @@
   }
 
   async function addDocument(): Promise<void> {
+    if (saving) return
     if (dirty && !window.confirm('Le modifiche non salvate andranno perse. Continuare?')) return
+    // La creazione passa dal server: senza questo blocco si potrebbe scrivere nel documento
+    // precedente, o crearne due, mentre il nuovo sta arrivando.
+    saving = true
     error = ''
     try {
       const created = await createDocument()
@@ -218,6 +275,8 @@
       applyDocument(created)
     } catch (cause) {
       showError(cause)
+    } finally {
+      saving = false
     }
   }
 
@@ -250,8 +309,18 @@
     draftJson = document.documentJson
     dirty = false
     persistedOccurrenceIds = new Set(collectOccurrences(document.documentJson).keys())
+    if (!sameDocument) void loadDocumentTags(document.id)
     if (!sameDocument) pendingObjects = new Map()
     void tick().then(resizeTitleInput)
+  }
+
+  async function loadDocumentTags(documentId: string): Promise<void> {
+    try {
+      documentTags = await listDocumentTags(documentId)
+    } catch (cause) {
+      console.warn('Tag del documento non disponibili.', cause)
+      documentTags = []
+    }
   }
 
   function changeTitle(value: string): void {
@@ -479,7 +548,7 @@
       </div>
     </div>
 
-    <button class="new-document" type="button" onclick={addDocument}>+ Nuovo documento</button>
+    <button class="new-document" type="button" disabled={saving} onclick={addDocument}>+ Nuovo documento</button>
 
     <div class="scope-switch" role="group" aria-label={documentStrings.scopeLabel}>
       {#each documentStrings.scopes as option}
@@ -497,7 +566,6 @@
       {contexts}
       selectedId={selectedContextId}
       mode={contextMode}
-      derived={contextObjects}
       busy={saving}
       onSelect={(contextId) => void selectContext(contextId)}
       onModeChange={(mode) => void changeContextMode(mode)}
@@ -515,6 +583,27 @@
         if (selectedContextId === contextId) selectedContextId = null
       })}
     />
+
+    <TagPanel
+      {tags}
+      selectedIds={selectedTagIds}
+      busy={saving}
+      onToggle={(tagId) => void toggleTag(tagId)}
+      onCreate={(name) => void withTags(async () => {
+        await createTag(name)
+      })}
+      onRename={(tagId, name) => void withTags(async () => {
+        await renameTag(tagId, name)
+      })}
+      onDelete={(tagId) => void withTags(async () => {
+        await deleteTag(tagId)
+        selectedTagIds = selectedTagIds.filter((id) => id !== tagId)
+      })}
+    />
+
+    {#if selectedContextId !== null || selectedTagIds.length > 0}
+      <DerivedObjects objects={contextObjects} />
+    {/if}
 
     <nav aria-label="Documenti">
       {#if loading}
@@ -618,6 +707,15 @@
           {/if}
         </div>
       </header>
+
+      <DocumentTags
+        tags={documentTags}
+        available={tags}
+        disabled={saving || readOnly}
+        onAssign={(tagId) => void changeDocumentTag(tagId, true)}
+        onUnassign={(tagId) => void changeDocumentTag(tagId, false)}
+        onCreateAndAssign={(name) => void addNewDocumentTag(name)}
+      />
 
       {#key selected.id}
         <DocumentEditor

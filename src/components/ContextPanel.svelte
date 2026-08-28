@@ -10,7 +10,6 @@
     contexts,
     selectedId,
     mode,
-    derived: derivedObjects,
     busy = false,
     onSelect,
     onModeChange,
@@ -22,8 +21,6 @@
     contexts: ContextNode[]
     selectedId: string | null
     mode: ContextMode
-    /** Concept and Entity reached through the Documents of the selected Context. */
-    derived: { id: string; object_type: 'concept' | 'entity'; name: string }[]
     busy?: boolean
     onSelect: (contextId: string | null) => void
     onModeChange: (mode: ContextMode) => void
@@ -109,19 +106,6 @@
         {/each}
       </select>
     </label>
-
-    <div class="context-derived" title={contextStrings.derived.description}>
-      <h3>{contextStrings.derived.label} ({derivedObjects.length})</h3>
-      {#if derivedObjects.length === 0}
-        <p class="empty-state">{contextStrings.derived.empty}</p>
-      {:else}
-        <ul>
-          {#each derivedObjects as object (object.id)}
-            <li><span>{object.object_type === 'concept' ? 'Concept' : 'Entity'}</span> {object.name}</li>
-          {/each}
-        </ul>
-      {/if}
-    </div>
   {/if}
 </section>
 

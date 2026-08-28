@@ -265,6 +265,21 @@ button:disabled {
   text-transform: none;
 }
 
+.context-derived {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #34382e;
+}
+
+.context-derived h2 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #9a9d90;
+}
+
 .context-derived ul {
   margin: 0;
   padding: 0;
@@ -288,6 +303,107 @@ button:disabled {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #8f9286;
+}
+
+.tag-panel {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #34382e;
+}
+
+.tag-panel h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #9a9d90;
+}
+
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag-chips button {
+  padding: 4px 9px;
+  border: 1px solid #3d4137;
+  border-radius: 999px;
+  color: #cfd2c6;
+  background: transparent;
+  font-size: 12px;
+}
+
+.tag-chips button.active {
+  color: #20241d;
+  background: #c9d8c2;
+  border-color: #c9d8c2;
+  font-weight: 650;
+}
+
+.tag-chips small {
+  opacity: 0.65;
+  font-size: 10px;
+}
+
+.tag-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #8f9286;
+}
+
+.document-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 1060px;
+  margin: -8px auto 16px;
+  font-size: 12px;
+  color: #6f7265;
+}
+
+.document-tags-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.document-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid #ded7c9;
+  border-radius: 999px;
+  background: #fbf8f1;
+  color: #292821;
+  font-size: 12px;
+}
+
+.document-tag button {
+  border: 0;
+  padding: 0 3px;
+  color: #7c7f72;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.document-tag button:hover:not(:disabled) {
+  color: #8d3a2e;
+}
+
+.document-tags select {
+  padding: 4px 8px;
+  border: 1px solid #cfc7b8;
+  border-radius: 999px;
+  background: #fbf8f1;
+  font-size: 12px;
+  color: #4a4d43;
 }
 
 .document-context {

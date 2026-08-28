@@ -123,12 +123,14 @@ export async function listDocuments(
   scope: DocumentStatus = 'active',
   contextId: string | null = null,
   contextMode: ContextMode = 'subtree',
+  tagIds: string[] = [],
 ): Promise<DocumentSummary[]> {
   const query = new URLSearchParams({ scope })
   if (contextId !== null) {
     query.set('contextId', contextId)
     query.set('contextMode', contextMode)
   }
+  if (tagIds.length > 0) query.set('tagIds', tagIds.join(','))
   const payload = await request<{ documents: DocumentSummary[] }>(`/api/documents?${query.toString()}`)
   return payload.documents
 }
@@ -272,6 +274,68 @@ export async function updateKnowledgeObject(
   return payload.object
 }
 
+export interface Tag { id: string; name: string }
+export interface TagSummary extends Tag { documents: number }
+
+export async function listTags(): Promise<TagSummary[]> {
+  const payload = await request<{ tags: TagSummary[] }>('/api/tags')
+  return payload.tags
+}
+
+export async function createTag(name: string): Promise<Tag> {
+  const payload = await request<{ tag: Tag }>('/api/tags', { method: 'POST', body: JSON.stringify({ name }) })
+  return payload.tag
+}
+
+export async function renameTag(id: string, name: string): Promise<Tag> {
+  const payload = await request<{ tag: Tag }>(`/api/tags/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  })
+  return payload.tag
+}
+
+/** Refused while the Tag is still assigned to a Document. */
+export async function deleteTag(id: string): Promise<void> {
+  await request<{ deleted: boolean }>(`/api/tags/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function listDocumentTags(documentId: string): Promise<Tag[]> {
+  const payload = await request<{ tags: Tag[] }>(`/api/documents/${encodeURIComponent(documentId)}/tags`)
+  return payload.tags
+}
+
+export async function assignTag(documentId: string, tagId: string): Promise<Tag[]> {
+  const payload = await request<{ tags: Tag[] }>(`/api/documents/${encodeURIComponent(documentId)}/tags`, {
+    method: 'POST',
+    body: JSON.stringify({ tagId }),
+  })
+  return payload.tags
+}
+
+export async function unassignTag(documentId: string, tagId: string): Promise<Tag[]> {
+  const payload = await request<{ tags: Tag[] }>(
+    `/api/documents/${encodeURIComponent(documentId)}/tags/${encodeURIComponent(tagId)}`,
+    { method: 'DELETE' },
+  )
+  return payload.tags
+}
+
+/** Concept and Entity of the Documents selected by the Context and Tag filters. */
+export async function derivedKnowledgeObjects(
+  contextId: string | null,
+  contextMode: ContextMode,
+  tagIds: string[],
+): Promise<{ id: string; object_type: 'concept' | 'entity'; name: string }[]> {
+  const query = new URLSearchParams({ contextMode })
+  if (contextId !== null) query.set('contextId', contextId)
+  if (tagIds.length > 0) query.set('tagIds', tagIds.join(','))
+  const payload = await request<{ objects: { id: string; object_type: 'concept' | 'entity'; name: string }[] }>(
+    `/api/knowledge-objects/derived?${query.toString()}`,
+  )
+  return payload.objects
+}
+
 export async function listContexts(): Promise<ContextNode[]> {
   const payload = await request<{ contexts: ContextNode[] }>('/api/contexts')
   return payload.contexts
@@ -305,17 +369,6 @@ export async function moveContext(id: string, parentId: string | null): Promise<
 /** Refused while the Context still holds sub-context or Document. */
 export async function deleteContext(id: string): Promise<void> {
   await request<{ deleted: boolean }>(`/api/contexts/${encodeURIComponent(id)}`, { method: 'DELETE' })
-}
-
-/** Concept and Entity reached through Context → Document → KnowledgeOccurrence. */
-export async function contextKnowledgeObjects(
-  id: string,
-  mode: ContextMode,
-): Promise<{ id: string; object_type: 'concept' | 'entity'; name: string }[]> {
-  const payload = await request<{ objects: { id: string; object_type: 'concept' | 'entity'; name: string }[] }>(
-    `/api/contexts/${encodeURIComponent(id)}/knowledge-objects?mode=${mode}`,
-  )
-  return payload.objects
 }
 
 export async function assignDocumentContext(documentId: string, contextId: string | null): Promise<DocumentRecord> {

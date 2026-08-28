@@ -21,22 +21,27 @@ final class DocumentRepository
      *
      * @return list<array<string, mixed>>
      */
-    public function list(string $status, ?array $contextIds = null): array
+    public function list(string $status, ?array $contextIds = null, ?array $documentIds = null): array
     {
-        $columns = 'SELECT id, title, revision, status, context_id, created_at, updated_at FROM documents ';
-        if ($contextIds === null) {
-            $statement = $this->pdo->prepare($columns . 'WHERE status = ? ORDER BY updated_at DESC, id');
-            $statement->execute([$status]);
-            return array_map($this->mapSummary(...), $statement->fetchAll());
-        }
-        if ($contextIds === []) {
+        if ($contextIds === [] || $documentIds === []) {
             return [];
         }
-        $placeholders = implode(',', array_fill(0, count($contextIds), '?'));
+        $conditions = ['status = ?'];
+        $parameters = [$status];
+        if ($contextIds !== null) {
+            $conditions[] = 'context_id IN (' . implode(',', array_fill(0, count($contextIds), '?')) . ')';
+            $parameters = [...$parameters, ...$contextIds];
+        }
+        if ($documentIds !== null) {
+            $conditions[] = 'id IN (' . implode(',', array_fill(0, count($documentIds), '?')) . ')';
+            $parameters = [...$parameters, ...$documentIds];
+        }
+
         $statement = $this->pdo->prepare(
-            $columns . "WHERE status = ? AND context_id IN ({$placeholders}) ORDER BY updated_at DESC, id"
+            'SELECT id, title, revision, status, context_id, created_at, updated_at FROM documents WHERE ' .
+            implode(' AND ', $conditions) . ' ORDER BY updated_at DESC, id'
         );
-        $statement->execute([$status, ...$contextIds]);
+        $statement->execute($parameters);
         return array_map($this->mapSummary(...), $statement->fetchAll());
     }
 
