@@ -11,6 +11,7 @@ use Nectrix\DocumentService;
 use Nectrix\DocumentValidator;
 use Nectrix\KnowledgeOccurrenceExtractor;
 use Nectrix\KnowledgeRepository;
+use Nectrix\KnowledgeService;
 use Nectrix\Migrator;
 use Nectrix\PlainTextExtractor;
 use Nectrix\UuidV7;
@@ -502,6 +503,206 @@ $suite->test('la migration Phase 1.1 aggiorna un database FASE 1 senza perdere D
     assertSameValue('Documento preesistente', $upgradePdo->query('SELECT title FROM documents')->fetchColumn());
     assertSameValue(2, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
     assertSameValue('field_values', $upgradePdo->query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'field_values'")->fetchColumn());
+});
+
+/** Text node carrying the knowledgeOccurrence mark, used by the occurrence invariant tests. */
+function occurrenceText(string $text, string $occurrenceId, string $objectId, string $type = 'concept'): array
+{
+    return ['type' => 'text', 'text' => $text, 'marks' => [[
+        'type' => 'knowledgeOccurrence',
+        'attrs' => ['occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $objectId, 'objectType' => $type],
+    ]]];
+}
+
+/** Document made of one paragraph per argument. @param list<array<string, mixed>> $paragraphs */
+function documentOfParagraphs(array ...$paragraphs): array
+{
+    $content = array_map(
+        static fn (array $nodes): array => ['type' => 'paragraph', 'content' => $nodes],
+        $paragraphs,
+    );
+    return ['type' => 'doc', 'content' => $content];
+}
+
+$suite->test('INV-OCC-05: frammenti contigui dello stesso ID restano una sola occurrence', static function (): void {
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $document = documentOfParagraphs([
+        occurrenceText('Rocket', $occurrenceId, $conceptId),
+        occurrenceText(' Lab', $occurrenceId, $conceptId),
+    ]);
+
+    $marks = (new KnowledgeOccurrenceExtractor())->extract($document);
+    assertSameValue([$occurrenceId], array_keys($marks));
+    assertSameValue($conceptId, $marks[$occurrenceId]['knowledgeObjectId']);
+});
+
+$suite->test('INV-OCC-05: lo stesso ID in intervalli disgiunti viene rifiutato', static function (): void {
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $extractor = new KnowledgeOccurrenceExtractor();
+
+    $sameParagraph = documentOfParagraphs([
+        occurrenceText('primo', $occurrenceId, $conceptId),
+        ['type' => 'text', 'text' => ' intervallo '],
+        occurrenceText('secondo', $occurrenceId, $conceptId),
+    ]);
+    $twoParagraphs = documentOfParagraphs(
+        [occurrenceText('primo', $occurrenceId, $conceptId)],
+        [occurrenceText('secondo', $occurrenceId, $conceptId)],
+    );
+
+    foreach ([$sameParagraph, $twoParagraphs] as $document) {
+        try {
+            $extractor->extract($document);
+            throw new RuntimeException('Intervalli disgiunti accettati.');
+        } catch (ApiException $error) {
+            assertSameValue('occurrence_split', $error->errorCode);
+        }
+    }
+});
+
+$suite->test('INV-OCC-05: l’estrattore trova le occurrence dentro liste e citazioni', static function (): void {
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $document = ['type' => 'doc', 'content' => [[
+        'type' => 'bulletList',
+        'content' => [['type' => 'listItem', 'content' => [[
+            'type' => 'paragraph',
+            'content' => [occurrenceText('Backlog', $occurrenceId, $conceptId)],
+        ]]]],
+    ]]];
+
+    assertSameValue([$occurrenceId], array_keys((new KnowledgeOccurrenceExtractor())->extract($document)));
+});
+
+$suite->test('INV-OCC-16: lo stesso ID con KnowledgeObject differenti viene rifiutato', static function (): void {
+    $occurrenceId = UuidV7::generate();
+    $document = documentOfParagraphs([
+        occurrenceText('primo', $occurrenceId, UuidV7::generate()),
+        occurrenceText('secondo', $occurrenceId, UuidV7::generate()),
+    ]);
+
+    try {
+        (new KnowledgeOccurrenceExtractor())->extract($document);
+        throw new RuntimeException('Attributi incoerenti accettati.');
+    } catch (ApiException $error) {
+        assertSameValue('occurrence_duplicate', $error->errorCode);
+    }
+});
+
+$suite->test('INV-OCC-03: un mark occurrence senza attributi completi viene rifiutato', static function (): void {
+    $document = ['type' => 'doc', 'content' => [[
+        'type' => 'paragraph',
+        'content' => [['type' => 'text', 'text' => 'manipolato', 'marks' => [['type' => 'knowledgeOccurrence']]]],
+    ]]];
+
+    try {
+        (new KnowledgeOccurrenceExtractor())->extract($document);
+        throw new RuntimeException('Mark senza attributi accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('occurrence_invalid_attributes', $error->errorCode);
+    }
+});
+
+$suite->test('INV-OCC-15: associare un KnowledgeObject inesistente fallisce atomicamente', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Paste manipolato']);
+    $occurrenceId = UuidV7::generate();
+    $unknownId = UuidV7::generate();
+    $json = documentOfParagraphs([occurrenceText('Sconosciuto', $occurrenceId, $unknownId)]);
+
+    try {
+        $service->update($document['id'], [
+            'baseRevision' => 0, 'title' => 'Paste manipolato', 'documentJson' => $json,
+            'occurrenceCreates' => [[
+                'occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $unknownId,
+                'objectType' => 'concept', 'newObject' => false,
+            ]],
+        ]);
+        throw new RuntimeException('KnowledgeObject inesistente accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('knowledge_object_missing', $error->errorCode);
+    }
+
+    assertSameValue(0, (int) $pdo->query("SELECT COUNT(*) FROM knowledge_objects WHERE id = '{$unknownId}'")->fetchColumn());
+    assertSameValue(0, (int) $pdo->query("SELECT COUNT(*) FROM knowledge_occurrences WHERE id = '{$occurrenceId}'")->fetchColumn());
+    assertSameValue(0, (int) $pdo->query("SELECT revision FROM documents WHERE id = '{$document['id']}'")->fetchColumn());
+});
+
+$suite->test('INV-OCC-05: un salvataggio con occurrence frammentata non modifica nulla', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Frammentazione']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $json = documentOfParagraphs(
+        [occurrenceText('primo', $occurrenceId, $conceptId)],
+        [occurrenceText('secondo', $occurrenceId, $conceptId)],
+    );
+
+    try {
+        $service->update($document['id'], [
+            'baseRevision' => 0, 'title' => 'Frammentazione', 'documentJson' => $json,
+            'occurrenceCreates' => [[
+                'occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $conceptId,
+                'objectType' => 'concept', 'newObject' => true, 'name' => 'Frammento',
+            ]],
+        ]);
+        throw new RuntimeException('Occurrence frammentata accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('occurrence_split', $error->errorCode);
+    }
+
+    assertSameValue(0, (int) $pdo->query("SELECT COUNT(*) FROM knowledge_objects WHERE id = '{$conceptId}'")->fetchColumn());
+    assertSameValue(0, (int) $pdo->query("SELECT revision FROM documents WHERE id = '{$document['id']}'")->fetchColumn());
+});
+
+$suite->test('INV-OCC-13: risalvare lo stesso documento non duplica le occurrence', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Reload stabile']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $json = documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]);
+    $created = ['occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept', 'newObject' => true, 'name' => 'Backlog'];
+
+    $service->update($document['id'], ['baseRevision' => 0, 'title' => 'Reload stabile', 'documentJson' => $json, 'occurrenceCreates' => [$created]]);
+    $saved = $service->update($document['id'], ['baseRevision' => 1, 'title' => 'Reload stabile', 'documentJson' => $json, 'occurrenceCreates' => []]);
+
+    assertSameValue(2, $saved['revision']);
+    assertSameValue(1, (int) $pdo->query("SELECT COUNT(*) FROM knowledge_occurrences WHERE id = '{$occurrenceId}'")->fetchColumn());
+    assertSameValue(1, (int) $pdo->query("SELECT COUNT(*) FROM knowledge_objects WHERE id = '{$conceptId}'")->fetchColumn());
+});
+
+$suite->test('la risoluzione dei KnowledgeObject espone solo esistenza e discriminator', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo));
+    $document = $service->create(['title' => 'Risoluzione']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $missingId = UuidV7::generate();
+    $service->update($document['id'], [
+        'baseRevision' => 0, 'title' => 'Risoluzione',
+        'documentJson' => documentOfParagraphs([occurrenceText('Risolvibile', $occurrenceId, $conceptId)]),
+        'occurrenceCreates' => [[
+            'occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $conceptId,
+            'objectType' => 'concept', 'newObject' => true, 'name' => 'Risolvibile',
+        ]],
+    ]);
+
+    $resolved = $knowledge->resolveObjects("{$conceptId},{$missingId}");
+    assertSameValue([['id' => $conceptId, 'object_type' => 'concept']], $resolved);
+    assertSameValue([], $knowledge->resolveObjects(''));
+
+    try {
+        $knowledge->resolveObjects('non-un-uuid');
+        throw new RuntimeException('ID malformato accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_id', $error->errorCode);
+    }
+
+    $tooMany = implode(',', array_map(static fn (): string => UuidV7::generate(), range(1, 201)));
+    try {
+        $knowledge->resolveObjects($tooMany);
+        throw new RuntimeException('Richiesta senza limite accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_request', $error->errorCode);
+    }
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

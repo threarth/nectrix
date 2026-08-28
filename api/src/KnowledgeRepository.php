@@ -40,6 +40,24 @@ final class KnowledgeRepository
         return ['id' => $id, 'name' => $name, 'description' => null];
     }
 
+    /**
+     * Existence and discriminator of the requested KnowledgeObject, used by the client to decide
+     * whether a pasted mark can be kept. Read only: it never creates anything.
+     *
+     * @param list<string> $ids
+     * @return list<array<string, mixed>>
+     */
+    public function resolveObjects(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $statement = $this->pdo->prepare("SELECT id, object_type FROM knowledge_objects WHERE id IN ({$placeholders})");
+        $statement->execute($ids);
+        return $statement->fetchAll();
+    }
+
     /** @param array<string, array<string, string>> $marks @param list<array<string, mixed>> $creates */
     public function assertAndCreateOccurrences(string $documentId, array $marks, array $creates): void
     {
@@ -72,7 +90,9 @@ final class KnowledgeRepository
         $existing = $this->pdo->prepare('SELECT 1 FROM knowledge_occurrences WHERE id = :id');
         $existing->execute(['id' => $occurrenceId]);
         if ($existing->fetch() !== false) throw new ApiException(422, 'occurrence_duplicate', 'Occurrence ID già esistente.');
-        if (($create['newObject'] ?? false) === true) {
+        if (($create['newObject'] ?? false) !== true) {
+            $this->assertObjectExists($objectId, $type);
+        } else {
             $name = $create['name'] ?? null;
             if (!is_string($name) || trim($name) === '') throw new ApiException(422, 'invalid_knowledge_object', 'Nome obbligatorio.');
             $this->pdo->prepare('INSERT INTO knowledge_objects (id, object_type, created_at, updated_at) VALUES (:id, :type, :created, :updated)')->execute(['id'=>$objectId,'type'=>$type,'created'=>$timestamp,'updated'=>$timestamp]);
@@ -85,5 +105,15 @@ final class KnowledgeRepository
             }
         }
         $this->pdo->prepare('INSERT INTO knowledge_occurrences (id, knowledge_object_id, object_type, document_id, created_at, updated_at) VALUES (:id, :object_id, :type, :document_id, :created, :updated)')->execute(['id'=>$occurrenceId,'object_id'=>$objectId,'type'=>$type,'document_id'=>$documentId,'created'=>$timestamp,'updated'=>$timestamp]);
+    }
+
+    /** INV-OCC-15: associating an unknown KnowledgeObject fails, it never creates one implicitly. */
+    private function assertObjectExists(string $objectId, string $type): void
+    {
+        $statement = $this->pdo->prepare('SELECT 1 FROM knowledge_objects WHERE id = :id AND object_type = :type');
+        $statement->execute(['id' => $objectId, 'type' => $type]);
+        if ($statement->fetch() === false) {
+            throw new ApiException(422, 'knowledge_object_missing', 'Il KnowledgeObject associato non esiste o ha un discriminator differente.');
+        }
     }
 }

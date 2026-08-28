@@ -74,11 +74,15 @@ Completato: il mark comune `knowledgeOccurrence` è validato lato editor/API; i 
 
 Gate soddisfatto: creazione atomica di KnowledgeObject, sottotipo, occurrence e mark; persistenza e rendering coerenti per entrambi i discriminator; nessuna conversione automatica Concept↔Entity e nessuna promozione del testo ad Alias o EntityIdentifier; flussi critici coperti da test end-to-end in browser reale.
 
-## FASE 4 — Invarianti delle KnowledgeOccurrence
+## FASE 4 — Invarianti delle KnowledgeOccurrence (completata)
 
 Implementare per entrambi i sottotipi editing interno e ai bordi, delete parziale/totale, undo/redo, copy/paste, cut/paste verificato e ambiguo, serializzazione, reload, frammentazione contigua e input manipolato. La perdita dell'ultima occurrence porta a `orphan` soltanto un Concept prima attivo; una Entity resta `active` e nessun KnowledgeObject viene eliminato. Il paste genera un nuovo `occurrenceId` mantenendo `knowledgeObjectId`/`objectType`.
 
-Gate: tutte le invarianti `INV-OCC-*` applicabili coperte per Concept ed Entity, inclusi ID globali e discriminator incoerenti, da test verdi.
+Completato: il mark ha un round trip HTML esplicito su `data-occurrence-id`, `data-knowledge-object-id` e `data-object-type` e viene accettato soltanto con attributi completi e ben formati. Il paste riscrive ogni `occurrenceId` una volta per ID copiato, conserva `knowledgeObjectId`/`objectType` e verifica gli oggetti con `GET /api/knowledge-objects`, rimuovendo il solo mark non fidato con avviso non bloccante. Il cut/paste conserva gli ID unicamente con la prova `application/x-nectrix-slice` nello stesso Document, token non consumato, originali assenti e intervallo unico; ogni caso ambiguo genera nuovi ID. L'estrattore API rifiuta intervalli disgiunti, più textblock, attributi incompleti e attributi incoerenti per lo stesso ID; l'associazione a un KnowledgeObject inesistente fallisce con `knowledge_object_missing`. Le creazioni inviate al salvataggio sono derivate dai mark presenti nel documento, quindi un undo non lascia creazioni fantasma e un paste dichiara il proprio record.
+
+Gate soddisfatto: `INV-OCC-01`, `INV-OCC-02`, `INV-OCC-03`, `INV-OCC-05`, `INV-OCC-06`, `INV-OCC-07`, `INV-OCC-10`, `INV-OCC-11`, `INV-OCC-12`, `INV-OCC-13`, `INV-OCC-14`, `INV-OCC-15` e `INV-OCC-16` coperti da test verdi per Concept ed Entity, inclusi ID globali e discriminator incoerenti, con copy/paste, cut/paste e undo in browser reale. `INV-OCC-04` resta garantito dallo schema.
+
+Rinviato alla FASE 5, che ha come proprio deliverable gli stati `active`/`detached`/`deleted` e la riconciliazione transazionale: il lato database di `INV-OCC-08` e `INV-OCC-09`, cioè il passaggio ad `detached` degli ID assenti e la riattivazione idempotente, e con essi la transizione a `orphan` dei soli Concept. Nella FASE 4 la cancellazione totale rimuove il mark dal documento e undo lo ripristina con lo stesso ID, senza che il salvataggio elimini alcun record. `INV-OCC-17`, `INV-OCC-18` e `INV-OCC-19` restano fuori portata fino alle rispettive fasi.
 
 ## FASE 5 — Sincronizzazione DB ↔ documento
 

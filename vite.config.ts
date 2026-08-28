@@ -3,6 +3,12 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { defineConfig } from 'vitest/config'
 
+/**
+ * This file is the only one that runs in Node and the only variable it needs is the API target.
+ * A module scoped declaration keeps it type checked without adding the whole @types/node package.
+ */
+declare const process: { env: Record<string, string | undefined> }
+
 export default defineConfig({
   plugins: [svelte()],
   server: {

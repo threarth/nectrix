@@ -178,6 +178,8 @@ Identità persistente di un intervallo vivo di testo dichiarato manifestazione d
 
 Non contiene testo, posizione assoluta o copia autorevole del range. Il testo corrente e la posizione si estraggono dal documento del Document cercando il mark con il suo ID.
 
+Nel contenuto il mark `knowledgeOccurrence` serializza su uno `span` con i soli attributi `data-occurrence-id`, `data-knowledge-object-id` e `data-object-type`. Il parsing lo accetta soltanto con i tre attributi presenti, ID UUIDv7 canonici e discriminator `concept` oppure `entity`: un frammento HTML incompleto o manipolato conserva testo e formattazione ordinaria e perde il mark, senza creare alcun record. Lo stesso ID copre una sola sequenza di text node adiacenti dentro un unico textblock; intervalli disgiunti vengono rifiutati al salvataggio.
+
 Cambiare KnowledgeObject o passare un range da Concept a Entity non muta l'associazione in place: termina/detacha l'occurrence precedente e ne crea una nuova. L'identità esprime anche l'associazione semantica, non soltanto una decorazione visuale.
 
 Transizioni ammesse:

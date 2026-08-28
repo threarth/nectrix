@@ -124,6 +124,8 @@ Comportamento iniziale dei bordi:
 
 Queste regole richiedono configurazione esplicita dell'inclusività del mark e test a livello ProseMirror; non vanno affidate ai default della libreria.
 
+Per lo stesso motivo il collasso di una selezione non vuota con le frecce sinistra e destra è esplicito e avviene nella stessa transazione del tasto premuto. Lo stato ProseMirror altrimenti dipende dall'evento asincrono `selectionchange` e una battitura immediata dopo un select all verrebbe applicata alla selezione precedente, sostituendo l'intero contenuto invece di inserire al caret.
+
 ## 5. Lifecycle delle occurrence
 
 ### 5.1 Stati persistenti
@@ -161,6 +163,8 @@ Il copy serializza il contenuto ma il paste deve riscrivere **ogni** `occurrence
 
 Il paste non deve fidarsi degli ID presenti in HTML, JSON o clipboard esterni. Se il KnowledgeObject non esiste o il discriminator non coincide, il client rimuove soltanto il mark `knowledgeOccurrence`, conserva testo e formattazione ordinaria e mostra un avviso non bloccante. Non viene mai creato implicitamente un Concept o una Entity.
 
+La verifica usa l'endpoint di sola lettura `GET /api/knowledge-objects?ids=…`, che restituisce esclusivamente ID e discriminator dei KnowledgeObject esistenti e non crea nulla. Gli oggetti già noti alla sessione editoriale, cioè quelli referenziati dal documento caricato e quelli creati e non ancora salvati, non vengono richiesti di nuovo. L'avviso al paste è un aiuto immediato, non l'autorità: il salvataggio rifiuta comunque con `knowledge_object_missing` un'associazione verso un oggetto inesistente.
+
 ### 5.5 Cut/paste
 
 La preferenza “cut/paste nello stesso documento mantiene l'ID” è realizzabile solo quando il client può provare che si tratta dello stesso taglio. La decisione è:
@@ -171,6 +175,8 @@ La preferenza “cut/paste nello stesso documento mantiene l'ID” è realizzabi
 4. consumare il token al primo paste riuscito e invalidarlo su nuovo copy/cut, reload o distruzione dell'editor;
 5. tra Document, senza formato custom, con token scaduto oppure in qualsiasi caso ambiguo, trattare l'operazione come copy/paste e generare nuovi ID;
 6. se un ID risulta ancora presente, generare sempre un nuovo ID per evitare duplicati.
+
+Il formato clipboard custom è `application/x-nectrix-slice` e trasporta `nonce`, `documentId` e impronta del payload. L'impronta è calcolata soltanto su ciò che sopravvive al round trip del clipboard, cioè testo visibile della slice e occurrenceId ordinati, così il confronto resta valido dopo la serializzazione in HTML. Il token in memoria conserva inoltre gli occurrenceId tagliati e viene consumato al primo paste valido.
 
 Il token non è persistenza di dominio e scade con la sessione editoriale. Questa policy privilegia la coerenza rispetto alla conservazione dell'identità nei casi non dimostrabili.
 
@@ -196,6 +202,8 @@ Pipeline prevista:
 10. eseguire commit o rollback dell'intera operazione.
 
 La perdita dell'ultima occurrence di una Entity non ne cambia lo stato e non la elimina: resta `active` fino a un comando esplicito di archiviazione.
+
+Le operazioni di creazione inviate dal client non sono una lista accumulata dai comandi dell'editor: vengono derivate dai mark effettivamente presenti nel documento al momento del salvataggio, incrociati con gli ID già persistiti nella revisione caricata e con i KnowledgeObject creati e non ancora salvati. Un undo elimina la creazione insieme al mark, un paste dichiara il proprio nuovo record e il KnowledgeObject viene dichiarato una sola volta, dalla prima occurrence che lo referenzia.
 
 Non si inferiscono nuovi record da un mark sconosciuto senza una manifestazione esplicita della creazione. Questo impedisce che documenti manipolati creino entità silenziosamente.
 

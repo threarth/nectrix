@@ -11,8 +11,9 @@
     listDocuments,
     saveDocument,
     type DocumentRecord,
-    type DocumentSummary, type OccurrenceCreate,
+    type DocumentSummary,
   } from './lib/api'
+  import { collectOccurrences, deriveOccurrenceCreates, type PendingKnowledgeObject } from './lib/occurrences'
 
   let documents = $state<DocumentSummary[]>([])
   let selected = $state<DocumentRecord | null>(null)
@@ -22,7 +23,11 @@
   let loading = $state(true)
   let saving = $state(false)
   let error = $state('')
-  let occurrenceCreates = $state<OccurrenceCreate[]>([])
+  /** Occurrence already persisted in the loaded revision: they need no creation at save time. */
+  let persistedOccurrenceIds = new Set<string>()
+
+  /** KnowledgeObject created in this session and not yet persisted, by knowledgeObjectId. */
+  let pendingObjects = new Map<string, PendingKnowledgeObject>()
   let sidebarRename = $state<{ id: string; title: string } | null>(null)
   let sidebarRenameInput = $state<HTMLInputElement | undefined>(undefined)
   let titleInput = $state<HTMLTextAreaElement | undefined>(undefined)
@@ -73,7 +78,8 @@
     saving = true
     error = ''
     try {
-      const saved = await saveDocument(selected, draftTitle, draftJson, occurrenceCreates)
+      const creates = deriveOccurrenceCreates(draftJson, persistedOccurrenceIds, pendingObjects)
+      const saved = await saveDocument(selected, draftTitle, draftJson, creates)
       applyDocument(saved)
       documents = [saved, ...documents.filter((document) => document.id !== saved.id)]
     } catch (cause) {
@@ -88,7 +94,8 @@
     draftTitle = document.title
     draftJson = document.documentJson
     dirty = false
-    occurrenceCreates = []
+    persistedOccurrenceIds = new Set(collectOccurrences(document.documentJson).keys())
+    pendingObjects = new Map()
     void tick().then(resizeTitleInput)
   }
 
@@ -103,8 +110,8 @@
     dirty = true
   }
 
-  function addOccurrenceCreate(create: OccurrenceCreate): void {
-    occurrenceCreates = [...occurrenceCreates, create]
+  function addPendingObject(knowledgeObjectId: string, object: PendingKnowledgeObject): void {
+    pendingObjects.set(knowledgeObjectId, object)
     dirty = true
   }
 
@@ -269,7 +276,12 @@
       </header>
 
       {#key selected.id}
-        <DocumentEditor initialContent={draftJson} onChange={changeContent} onOccurrenceCreate={addOccurrenceCreate} />
+        <DocumentEditor
+          documentId={selected.id}
+          initialContent={draftJson}
+          onChange={changeContent}
+          onObjectCreate={addPendingObject}
+        />
       {/key}
     {:else if !loading}
       <section class="welcome">

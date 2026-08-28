@@ -7,8 +7,11 @@
     defaultHighlightColors,
     editorExtensions,
     normalizeHighlightColor,
+    occurrenceClipboardExtension,
+    removeOccurrenceMarks,
     type HighlightColor,
   } from '../lib/editor'
+  import { collectOccurrences, type OccurrenceAttributes, type PendingKnowledgeObject } from '../lib/occurrences'
   import {
     MAX_HIGHLIGHT_COLORS,
     MIN_HIGHLIGHT_COLORS,
@@ -16,16 +19,18 @@
     writeHighlightPalette,
   } from '../lib/highlightPalette'
   import { uuidV7 } from '../lib/uuid'
-  import { createEntityType, searchKnowledge, type OccurrenceCreate } from '../lib/api'
+  import { createEntityType, resolveKnowledgeObjects, searchKnowledge } from '../lib/api'
 
   let {
+    documentId,
     initialContent,
     onChange,
-    onOccurrenceCreate,
+    onObjectCreate,
   }: {
+    documentId: string
     initialContent: JSONContent
     onChange: (content: JSONContent) => void
-    onOccurrenceCreate: (create: OccurrenceCreate) => void
+    onObjectCreate: (knowledgeObjectId: string, object: PendingKnowledgeObject) => void
   } = $props()
 
   let element: HTMLDivElement
@@ -34,12 +39,26 @@
   let highlightPopover = $state<{ color: HighlightColor; left: number; top: number } | null>(null)
   let highlightPalette = $state<string[]>([...defaultHighlightColors])
   let paletteSelectorOpen = $state(false)
+  let clipboardWarning = $state('')
+
+  /** Discriminator of the KnowledgeObject already known to be valid, to avoid useless lookups. */
+  const knownObjectTypes = new Map<string, 'concept' | 'entity'>()
 
   onMount(() => {
     highlightPalette = readHighlightPalette()
+    for (const occurrence of collectOccurrences(initialContent).values()) {
+      knownObjectTypes.set(occurrence.knowledgeObjectId, occurrence.objectType)
+    }
     const editor = new Editor({
       element,
-      extensions: editorExtensions,
+      extensions: [
+        ...editorExtensions,
+        occurrenceClipboardExtension({
+          documentId,
+          createId: uuidV7,
+          onPaste: (occurrences) => void verifyPastedOccurrences(occurrences),
+        }),
+      ],
       content: initialContent,
       onTransaction: ({ editor, transaction }) => {
         editorState = { editor }
@@ -69,7 +88,8 @@
     const occurrenceId = uuidV7()
     const knowledgeObjectId = uuidV7()
     editor.chain().focus().setMark('knowledgeOccurrence', { occurrenceId, knowledgeObjectId, objectType: 'concept' }).run()
-    onOccurrenceCreate({ occurrenceId, knowledgeObjectId, objectType: 'concept', newObject: true, name })
+    knownObjectTypes.set(knowledgeObjectId, 'concept')
+    onObjectCreate(knowledgeObjectId, { objectType: 'concept', name })
   }
 
   async function createEntityFromSelection(): Promise<void> {
@@ -85,7 +105,8 @@
       const occurrenceId = uuidV7()
       const knowledgeObjectId = uuidV7()
       editor.chain().focus().setMark('knowledgeOccurrence', { occurrenceId, knowledgeObjectId, objectType: 'entity' }).run()
-      onOccurrenceCreate({ occurrenceId, knowledgeObjectId, objectType: 'entity', newObject: true, name, entityTypeId: entityType.id })
+      knownObjectTypes.set(knowledgeObjectId, 'entity')
+      onObjectCreate(knowledgeObjectId, { objectType: 'entity', name, entityTypeId: entityType.id })
     } catch (cause) {
       window.alert(cause instanceof Error ? cause.message : 'Impossibile creare EntityType.')
     }
@@ -109,10 +130,42 @@
       if (!result) return
       const occurrenceId = uuidV7()
       editor.chain().focus().setMark('knowledgeOccurrence', { occurrenceId, knowledgeObjectId: result.id, objectType: result.object_type }).run()
-      onOccurrenceCreate({ occurrenceId, knowledgeObjectId: result.id, objectType: result.object_type, newObject: false })
+      knownObjectTypes.set(result.id, result.object_type)
     } catch (cause) {
       window.alert(cause instanceof Error ? cause.message : 'Ricerca non disponibile.')
     }
+  }
+
+  /**
+   * INV-OCC-15: a pasted mark keeps its KnowledgeObject only if the database confirms both the
+   * existence and the discriminator. Otherwise only the mark is removed, with a non blocking notice.
+   */
+  async function verifyPastedOccurrences(occurrences: OccurrenceAttributes[]): Promise<void> {
+    const editor = editorState.editor
+    clipboardWarning = ''
+    const unverified = occurrences.filter((occurrence) => !isKnownObject(occurrence))
+    if (!editor || unverified.length === 0) return
+
+    try {
+      const resolved = await resolveKnowledgeObjects([...new Set(unverified.map((occurrence) => occurrence.knowledgeObjectId))])
+      for (const object of resolved) knownObjectTypes.set(object.id, object.object_type)
+    } catch (cause) {
+      clipboardWarning = cause instanceof Error
+        ? `Verifica degli oggetti incollati non riuscita: ${cause.message}`
+        : 'Verifica degli oggetti incollati non riuscita.'
+      return
+    }
+
+    const invalid = occurrences.filter((occurrence) => !isKnownObject(occurrence))
+    if (invalid.length === 0) return
+    removeOccurrenceMarks(editor, new Set(invalid.map((occurrence) => occurrence.occurrenceId)))
+    clipboardWarning = invalid.length === 1
+      ? 'Un elemento incollato faceva riferimento a un Concept o a una Entity non validi: il testo è stato mantenuto senza associazione.'
+      : `${invalid.length} elementi incollati facevano riferimento a Concept o Entity non validi: il testo è stato mantenuto senza associazione.`
+  }
+
+  function isKnownObject(occurrence: OccurrenceAttributes): boolean {
+    return knownObjectTypes.get(occurrence.knowledgeObjectId) === occurrence.objectType
   }
 
   function syncHighlightPopover(editor: Editor): void {
@@ -286,6 +339,12 @@
         <button type="button" onclick={resetHighlightPalette}>Ripristina predefiniti</button>
       </div>
     {/if}
+  {/if}
+  {#if clipboardWarning}
+    <div class="clipboard-warning" role="status">
+      <span>{clipboardWarning}</span>
+      <button type="button" aria-label="Chiudi avviso" onclick={() => (clipboardWarning = '')}>×</button>
+    </div>
   {/if}
   <div class="editor-content" bind:this={element}></div>
   {#if editorState.editor && highlightPopover}

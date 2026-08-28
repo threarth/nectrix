@@ -186,6 +186,27 @@ button:disabled {
   line-height: 1;
 }
 
+.clipboard-warning {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid #c9a227;
+  border-radius: 9px;
+  color: #6b5310;
+  background: #fbf3d6;
+}
+
+.clipboard-warning button {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+}
+
 .document-header {
   display: flex;
   max-width: 1060px;

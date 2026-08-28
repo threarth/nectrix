@@ -127,7 +127,7 @@ Dopo salvataggio e reload ogni occurrence attiva conserva gli stessi ID e associ
 Due range dello stesso KnowledgeObject hanno ID differenti, anche se il testo è identico.
 
 **INV-OCC-15 — Nessuna creazione implicita da input non fidato**  
-Un mark sconosciuto proveniente da clipboard o documento manipolato non può creare implicitamente Concept, Entity o record persistenti.
+Un mark sconosciuto proveniente da clipboard o documento manipolato non può creare implicitamente Concept, Entity o record persistenti. Il mark viene accettato soltanto con attributi completi e ben formati; un KnowledgeObject inesistente o con discriminator diverso fa perdere il mark al contenuto incollato e fa fallire il salvataggio che lo dichiarasse.
 
 **INV-OCC-16 — Mismatch bloccante**  
 Se `knowledgeObjectId` o `objectType` nel mark non coincide con la KnowledgeOccurrence, il salvataggio fallisce atomicamente; nessuna delle rappresentazioni viene riscritta in automatico.

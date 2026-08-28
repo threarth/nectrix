@@ -24,6 +24,9 @@ export interface OccurrenceCreate {
   entityTypeId?: string
 }
 
+/** Existence and discriminator of a KnowledgeObject, as returned by the resolution endpoint. */
+export interface KnowledgeObjectRef { id: string; object_type: 'concept' | 'entity' }
+
 export interface EntityType { id: string; name: string; description: string | null }
 export interface KnowledgeSearchResult { id: string; object_type: 'concept' | 'entity'; name: string; entity_type_name: string | null }
 
@@ -113,4 +116,13 @@ export async function createEntityType(name: string): Promise<EntityType> {
 export async function searchKnowledge(query: string): Promise<KnowledgeSearchResult[]> {
   const payload = await request<{ results: KnowledgeSearchResult[] }>(`/api/knowledge/search?q=${encodeURIComponent(query)}`)
   return payload.results
+}
+
+/** Resolves pasted KnowledgeObject IDs: unknown IDs are simply missing from the answer. */
+export async function resolveKnowledgeObjects(ids: string[]): Promise<KnowledgeObjectRef[]> {
+  if (ids.length === 0) return []
+  const payload = await request<{ objects: KnowledgeObjectRef[] }>(
+    `/api/knowledge-objects?ids=${encodeURIComponent(ids.join(','))}`,
+  )
+  return payload.objects
 }

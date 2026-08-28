@@ -72,6 +72,9 @@ try {
     if ($method === 'GET' && $path === '/api/knowledge/search') {
         respond(200, ['results' => $knowledge->search((string) ($_GET['q'] ?? ''))]);
     }
+    if ($method === 'GET' && $path === '/api/knowledge-objects') {
+        respond(200, ['objects' => $knowledge->resolveObjects((string) ($_GET['ids'] ?? ''))]);
+    }
     if ($method === 'GET' && $path === '/api/entity-types') {
         respond(200, ['entityTypes' => $knowledge->entityTypes()]);
     }
