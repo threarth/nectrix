@@ -124,11 +124,15 @@ Completato: ConceptAlias ed EntityIdentifier sono modelli distinti, aggiunti e r
 
 Gate soddisfatto: ambiguità degli Alias verificata con due Concept che condividono un alias e con un Concept che ne ha due corrispondenti; duplicati normalizzati nella stessa Entity rifiutati anche con maiuscole, spazi e zeri iniziali differenti; collisione fra Entity che produce candidati duplicati con entrambe le Entity intatte; authority obbligatoria dove lo scheme la richiede e parte dell'identità, così lo stesso ticker su exchange diversi resta ammesso.
 
-## FASE 8 — Context
+## FASE 8 — Context (completata)
 
 CRUD di Context e sub-context a profondità arbitraria, breadcrumb, move aciclico di interi rami, assegnazione di un Context principale al Document, filtro `exact`/`subtree` e raggruppamento occurrence per Context. Concept, Entity ed EntityType vengono filtrati attraverso il percorso esplicito Context→Document→KnowledgeOccurrence→KnowledgeObject; SemanticBlock si aggiunge allo stesso percorso dopo la FASE 10.1. Nessuno riceve silenziosamente `context_id`. La cancellazione di nodi con figli o Document richiede riassegnazione esplicita.
 
-Gate: lo stesso Concept o Entity compare in più Context senza duplicazione; query derivate per entrambi i sottotipi, query ricorsive, move, anti-ciclo, filtro subtree e cancellazione prudente coperti da test verdi.
+Completato: la migration 006 aggiunge `contexts` con self-FK e `documents.context_id`. Un sub-context è un Context con `parent_id`, la profondità non ha limiti e percorso e breadcrumb si calcolano dalla gerarchia con query ricorsive, senza percorsi materializzati. Il nome è unico fra fratelli ma si ripete liberamente in rami diversi. Il move sposta l'intero ramo e rifiuta destinazioni dentro il ramo stesso, auto-parenting incluso. La cancellazione è prudente: un Context con sub-context o con Document assegnati va prima riassegnato. Il filtro `exact`/`subtree` seleziona i Document del ramo e la sidebar espone albero, modalità e comandi. Un Document riceve un Context solo con il comando dedicato, mai come effetto del salvataggio.
+
+Concept ed Entity si raggiungono attraverso il percorso esplicito Context→Document→KnowledgeOccurrence→KnowledgeObject e il pannello li mostra come elenco derivato: nessuno riceve `context_id` e lo stesso oggetto presente in più Context compare una sola volta.
+
+Gate soddisfatto: lo stesso Concept in due Context diversi restituito una volta sola; query derivate per entrambi i sottotipi, ricorsione su breadcrumb e subtree, move di ramo, anti-ciclo, filtro exact/subtree e cancellazione prudente coperti da test backend, più due end-to-end sul filtro e sul rifiuto della cancellazione.
 
 ## FASE 9 — Tag
 

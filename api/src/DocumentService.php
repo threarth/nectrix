@@ -30,12 +30,12 @@ final class DocumentService
      *
      * @return list<array<string, mixed>>
      */
-    public function list(string $scope = 'active'): array
+    public function list(string $scope = 'active', ?array $contextIds = null): array
     {
         if (!in_array($scope, self::LIFECYCLE_SCOPES, true)) {
             throw new ApiException(422, 'invalid_request', 'Scope del lifecycle non supportato.');
         }
-        return $this->repository->list($scope);
+        return $this->repository->list($scope, $contextIds);
     }
 
     /** @return array<string, mixed> */

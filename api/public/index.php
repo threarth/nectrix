@@ -5,6 +5,8 @@
 declare(strict_types=1);
 
 use Nectrix\ApiException;
+use Nectrix\ContextRepository;
+use Nectrix\ContextService;
 use Nectrix\Database;
 use Nectrix\DocumentRepository;
 use Nectrix\DocumentService;
@@ -60,6 +62,8 @@ try {
         $knowledgeRepository,
     );
     $knowledge = new KnowledgeService($knowledgeRepository, new OccurrenceTextExtractor());
+    $documentRepository = new DocumentRepository($pdo);
+    $contexts = new ContextService(new ContextRepository($pdo), $documentRepository);
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -68,7 +72,41 @@ try {
         respond(200, ['status' => 'ok']);
     }
     if ($method === 'GET' && $path === '/api/documents') {
-        respond(200, ['documents' => $service->list((string) ($_GET['scope'] ?? 'active'))]);
+        $contextId = isset($_GET['contextId']) ? (string) $_GET['contextId'] : null;
+        $contextIds = $contextId === null || $contextId === ''
+            ? null
+            : $contexts->selectedIds($contextId, (string) ($_GET['contextMode'] ?? 'subtree'));
+        respond(200, ['documents' => $service->list((string) ($_GET['scope'] ?? 'active'), $contextIds)]);
+    }
+    if ($method === 'GET' && $path === '/api/contexts') {
+        respond(200, ['contexts' => $contexts->list()]);
+    }
+    if ($method === 'POST' && $path === '/api/contexts') {
+        respond(201, ['context' => $contexts->create(requestBody())]);
+    }
+    if (preg_match('#^/api/contexts/([^/]+)$#', (string) $path, $matches) === 1) {
+        $contextId = rawurldecode($matches[1]);
+        if ($method === 'PUT') {
+            respond(200, ['context' => $contexts->rename($contextId, requestBody())]);
+        }
+        if ($method === 'DELETE') {
+            $contexts->delete($contextId);
+            respond(200, ['deleted' => true]);
+        }
+    }
+    if ($method === 'POST' && preg_match('#^/api/contexts/([^/]+)/move$#', (string) $path, $matches) === 1) {
+        respond(200, ['context' => $contexts->move(rawurldecode($matches[1]), requestBody())]);
+    }
+    if ($method === 'GET' && preg_match('#^/api/contexts/([^/]+)/breadcrumb$#', (string) $path, $matches) === 1) {
+        respond(200, ['breadcrumb' => $contexts->breadcrumb(rawurldecode($matches[1]))]);
+    }
+    if ($method === 'GET' && preg_match('#^/api/contexts/([^/]+)/knowledge-objects$#', (string) $path, $matches) === 1) {
+        respond(200, [
+            'objects' => $contexts->knowledgeObjects(rawurldecode($matches[1]), (string) ($_GET['mode'] ?? 'subtree')),
+        ]);
+    }
+    if ($method === 'POST' && preg_match('#^/api/documents/([^/]+)/context$#', (string) $path, $matches) === 1) {
+        respond(200, ['document' => $contexts->assignDocument(rawurldecode($matches[1]), requestBody())]);
     }
     if ($method === 'POST' && preg_match('#^/api/documents/([^/]+)/(archive|trash|restore)$#', (string) $path, $matches) === 1) {
         $documentId = rawurldecode($matches[1]);

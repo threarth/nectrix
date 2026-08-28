@@ -5,6 +5,8 @@
 declare(strict_types=1);
 
 use Nectrix\ApiException;
+use Nectrix\ContextRepository;
+use Nectrix\ContextService;
 use Nectrix\Database;
 use Nectrix\DocumentPurgeService;
 use Nectrix\DocumentRepository;
@@ -170,8 +172,8 @@ $suite->test('le migrazioni estendono lo schema Document senza rimuovere le colo
     $phaseOne = ['id', 'title', 'document_json', 'plain_text', 'revision', 'created_at', 'updated_at'];
 
     assertSameValue($phaseOne, array_slice($columns, 0, count($phaseOne)));
-    assertSameValue(['status'], array_slice($columns, count($phaseOne)));
-    assertSameValue(5, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(['status', 'context_id'], array_slice($columns, count($phaseOne)));
+    assertSameValue(6, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
 });
 
 $domainFixture = [];
@@ -504,7 +506,7 @@ $suite->test('la migration Phase 1.1 aggiorna un database FASE 1 senza perdere D
 
     assertSameValue(1, (int) $upgradePdo->query('SELECT COUNT(*) FROM documents')->fetchColumn());
     assertSameValue('Documento preesistente', $upgradePdo->query('SELECT title FROM documents')->fetchColumn());
-    assertSameValue(5, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(6, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
     assertSameValue('field_values', $upgradePdo->query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'field_values'")->fetchColumn());
 });
 
@@ -1351,6 +1353,154 @@ $suite->test('un nome vuoto o un campo non previsto vengono rifiutati', static f
     }
 
     assertSameValue('Nome valido', $knowledge->object($conceptId)['name']);
+});
+
+/** Context service sharing the test database. */
+function contextService(PDO $pdo): ContextService
+{
+    return new ContextService(new ContextRepository($pdo), new DocumentRepository($pdo));
+}
+
+$suite->test('i Context formano una gerarchia con breadcrumb derivato', static function () use ($pdo): void {
+    $contexts = contextService($pdo);
+    $root = $contexts->create(['name' => 'Università']);
+    $child = $contexts->create(['name' => 'Psicologia', 'parentId' => $root['id']]);
+    $grandChild = $contexts->create(['name' => 'Junghiana', 'parentId' => $child['id']]);
+
+    $breadcrumb = array_column($contexts->breadcrumb($grandChild['id']), 'name');
+
+    assertSameValue(['Università', 'Psicologia', 'Junghiana'], $breadcrumb);
+    assertSameValue(3, count($contexts->selectedIds($root['id'], 'subtree')));
+    assertSameValue(1, count($contexts->selectedIds($root['id'], 'exact')));
+});
+
+$suite->test('lo stesso nome è ammesso in rami diversi ma non fra fratelli', static function () use ($pdo): void {
+    $contexts = contextService($pdo);
+    $first = $contexts->create(['name' => 'Ramo primo']);
+    $second = $contexts->create(['name' => 'Ramo secondo']);
+    $contexts->create(['name' => 'Metodi', 'parentId' => $first['id']]);
+    $contexts->create(['name' => 'Metodi', 'parentId' => $second['id']]);
+
+    assertThrows(
+        static fn () => $contexts->create(['name' => 'metodi', 'parentId' => $first['id']]),
+        'Due fratelli omonimi devono essere rifiutati.',
+    );
+});
+
+$suite->test('il move sposta un ramo intero e rifiuta i cicli', static function () use ($pdo): void {
+    $contexts = contextService($pdo);
+    $root = $contexts->create(['name' => 'Radice move']);
+    $branch = $contexts->create(['name' => 'Ramo', 'parentId' => $root['id']]);
+    $leaf = $contexts->create(['name' => 'Foglia', 'parentId' => $branch['id']]);
+    $other = $contexts->create(['name' => 'Altra radice']);
+
+    $contexts->move($branch['id'], ['parentId' => $other['id']]);
+    assertSameValue(['Altra radice', 'Ramo', 'Foglia'], array_column($contexts->breadcrumb($leaf['id']), 'name'));
+
+    try {
+        $contexts->move($branch['id'], ['parentId' => $leaf['id']]);
+        throw new RuntimeException('Ciclo accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('context_cycle', $error->errorCode);
+    }
+
+    try {
+        $contexts->move($branch['id'], ['parentId' => $branch['id']]);
+        throw new RuntimeException('Auto-parenting accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('context_cycle', $error->errorCode);
+    }
+
+    assertSameValue(['Altra radice', 'Ramo'], array_column($contexts->breadcrumb($branch['id']), 'name'));
+});
+
+$suite->test('la cancellazione di un Context con figli o Document richiede riassegnazione', static function () use ($pdo, $service): void {
+    $contexts = contextService($pdo);
+    $root = $contexts->create(['name' => 'Radice prudente']);
+    $child = $contexts->create(['name' => 'Figlio', 'parentId' => $root['id']]);
+    $document = $service->create(['title' => 'Assegnato']);
+    $contexts->assignDocument($document['id'], ['contextId' => $child['id']]);
+
+    try {
+        $contexts->delete($root['id']);
+        throw new RuntimeException('Context con figli eliminato.');
+    } catch (ApiException $error) {
+        assertSameValue('context_has_children', $error->errorCode);
+    }
+
+    try {
+        $contexts->delete($child['id']);
+        throw new RuntimeException('Context con Document eliminato.');
+    } catch (ApiException $error) {
+        assertSameValue('context_has_documents', $error->errorCode);
+    }
+
+    $contexts->assignDocument($document['id'], ['contextId' => null]);
+    $contexts->delete($child['id']);
+    $contexts->delete($root['id']);
+    assertSameValue(null, $service->get($document['id'])['contextId']);
+});
+
+$suite->test('il filtro exact e subtree seleziona i Document del ramo', static function () use ($pdo, $service): void {
+    $contexts = contextService($pdo);
+    $root = $contexts->create(['name' => 'Corso']);
+    $child = $contexts->create(['name' => 'Lezione', 'parentId' => $root['id']]);
+    $rootDocument = $service->create(['title' => 'Documento del corso']);
+    $childDocument = $service->create(['title' => 'Documento della lezione']);
+    $contexts->assignDocument($rootDocument['id'], ['contextId' => $root['id']]);
+    $contexts->assignDocument($childDocument['id'], ['contextId' => $child['id']]);
+
+    $exact = array_column($service->list('active', $contexts->selectedIds($root['id'], 'exact')), 'id');
+    $subtree = array_column($service->list('active', $contexts->selectedIds($root['id'], 'subtree')), 'id');
+
+    assertSameValue([$rootDocument['id']], $exact);
+    assertTrue(in_array($childDocument['id'], $subtree, true), 'Il subtree deve includere i Document dei discendenti.');
+    assertSameValue(2, count($subtree));
+});
+
+$suite->test('lo stesso KnowledgeObject compare in più Context senza duplicazione', static function () use ($pdo, $service): void {
+    $contexts = contextService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $root = $contexts->create(['name' => 'Ricerca']);
+    $child = $contexts->create(['name' => 'Sotto ricerca', 'parentId' => $root['id']]);
+
+    $conceptId = UuidV7::generate();
+    $first = $service->create(['title' => 'Primo']);
+    $second = $service->create(['title' => 'Secondo']);
+    $firstOccurrence = UuidV7::generate();
+    $secondOccurrence = UuidV7::generate();
+    saveRevision($service, $first['id'], 0, documentOfParagraphs([occurrenceText('Idea', $firstOccurrence, $conceptId)]), [
+        conceptCreate($firstOccurrence, $conceptId, 'Idea condivisa'),
+    ]);
+    saveRevision($service, $second['id'], 0, documentOfParagraphs([occurrenceText('Idea', $secondOccurrence, $conceptId)]), [
+        ['occurrenceId' => $secondOccurrence, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept', 'newObject' => false],
+    ]);
+    $contexts->assignDocument($first['id'], ['contextId' => $root['id']]);
+    $contexts->assignDocument($second['id'], ['contextId' => $child['id']]);
+
+    $subtree = $contexts->knowledgeObjects($root['id'], 'subtree');
+    $exact = $contexts->knowledgeObjects($root['id'], 'exact');
+
+    assertSameValue(1, count($subtree));
+    assertSameValue($conceptId, $subtree[0]['id']);
+    assertSameValue('concept', $subtree[0]['object_type']);
+    assertSameValue(1, count($exact));
+    assertSameValue(1, count($contexts->knowledgeObjects($child['id'], 'exact')));
+});
+
+$suite->test('un Document non riceve un Context per effetto collaterale del salvataggio', static function () use ($pdo, $service): void {
+    $contexts = contextService($pdo);
+    $context = $contexts->create(['name' => 'Non assegnato automaticamente']);
+    $document = $service->create(['title' => 'Senza Context']);
+
+    saveRevision($service, $document['id'], 0, emptyDocument());
+
+    assertSameValue(null, $service->get($document['id'])['contextId']);
+    $contexts->assignDocument($document['id'], ['contextId' => $context['id']]);
+    assertSameValue($context['id'], $service->get($document['id'])['contextId']);
+
+    saveRevision($service, $document['id'], 1, emptyDocument());
+    assertSameValue($context['id'], $service->get($document['id'])['contextId']);
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

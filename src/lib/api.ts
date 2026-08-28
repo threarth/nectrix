@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { JSONContent } from '@tiptap/core'
+import type { ContextNode } from './contexts'
 
 export type DocumentStatus = 'active' | 'archived' | 'trashed'
+
+export type ContextMode = 'exact' | 'subtree'
 
 export interface DocumentSummary {
   id: string
   title: string
   revision: number
   status: DocumentStatus
+  contextId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -115,8 +119,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /** Archived and trashed Documents are returned only when the scope asks for them. */
-export async function listDocuments(scope: DocumentStatus = 'active'): Promise<DocumentSummary[]> {
-  const payload = await request<{ documents: DocumentSummary[] }>(`/api/documents?scope=${scope}`)
+export async function listDocuments(
+  scope: DocumentStatus = 'active',
+  contextId: string | null = null,
+  contextMode: ContextMode = 'subtree',
+): Promise<DocumentSummary[]> {
+  const query = new URLSearchParams({ scope })
+  if (contextId !== null) {
+    query.set('contextId', contextId)
+    query.set('contextMode', contextMode)
+  }
+  const payload = await request<{ documents: DocumentSummary[] }>(`/api/documents?${query.toString()}`)
   return payload.documents
 }
 
@@ -257,4 +270,58 @@ export async function updateKnowledgeObject(
     { method: 'PUT', body: JSON.stringify(input) },
   )
   return payload.object
+}
+
+export async function listContexts(): Promise<ContextNode[]> {
+  const payload = await request<{ contexts: ContextNode[] }>('/api/contexts')
+  return payload.contexts
+}
+
+export async function createContext(name: string, parentId: string | null): Promise<ContextNode> {
+  const payload = await request<{ context: ContextNode }>('/api/contexts', {
+    method: 'POST',
+    body: JSON.stringify({ name, parentId }),
+  })
+  return payload.context
+}
+
+export async function renameContext(id: string, name: string): Promise<ContextNode> {
+  const payload = await request<{ context: ContextNode }>(`/api/contexts/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  })
+  return payload.context
+}
+
+/** Moves a whole branch. The API refuses a destination inside the branch itself. */
+export async function moveContext(id: string, parentId: string | null): Promise<ContextNode> {
+  const payload = await request<{ context: ContextNode }>(`/api/contexts/${encodeURIComponent(id)}/move`, {
+    method: 'POST',
+    body: JSON.stringify({ parentId }),
+  })
+  return payload.context
+}
+
+/** Refused while the Context still holds sub-context or Document. */
+export async function deleteContext(id: string): Promise<void> {
+  await request<{ deleted: boolean }>(`/api/contexts/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** Concept and Entity reached through Context → Document → KnowledgeOccurrence. */
+export async function contextKnowledgeObjects(
+  id: string,
+  mode: ContextMode,
+): Promise<{ id: string; object_type: 'concept' | 'entity'; name: string }[]> {
+  const payload = await request<{ objects: { id: string; object_type: 'concept' | 'entity'; name: string }[] }>(
+    `/api/contexts/${encodeURIComponent(id)}/knowledge-objects?mode=${mode}`,
+  )
+  return payload.objects
+}
+
+export async function assignDocumentContext(documentId: string, contextId: string | null): Promise<DocumentRecord> {
+  const payload = await request<{ document: DocumentRecord }>(
+    `/api/documents/${encodeURIComponent(documentId)}/context`,
+    { method: 'POST', body: JSON.stringify({ contextId }) },
+  )
+  return payload.document
 }

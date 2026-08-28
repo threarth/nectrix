@@ -21,13 +21,22 @@ final class DocumentRepository
      *
      * @return list<array<string, mixed>>
      */
-    public function list(string $status): array
+    public function list(string $status, ?array $contextIds = null): array
     {
+        $columns = 'SELECT id, title, revision, status, context_id, created_at, updated_at FROM documents ';
+        if ($contextIds === null) {
+            $statement = $this->pdo->prepare($columns . 'WHERE status = ? ORDER BY updated_at DESC, id');
+            $statement->execute([$status]);
+            return array_map($this->mapSummary(...), $statement->fetchAll());
+        }
+        if ($contextIds === []) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($contextIds), '?'));
         $statement = $this->pdo->prepare(
-            'SELECT id, title, revision, status, created_at, updated_at FROM documents ' .
-            'WHERE status = :status ORDER BY updated_at DESC, id'
+            $columns . "WHERE status = ? AND context_id IN ({$placeholders}) ORDER BY updated_at DESC, id"
         );
-        $statement->execute(['status' => $status]);
+        $statement->execute([$status, ...$contextIds]);
         return array_map($this->mapSummary(...), $statement->fetchAll());
     }
 
@@ -143,6 +152,7 @@ final class DocumentRepository
             'title' => $row['title'],
             'revision' => (int) $row['revision'],
             'status' => $row['status'],
+            'contextId' => $row['context_id'],
             'createdAt' => $row['created_at'],
             'updatedAt' => $row['updated_at'],
         ];

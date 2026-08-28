@@ -14,6 +14,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 6 — Inspectors e popover: completata.
 - FASE 6.1 — Lifecycle e cancellazione dei Document: completata.
 - FASE 7 — ConceptAlias ed EntityIdentifier: completata.
+- FASE 8 — Context: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
 - API PHP minimale e database SQLite in `data/nectrix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
@@ -22,22 +23,21 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 8 — Context
+### FASE 9 — Tag
 
-CRUD di Context e sub-context a profondità arbitraria, breadcrumb, move aciclico di interi rami, assegnazione di un Context principale al Document e filtro `exact`/`subtree`.
+CRUD e assegnazione dei Tag ai Document, ricerca e filtro, sempre separati da Concept, Entity, EntityType, Template e FieldValue.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- lo stesso Concept o Entity presenti in più Context senza duplicazione;
-- query derivate attraverso il percorso Context→Document→KnowledgeOccurrence→KnowledgeObject;
-- query ricorsive, move di rami, anti-ciclo e filtro subtree;
-- cancellazione di nodi con figli o Document che richiede riassegnazione esplicita.
+- query singole e combinate KnowledgeObject × Context × Tag;
+- filtro dei KnowledgeObject derivato tramite Document e KnowledgeOccurrence, senza assegnazioni dirette;
+- nomi uguali nelle dimensioni distinte che restano cose diverse.
 
-Gate: lo stesso Concept o Entity compare in più Context senza duplicazione; query derivate per entrambi i sottotipi, query ricorsive, move, anti-ciclo, filtro subtree e cancellazione prudente coperti da test verdi.
+Gate: query singole e combinate `KnowledgeObject × Context × Tag` corrette per Concept ed Entity, incluso il caso di nomi uguali nelle dimensioni distinte.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 8.
+Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 9.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

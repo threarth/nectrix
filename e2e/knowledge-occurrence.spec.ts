@@ -611,3 +611,66 @@ test('CRUD: rinominare un Concept dall’inspector non tocca occurrence e alias'
   await expect(inspector.locator('.inspector-list li')).toContainText('Alias stabile')
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Bozza')
 })
+
+test('FASE 8: i Context filtrano i documenti e ne derivano Concept ed Entity', async ({ page }) => {
+  await page.goto('/')
+  const panel = page.getByLabel('Contesti')
+
+  await panel.getByRole('button', { name: 'Nuovo' }).click()
+  let dialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
+  await dialog.getByLabel('Nome del contesto').fill('Università')
+  await dialog.getByRole('button', { name: 'Nuovo' }).click()
+  await expect(panel.getByRole('button', { name: 'Università' })).toBeVisible()
+
+  await panel.getByRole('button', { name: 'Università' }).click()
+  await panel.getByRole('button', { name: 'Nuovo' }).click()
+  dialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
+  await expect(dialog).toContainText('Nasce dentro «Università»')
+  await dialog.getByLabel('Nome del contesto').fill('Psicologia')
+  await dialog.getByRole('button', { name: 'Nuovo' }).click()
+  await expect(panel.getByRole('button', { name: 'Psicologia' })).toBeVisible()
+
+  // Un documento con un Concept, assegnato al sotto-contesto.
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Inconscio', 'Inconscio collettivo')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Appunti di psicologia')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.getByLabel('Contesto del documento').selectOption({ label: 'Università / Psicologia' })
+
+  // Il ramo vede il documento, il solo padre no.
+  await panel.getByRole('button', { name: 'Università' }).click()
+  await expect(page.locator('.sidebar nav')).toContainText('Appunti di psicologia')
+  await expect(panel.getByText('Inconscio collettivo')).toBeVisible()
+
+  await panel.getByRole('button', { name: 'Solo questo' }).click()
+  await expect(page.locator('.sidebar nav')).not.toContainText('Appunti di psicologia')
+  await expect(panel.getByText('Nessun Concept o Entity')).toBeVisible()
+
+  await panel.getByRole('button', { name: 'Psicologia' }).click()
+  await expect(page.locator('.sidebar nav')).toContainText('Appunti di psicologia')
+  await expect(panel.getByText('Inconscio collettivo')).toBeVisible()
+})
+
+test('FASE 8: un Context con documenti non si elimina e non può diventare figlio di sé stesso', async ({ page }) => {
+  await page.goto('/')
+  const panel = page.getByLabel('Contesti')
+
+  await panel.getByRole('button', { name: 'Nuovo' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
+  await dialog.getByLabel('Nome del contesto').fill('Con documenti')
+  await dialog.getByRole('button', { name: 'Nuovo' }).click()
+  await panel.getByRole('button', { name: 'Con documenti' }).click()
+
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento legato')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.getByLabel('Contesto del documento').selectOption({ label: 'Con documenti' })
+
+  await panel.getByRole('button', { name: 'Con documenti' }).click()
+  await panel.getByRole('button', { name: 'Elimina' }).click()
+
+  await expect(page.getByRole('alert')).toContainText('riassegnali prima di eliminarlo')
+  await expect(panel.getByRole('button', { name: 'Con documenti' })).toBeVisible()
+})

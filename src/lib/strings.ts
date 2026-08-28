@@ -244,3 +244,42 @@ export const occurrenceHandleStrings = {
   end: 'Sposta la fine dell’occurrence',
   description: 'Trascina per correggere il confine, mantenendo lo stesso Concept o la stessa Entity',
 } as const
+
+export const contextStrings = {
+  panelLabel: 'Contesti',
+  all: { label: 'Tutti', description: 'Mostra i documenti di qualsiasi contesto' },
+  none: 'Nessun contesto',
+  empty: 'Nessun contesto: creane uno per organizzare i documenti.',
+  modeLabel: 'Come filtrare',
+  modes: [
+    { value: 'subtree', label: 'Con i sotto-contesti', description: 'Include i documenti dei contesti discendenti' },
+    { value: 'exact', label: 'Solo questo', description: 'Solo i documenti assegnati esattamente a questo contesto' },
+  ] as const,
+
+  create: {
+    label: 'Nuovo',
+    description: 'Crea un contesto sotto quello selezionato, o alla radice se non ne hai scelto uno',
+    dialogTitle: 'Nuovo contesto',
+    rootHint: 'Nasce alla radice, perché non hai selezionato nessun contesto.',
+    childHint: (parent: string): string => `Nasce dentro «${parent}».`,
+    nameLabel: 'Nome del contesto',
+    placeholder: 'Per esempio Università, Lavoro, Tesi',
+  },
+  rename: {
+    label: 'Rinomina',
+    description: 'Cambia il nome del contesto selezionato',
+    dialogTitle: 'Rinomina contesto',
+  },
+  move: { label: 'Sposta', description: 'Sposta il contesto selezionato, con tutto il suo ramo, sotto un altro' },
+  remove: { label: 'Elimina', description: 'Possibile solo se il contesto non ha sotto-contesti né documenti' },
+  moveToRoot: 'Alla radice',
+
+  documentLabel: 'Contesto del documento',
+  documentDescription: 'Un documento riceve un contesto solo così, mai come effetto del salvataggio',
+
+  derived: {
+    label: 'Concept ed Entity qui',
+    empty: 'Nessun Concept o Entity nei documenti di questo contesto.',
+    description: 'Ricavati dai documenti del contesto attraverso le loro occurrence, non assegnati direttamente',
+  },
+} as const

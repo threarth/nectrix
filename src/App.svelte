@@ -9,7 +9,14 @@
     createDocument,
     getDocument,
     getKnowledgeObject,
+    assignDocumentContext,
+    contextKnowledgeObjects,
+    createContext,
+    deleteContext,
+    listContexts,
     listDocuments,
+    moveContext,
+    renameContext,
     saveDocument,
     setDocumentLifecycle,
     setEntityTypeArchived,
@@ -19,6 +26,7 @@
     addEntityIdentifier,
     removeConceptAlias,
     removeEntityIdentifier,
+    type ContextMode,
     type DocumentRecord,
     type DocumentStatus,
     type DocumentSummary,
@@ -27,8 +35,10 @@
     type KnowledgeObjectDetail,
     type KnowledgeOccurrenceView,
   } from './lib/api'
+  import ContextPanel from './components/ContextPanel.svelte'
   import KnowledgeInspector from './components/KnowledgeInspector.svelte'
-  import { documentStrings } from './lib/strings'
+  import { contextPathLabel, orderContexts, type ContextNode } from './lib/contexts'
+  import { contextStrings, documentStrings } from './lib/strings'
   import {
     collectOccurrences,
     deriveOccurrenceCreates,
@@ -38,6 +48,10 @@
 
   let documents = $state<DocumentSummary[]>([])
   let scope = $state<DocumentStatus>('active')
+  let contexts = $state<ContextNode[]>([])
+  let selectedContextId = $state<string | null>(null)
+  let contextMode = $state<ContextMode>('subtree')
+  let contextObjects = $state<{ id: string; object_type: 'concept' | 'entity'; name: string }[]>([])
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
@@ -65,7 +79,8 @@
     loading = true
     error = ''
     try {
-      documents = await listDocuments(scope)
+      contexts = await listContexts()
+      documents = await listDocuments(scope, selectedContextId, contextMode)
       if (documents.length > 0) {
         await openDocument(documents[0].id)
       }
@@ -117,12 +132,62 @@
     return [restore]
   }
 
+  /** Reloads list and derived objects together: both depend on the selected Context. */
+  async function refreshContextView(): Promise<void> {
+    error = ''
+    try {
+      documents = await listDocuments(scope, selectedContextId, contextMode)
+      contextObjects = selectedContextId === null
+        ? []
+        : await contextKnowledgeObjects(selectedContextId, contextMode)
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
+  async function selectContext(contextId: string | null): Promise<void> {
+    selectedContextId = contextId
+    await refreshContextView()
+  }
+
+  async function changeContextMode(mode: ContextMode): Promise<void> {
+    contextMode = mode
+    await refreshContextView()
+  }
+
+  async function withContexts(operation: () => Promise<void>): Promise<void> {
+    error = ''
+    try {
+      await operation()
+      contexts = await listContexts()
+      await refreshContextView()
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
+  /** A Document receives a Context only here, never as a side effect of saving. */
+  async function assignContext(contextId: string | null): Promise<void> {
+    const document = selected
+    if (!document || saving) return
+    saving = true
+    error = ''
+    try {
+      applyDocument(await assignDocumentContext(document.id, contextId))
+      await refreshContextView()
+    } catch (cause) {
+      showError(cause)
+    } finally {
+      saving = false
+    }
+  }
+
   async function changeScope(next: DocumentStatus): Promise<void> {
     if (scope === next) return
     scope = next
     error = ''
     try {
-      documents = await listDocuments(scope)
+      documents = await listDocuments(scope, selectedContextId, contextMode)
     } catch (cause) {
       showError(cause)
     }
@@ -136,7 +201,7 @@
     error = ''
     try {
       applyDocument(await setDocumentLifecycle(selected.id, action))
-      documents = await listDocuments(scope)
+      documents = await listDocuments(scope, selectedContextId, contextMode)
     } catch (cause) {
       showError(cause)
     } finally {
@@ -428,6 +493,29 @@
       {/each}
     </div>
 
+    <ContextPanel
+      {contexts}
+      selectedId={selectedContextId}
+      mode={contextMode}
+      derived={contextObjects}
+      busy={saving}
+      onSelect={(contextId) => void selectContext(contextId)}
+      onModeChange={(mode) => void changeContextMode(mode)}
+      onCreate={(name, parentId) => void withContexts(async () => {
+        await createContext(name, parentId)
+      })}
+      onRename={(contextId, name) => void withContexts(async () => {
+        await renameContext(contextId, name)
+      })}
+      onMove={(contextId, parentId) => void withContexts(async () => {
+        await moveContext(contextId, parentId)
+      })}
+      onDelete={(contextId) => void withContexts(async () => {
+        await deleteContext(contextId)
+        if (selectedContextId === contextId) selectedContextId = null
+      })}
+    />
+
     <nav aria-label="Documenti">
       {#if loading}
         <p class="muted">Caricamento…</p>
@@ -494,6 +582,19 @@
           placeholder="Titolo del documento"
         ></textarea>
         <div class="save-area">
+          <label class="document-context" title={contextStrings.documentDescription}>
+            {contextStrings.documentLabel}
+            <select
+              value={selected.contextId ?? ''}
+              disabled={saving || readOnly}
+              onchange={(event) => void assignContext(event.currentTarget.value === '' ? null : event.currentTarget.value)}
+            >
+              <option value="">{contextStrings.none}</option>
+              {#each orderContexts(contexts) as row (row.id)}
+                <option value={row.id}>{contextPathLabel(row)}</option>
+              {/each}
+            </select>
+          </label>
           {#if readOnly}
             <span class="read-only-badge" title={documentStrings.readOnlyHint[selected.status]}>
               {documentStrings.readOnly}
