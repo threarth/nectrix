@@ -69,7 +69,7 @@ final class DocumentService
             $this->title($input['title']),
             $document,
             $this->plainTextExtractor->extract($document),
-            fn (string $documentId) => $this->knowledgeRepository->assertAndCreateOccurrences($documentId, $marks, $creates),
+            fn (string $documentId) => $this->knowledgeRepository->reconcileOccurrences($documentId, $marks, $creates),
         );
     }
 

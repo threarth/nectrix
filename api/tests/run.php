@@ -705,6 +705,193 @@ $suite->test('la risoluzione dei KnowledgeObject espone solo esistenza e discrim
     }
 });
 
+/** Empty but valid Document content. */
+function emptyDocument(): array
+{
+    return ['type' => 'doc', 'content' => [['type' => 'paragraph']]];
+}
+
+/** Saves one revision of a Document, optionally declaring occurrence creations. */
+function saveRevision(DocumentService $service, string $documentId, int $baseRevision, array $json, array $creates = []): array
+{
+    return $service->update($documentId, [
+        'baseRevision' => $baseRevision,
+        'title' => 'Riconciliazione',
+        'documentJson' => $json,
+        'occurrenceCreates' => $creates,
+    ]);
+}
+
+/** Declares a new Concept together with its first occurrence. */
+function conceptCreate(string $occurrenceId, string $conceptId, string $name = 'Concetto'): array
+{
+    return [
+        'occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $conceptId,
+        'objectType' => 'concept', 'newObject' => true, 'name' => $name,
+    ];
+}
+
+function occurrenceStatus(PDO $pdo, string $occurrenceId): string
+{
+    $statement = $pdo->prepare('SELECT status FROM knowledge_occurrences WHERE id = :id');
+    $statement->execute(['id' => $occurrenceId]);
+    return (string) $statement->fetchColumn();
+}
+
+function conceptStatus(PDO $pdo, string $conceptId): string
+{
+    $statement = $pdo->prepare('SELECT status FROM concepts WHERE id = :id');
+    $statement->execute(['id' => $conceptId]);
+    return (string) $statement->fetchColumn();
+}
+
+function countRows(PDO $pdo, string $sql, array $parameters): int
+{
+    $statement = $pdo->prepare($sql);
+    $statement->execute($parameters);
+    return (int) $statement->fetchColumn();
+}
+
+$suite->test('INV-OCC-08: il mark rimosso porta l’occurrence a detached e il Concept a orphan', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Riconciliazione']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $json = documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]);
+    saveRevision($service, $document['id'], 0, $json, [conceptCreate($occurrenceId, $conceptId, 'Backlog')]);
+    assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue('active', conceptStatus($pdo, $conceptId));
+
+    saveRevision($service, $document['id'], 1, emptyDocument());
+
+    assertSameValue('detached', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue('orphan', conceptStatus($pdo, $conceptId));
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM knowledge_objects WHERE id = :id', ['id' => $conceptId]));
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM knowledge_occurrences WHERE id = :id', ['id' => $occurrenceId]));
+});
+
+$suite->test('INV-OCC-09: il mark ripristinato riattiva lo stesso record e il Concept torna active', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Riconciliazione']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $json = documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]);
+    saveRevision($service, $document['id'], 0, $json, [conceptCreate($occurrenceId, $conceptId, 'Backlog')]);
+    saveRevision($service, $document['id'], 1, emptyDocument());
+    assertSameValue('detached', occurrenceStatus($pdo, $occurrenceId));
+
+    saveRevision($service, $document['id'], 2, $json);
+
+    assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue('active', conceptStatus($pdo, $conceptId));
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM knowledge_occurrences WHERE id = :id', ['id' => $occurrenceId]));
+});
+
+$suite->test('la riconciliazione è idempotente su salvataggi ripetuti', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Riconciliazione']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $json = documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]);
+    saveRevision($service, $document['id'], 0, $json, [conceptCreate($occurrenceId, $conceptId, 'Backlog')]);
+    saveRevision($service, $document['id'], 1, $json);
+    assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
+
+    saveRevision($service, $document['id'], 2, emptyDocument());
+    saveRevision($service, $document['id'], 3, emptyDocument());
+
+    assertSameValue('detached', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue('orphan', conceptStatus($pdo, $conceptId));
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM knowledge_occurrences WHERE id = :id', ['id' => $occurrenceId]));
+});
+
+$suite->test('una Entity che perde l’ultima occurrence resta active e non viene cancellata', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo));
+    $entityType = $knowledge->createEntityType(['name' => 'Agenzia spaziale']);
+    $document = $service->create(['title' => 'Riconciliazione']);
+    $occurrenceId = UuidV7::generate();
+    $entityId = UuidV7::generate();
+    $json = documentOfParagraphs([occurrenceText('Rocket Lab', $occurrenceId, $entityId, 'entity')]);
+    saveRevision($service, $document['id'], 0, $json, [[
+        'occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $entityId, 'objectType' => 'entity',
+        'newObject' => true, 'name' => 'Rocket Lab USA', 'entityTypeId' => $entityType['id'],
+    ]]);
+
+    saveRevision($service, $document['id'], 1, emptyDocument());
+
+    assertSameValue('detached', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue('active', (string) $pdo->query("SELECT status FROM entities WHERE id = '{$entityId}'")->fetchColumn());
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM knowledge_objects WHERE id = :id', ['id' => $entityId]));
+});
+
+$suite->test('un Concept con occurrence attive in un altro Document non diventa orphan', static function () use ($pdo, $service): void {
+    $first = $service->create(['title' => 'Riconciliazione']);
+    $second = $service->create(['title' => 'Riconciliazione']);
+    $conceptId = UuidV7::generate();
+    $firstOccurrence = UuidV7::generate();
+    $secondOccurrence = UuidV7::generate();
+    saveRevision($service, $first['id'], 0, documentOfParagraphs([occurrenceText('Backlog', $firstOccurrence, $conceptId)]), [
+        conceptCreate($firstOccurrence, $conceptId, 'Backlog'),
+    ]);
+    saveRevision($service, $second['id'], 0, documentOfParagraphs([occurrenceText('Backlog', $secondOccurrence, $conceptId)]), [
+        ['occurrenceId' => $secondOccurrence, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept', 'newObject' => false],
+    ]);
+
+    saveRevision($service, $first['id'], 1, emptyDocument());
+
+    assertSameValue('detached', occurrenceStatus($pdo, $firstOccurrence));
+    assertSameValue('active', occurrenceStatus($pdo, $secondOccurrence));
+    assertSameValue('active', conceptStatus($pdo, $conceptId));
+});
+
+$suite->test('INV-OCC-17: una occurrence deleted non torna active e blocca il salvataggio', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Riconciliazione']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $json = documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]);
+    saveRevision($service, $document['id'], 0, $json, [conceptCreate($occurrenceId, $conceptId, 'Backlog')]);
+    executeStatement($pdo, "UPDATE knowledge_occurrences SET status = 'deleted' WHERE id = :id", ['id' => $occurrenceId]);
+
+    try {
+        saveRevision($service, $document['id'], 1, $json);
+        throw new RuntimeException('Occurrence eliminata riattivata.');
+    } catch (ApiException $error) {
+        assertSameValue('occurrence_deleted', $error->errorCode);
+    }
+
+    assertSameValue('deleted', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue(1, (int) $pdo->query("SELECT revision FROM documents WHERE id = '{$document['id']}'")->fetchColumn());
+});
+
+$suite->test('un Concept archiviato non diventa orphan perdendo l’ultima occurrence', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Riconciliazione']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $json = documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]);
+    saveRevision($service, $document['id'], 0, $json, [conceptCreate($occurrenceId, $conceptId, 'Backlog')]);
+    executeStatement($pdo, "UPDATE concepts SET status = 'archived' WHERE id = :id", ['id' => $conceptId]);
+
+    saveRevision($service, $document['id'], 1, emptyDocument());
+
+    assertSameValue('detached', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue('archived', conceptStatus($pdo, $conceptId));
+});
+
+$suite->test('un conflitto di revisione non modifica lo stato delle occurrence', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Riconciliazione']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $json = documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]);
+    saveRevision($service, $document['id'], 0, $json, [conceptCreate($occurrenceId, $conceptId, 'Backlog')]);
+
+    try {
+        saveRevision($service, $document['id'], 0, emptyDocument());
+        throw new RuntimeException('Revisione obsoleta accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('revision_conflict', $error->errorCode);
+    }
+
+    assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue('active', conceptStatus($pdo, $conceptId));
+});
+
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {
     assertSameValue([], $pdo->query('PRAGMA foreign_key_check')->fetchAll());
     assertSameValue('ok', $pdo->query('PRAGMA integrity_check')->fetchColumn());

@@ -80,6 +80,9 @@
     try {
       const creates = deriveOccurrenceCreates(draftJson, persistedOccurrenceIds, pendingObjects)
       const saved = await saveDocument(selected, draftTitle, draftJson, creates)
+      for (const create of creates) {
+        if (create.newObject) pendingObjects.delete(create.knowledgeObjectId)
+      }
       applyDocument(saved)
       documents = [saved, ...documents.filter((document) => document.id !== saved.id)]
     } catch (cause) {
@@ -90,12 +93,15 @@
   }
 
   function applyDocument(document: DocumentRecord): void {
+    // A KnowledgeObject created but not yet persisted survives a save of the same Document: undo
+    // can bring its mark back and the next save still has to declare its creation.
+    const sameDocument = selected?.id === document.id
     selected = document
     draftTitle = document.title
     draftJson = document.documentJson
     dirty = false
     persistedOccurrenceIds = new Set(collectOccurrences(document.documentJson).keys())
-    pendingObjects = new Map()
+    if (!sameDocument) pendingObjects = new Map()
     void tick().then(resizeTitleInput)
   }
 

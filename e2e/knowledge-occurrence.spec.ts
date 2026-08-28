@@ -119,3 +119,49 @@ test('INV-OCC-09: undo della creazione non lascia una creazione fantasma al salv
 
   expect(await occurrenceIds(page)).toEqual([])
 })
+
+test('INV-OCC-08 e INV-OCC-09: l’occurrence salvata torna attiva dopo cancellazione, salvataggio e undo', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Riconciliazione', 'Riconciliazione')
+
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  const [before] = await occurrenceIds(page)
+
+  await page.locator('.tiptap').press('Control+A')
+  await page.keyboard.press('Delete')
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await page.locator('.tiptap').press('Control+Z')
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+
+  await page.reload()
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  expect(await occurrenceIds(page)).toEqual([before])
+})
+
+test('INV-OCC-09: un Concept creato, cancellato e ripristinato con undo viene creato al salvataggio', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Mai salvato', 'Mai salvato')
+
+  await page.locator('.tiptap').press('Control+A')
+  await page.keyboard.press('Delete')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await page.locator('.tiptap').press('Control+Z')
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+
+  await page.reload()
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Mai salvato')
+})

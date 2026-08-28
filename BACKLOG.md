@@ -10,6 +10,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 2 — Highlight normale: completata.
 - FASE 3 — KnowledgeObject e Semantic Occurrences: completata.
 - FASE 4 — Invarianti delle KnowledgeOccurrence: completata.
+- FASE 5 — Sincronizzazione DB ↔ documento: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
 - API PHP minimale e database SQLite in `data/nectrix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
@@ -18,23 +19,22 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 5 — Sincronizzazione DB ↔ documento
+### FASE 6 — Inspectors e popover
 
-Implementare estrazione, validazione e riconciliazione transazionale di tutte le KnowledgeOccurrence al salvataggio. La FASE 4 ha già consegnato l'estrazione e i rifiuti strutturali; restano da fare gli stati e la riconciliazione.
+Introdurre Concept Inspector ed Entity Inspector, aperti dal popover della KnowledgeOccurrence secondo `objectType`, con archive e restore espliciti per Concept, Entity ed EntityType.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- passaggio ad `detached` degli ID prima attivi e ora assenti, senza rimozione fisica;
-- riattivazione ad `active` di un record `detached` il cui mark torna dopo un undo;
-- idempotenza di salvataggi ripetuti dello stesso contenuto;
-- transizione ad `orphan` dei soli Concept che perdono l'ultima occurrence, mentre le Entity restano `active`;
-- optimistic concurrency e documenti corrotti senza modifiche parziali o cancellazioni definitive.
+- apertura dell'inspector corretto per ciascun discriminator;
+- testo delle occurrence sempre estratto dai Document, mai copiato nel database;
+- archive e restore che non cancellano nulla e lasciano validi i tipi già referenziati;
+- navigazione affidabile dopo editing e reload.
 
-Gate: salvataggi ripetuti idempotenti; conflitti e documenti corrotti non producono modifiche parziali o cancellazioni definitive.
+Gate: nessuna copia obsoleta del testo o dato di presentazione persistito; navigazione affidabile dopo editing/reload e scelta dell'inspector coerente con `objectType`.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 5.
+Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 6.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

@@ -84,11 +84,15 @@ Gate soddisfatto: `INV-OCC-01`, `INV-OCC-02`, `INV-OCC-03`, `INV-OCC-05`, `INV-O
 
 Rinviato alla FASE 5, che ha come proprio deliverable gli stati `active`/`detached`/`deleted` e la riconciliazione transazionale: il lato database di `INV-OCC-08` e `INV-OCC-09`, cioè il passaggio ad `detached` degli ID assenti e la riattivazione idempotente, e con essi la transizione a `orphan` dei soli Concept. Nella FASE 4 la cancellazione totale rimuove il mark dal documento e undo lo ripristina con lo stesso ID, senza che il salvataggio elimini alcun record. `INV-OCC-17`, `INV-OCC-18` e `INV-OCC-19` restano fuori portata fino alle rispettive fasi.
 
-## FASE 5 — Sincronizzazione DB ↔ documento
+## FASE 5 — Sincronizzazione DB ↔ documento (completata)
 
 Implementare estrazione, validazione e riconciliazione transazionale di tutte le KnowledgeOccurrence: presenza nel documento e nel DB, nuovi ID dichiarati, ID assenti o duplicati, intervalli disgiunti, KnowledgeObject inesistenti, appartenenza errata, discriminator incoerenti, stati `active`/`detached`/`deleted` e optimistic concurrency. SemanticBlock e FieldValue non vengono inferiti dal documento; i riferimenti editoriali arrivano soltanto nella FASE 10.1.1 e non duplicano il dato autorevole.
 
-Gate: salvataggi ripetuti idempotenti; conflitti e documenti corrotti non producono modifiche parziali o cancellazioni definitive.
+Completato: il salvataggio riconcilia i record dell'intero Document nella stessa transazione. Gli ID validi presenti restano o tornano `active`, gli ID prima attivi e ora assenti diventano `detached` senza rimozione fisica, un record `deleted` è terminale e blocca il salvataggio invece di tornare attivo. Una creazione ridichiarata dopo un undo riattiva il record esistente anziché fallire come duplicato, mentre lo stesso ID con un'associazione o un Document differenti viene rifiutato. Il Concept che perde l'ultima occurrence attiva passa a `orphan` e torna `active` quando ne riacquista una; le Entity non usano quello stato e nessun KnowledgeObject viene mai eliminato. Un Concept archiviato resta archiviato. Il client conserva i KnowledgeObject creati e non ancora salvati anche dopo un salvataggio dello stesso Document, così un undo che ne ripristina il mark ne dichiara ancora la creazione.
+
+Gate soddisfatto: salvataggi ripetuti idempotenti su contenuto invariato, su cancellazione e su ripristino; conflitto di revisione, occurrence frammentata, KnowledgeObject inesistente e occurrence eliminata falliscono atomicamente senza modifiche parziali né cancellazioni definitive. `INV-OCC-08`, `INV-OCC-09`, `INV-OCC-17` e `INV-OCC-18` sono ora coperti anche sul lato database, insieme alla transizione `orphan` dei soli Concept.
+
+`INV-OCC-19`, cioè la cache del testo indicizzato, resta alla FASE 10 che introduce la ricerca full text. Il comando esplicito che porta una occurrence a `deleted` appartiene alle fasi di inspector e manutenzione: qui è coperto il fatto che quello stato non torni mai `active`.
 
 ## FASE 6 — Inspectors e popover
 

@@ -201,7 +201,9 @@ Pipeline prevista:
 9. aggiornare lo stato `orphan` dei soli Concept interessati secondo le regole di dominio; le Entity non usano tale stato;
 10. eseguire commit o rollback dell'intera operazione.
 
-La perdita dell'ultima occurrence di una Entity non ne cambia lo stato e non la elimina: resta `active` fino a un comando esplicito di archiviazione.
+La perdita dell'ultima occurrence di una Entity non ne cambia lo stato e non la elimina: resta `active` fino a un comando esplicito di archiviazione. Il passaggio a `orphan` riguarda soltanto un Concept prima `active` e si inverte quando una occurrence attiva ritorna; un Concept archiviato resta archiviato.
+
+Una creazione ridichiarata dopo un undo non è un duplicato: se il record esiste già con lo stesso KnowledgeObject, discriminator e Document, viene accettata e il record viene riattivato. Lo stesso ID con un'associazione o un Document differenti resta un errore. Un record `deleted` non torna mai `active`: il salvataggio che ne presenta ancora il mark fallisce atomicamente.
 
 Le operazioni di creazione inviate dal client non sono una lista accumulata dai comandi dell'editor: vengono derivate dai mark effettivamente presenti nel documento al momento del salvataggio, incrociati con gli ID già persistiti nella revisione caricata e con i KnowledgeObject creati e non ancora salvati. Un undo elimina la creazione insieme al mark, un paste dichiara il proprio nuovo record e il KnowledgeObject viene dichiarato una sola volta, dalla prima occurrence che lo referenzia.
 
