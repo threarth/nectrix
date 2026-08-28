@@ -372,37 +372,55 @@ export function removeOccurrenceMarks(editor: Editor, occurrenceIds: ReadonlySet
   return removed
 }
 
-/** Occurrence range containing a position, or null when the position carries no occurrence. */
+/** One text node of a textblock, with the occurrence mark it carries. */
+interface OccurrenceFragment {
+  from: number
+  to: number
+  mark: ProseMirrorMark | null
+}
+
+/**
+ * Occurrence range containing a position, or null when the position carries no occurrence.
+ * The same occurrenceId can cover several adjacent text nodes, for example when only part of it is
+ * highlighted: the range covers the whole run, whichever fragment the position falls in.
+ */
 export function occurrenceRangeAt(state: EditorState, position: number): OccurrenceRange | null {
   const markType = state.schema.marks.knowledgeOccurrence
   const resolved = state.doc.resolve(position)
-  const parent = resolved.parent
-  if (!parent.isTextblock) return null
+  if (!resolved.parent.isTextblock) return null
 
   const blockStart = resolved.start()
-  let from = blockStart
-  let found: ProseMirrorMark | null = null
-  let rangeFrom = 0
-  let rangeTo = 0
-
-  parent.forEach((child, offset) => {
-    const childFrom = blockStart + offset
-    const childTo = childFrom + child.nodeSize
-    const mark = child.marks.find((candidate) => candidate.type === markType) ?? null
-    if (found !== null) {
-      if (mark !== null && mark.attrs.occurrenceId === found.attrs.occurrenceId && childFrom === rangeTo) {
-        rangeTo = childTo
-      }
-      return
-    }
-    if (mark === null || position < childFrom || position > childTo) return
-    found = mark
-    rangeFrom = childFrom
-    rangeTo = childTo
+  const fragments: OccurrenceFragment[] = []
+  resolved.parent.forEach((child, offset) => {
+    const from = blockStart + offset
+    fragments.push({ from, to: from + child.nodeSize, mark: child.marks.find((mark) => mark.type === markType) ?? null })
   })
 
-  from = rangeFrom
-  return found === null ? null : { from, to: rangeTo, mark: found, blockStart, blockEnd: resolved.end() }
+  const index = fragments.findIndex((fragment) =>
+    fragment.mark !== null && position >= fragment.from && position <= fragment.to)
+  if (index === -1) return null
+
+  const mark = fragments[index].mark
+  if (mark === null) return null
+  let first = index
+  let last = index
+  while (first > 0 && continues(fragments[first - 1], fragments[first], mark)) first -= 1
+  while (last < fragments.length - 1 && continues(fragments[last], fragments[last + 1], mark)) last += 1
+
+  return { from: fragments[first].from, to: fragments[last].to, mark, blockStart, blockEnd: resolved.end() }
+}
+
+/**
+ * True when two adjacent fragments both belong to the run. Marks are compared by occurrenceId:
+ * two text nodes of the same occurrence carry equal but distinct mark instances.
+ */
+function continues(left: OccurrenceFragment, right: OccurrenceFragment, mark: ProseMirrorMark): boolean {
+  if (left.to !== right.from) return false
+  return belongsTo(left.mark, mark) && belongsTo(right.mark, mark)
+}
+
+function belongsTo(candidate: ProseMirrorMark | null, mark: ProseMirrorMark): boolean {
+  return candidate !== null && candidate.attrs.occurrenceId === mark.attrs.occurrenceId
 }
 
 export interface OccurrenceRange {

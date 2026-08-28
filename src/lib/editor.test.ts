@@ -607,6 +607,32 @@ describe('maniglie di confine delle occurrence', () => {
     }],
   }
 
+  test('trova l’intero intervallo anche partendo da un frammento successivo', () => {
+    // Come nei documenti reali: solo una parte dell'occurrence è evidenziata, quindi il testo è
+    // spezzato in più text node contigui.
+    const editor = createEditor({
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', marks: [{ type: 'highlight', attrs: { color: '#f6dd79' } }], text: 'Gli a' },
+          { type: 'text', marks: [{ type: 'highlight', attrs: { color: '#f6dd79' } }, occurrenceMark()], text: 'rchetipi' },
+          { type: 'text', marks: [occurrenceMark()], text: ' junghiani' },
+          { type: 'text', text: ' e altro' },
+        ],
+      }],
+    })
+
+    const fromFirstFragment = occurrenceRangeAt(editor.state, 7)
+    const fromSecondFragment = occurrenceRangeAt(editor.state, 15)
+
+    expect(fromFirstFragment?.from).toBe(6)
+    expect(fromFirstFragment?.to).toBe(24)
+    expect(fromSecondFragment?.from).toBe(6)
+    expect(fromSecondFragment?.to).toBe(24)
+    expect(occurrenceRangeAt(editor.state, 28)).toBeNull()
+  })
+
   test('trova l’intervallo dell’occurrence, frammenti contigui inclusi', () => {
     const editor = createEditor({
       type: 'doc',
