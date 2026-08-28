@@ -185,3 +185,8 @@ export async function setEntityTypeArchived(id: string, archived: boolean): Prom
   )
   return payload.entityType
 }
+
+export async function listEntityTypes(): Promise<EntityType[]> {
+  const payload = await request<{ entityTypes: EntityType[] }>('/api/entity-types')
+  return payload.entityTypes
+}

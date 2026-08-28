@@ -158,3 +158,49 @@ export const documentStrings = {
     trashed: 'Il cestino è vuoto.',
   } as Record<string, string>,
 } as const
+
+export const dialogStrings = {
+  cancel: 'Annulla',
+  working: 'Attendi…',
+} as const
+
+export const conceptDialogStrings = {
+  title: 'Nuovo Concept',
+  hint: 'Il testo selezionato diventa una occurrence del Concept, senza essere modificato.',
+  nameLabel: 'Nome del Concept',
+  namePlaceholder: 'Come si chiama questa idea',
+  note: 'Il nome del Concept può essere diverso dal testo selezionato.',
+  confirm: 'Crea Concept',
+} as const
+
+export const entityDialogStrings = {
+  title: 'Nuova Entity',
+  hint: 'Il testo selezionato diventa una occurrence della Entity, senza essere modificato.',
+  nameLabel: 'Nome della Entity',
+  namePlaceholder: 'La cosa specifica di cui parli',
+  typeLabel: 'EntityType',
+  newType: 'Nuovo tipo…',
+  newTypeLabel: 'Nome del nuovo EntityType',
+  newTypePlaceholder: 'Per esempio Azienda, Farmaco, Libro',
+  note: 'Un tipo esistente viene riusato; un nome nuovo crea il tipo.',
+  archivedNote: (count: number): string =>
+    count === 1
+      ? ' Un tipo archiviato non è elencato: ripristinalo dall’inspector per riusarlo.'
+      : ` ${count} tipi archiviati non sono elencati: ripristinali dall’inspector per riusarli.`,
+  confirm: 'Crea Entity',
+} as const
+
+export const attachDialogStrings = {
+  title: 'Associa un Concept o una Entity esistenti',
+  hint: 'Il testo selezionato diventa una nuova occurrence dell’oggetto scelto.',
+  queryLabel: 'Cerca',
+  queryPlaceholder: 'Nome o alias',
+  search: 'Cerca',
+  searching: 'Ricerca…',
+  resultsLabel: 'Risultati della ricerca',
+  empty: 'Nessun Concept o Entity trovato.',
+  failure: 'Ricerca non disponibile.',
+  note: 'Lo stesso nome può appartenere a Concept distinti: scegli quello giusto.',
+  kind: (objectType: 'concept' | 'entity'): string => (objectType === 'concept' ? 'Concept' : 'Entity'),
+  confirm: 'Associa',
+} as const

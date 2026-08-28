@@ -14,6 +14,7 @@
   import {
     collectOccurrences,
     isOccurrenceAttributes,
+    type KnowledgeObjectType,
     type OccurrenceAttributes,
     type PendingKnowledgeObject,
   } from '../lib/occurrences'
@@ -24,7 +25,17 @@
     writeHighlightPalette,
   } from '../lib/highlightPalette'
   import { uuidV7 } from '../lib/uuid'
-  import { createEntityType, resolveKnowledgeObjects, searchKnowledge } from '../lib/api'
+  import {
+    createEntityType,
+    listEntityTypes,
+    resolveKnowledgeObjects,
+    searchKnowledge,
+    type EntityType,
+    type KnowledgeSearchResult,
+  } from '../lib/api'
+  import AttachDialog from './AttachDialog.svelte'
+  import ConceptDialog from './ConceptDialog.svelte'
+  import EntityDialog from './EntityDialog.svelte'
   import {
     editorStrings,
     highlightPopoverStrings,
@@ -66,6 +77,12 @@
   /** Discriminator of the KnowledgeObject already known to be valid, to avoid useless lookups. */
   const knownObjectTypes = new Map<string, 'concept' | 'entity'>()
 
+  /** Range the open dialog will mark, remembered because the dialog takes the focus. */
+  let pendingCommand = $state<{ kind: 'concept' | 'entity' | 'attach'; text: string; from: number; to: number } | null>(null)
+  let entityTypes = $state<EntityType[]>([])
+  let dialogBusy = $state(false)
+  let dialogError = $state('')
+
   onMount(() => {
     highlightPalette = readHighlightPalette()
     for (const occurrence of collectOccurrences(initialContent).values()) {
@@ -106,61 +123,76 @@
     if (editor) command(editor)
   }
 
-  function createConceptFromSelection(): void {
+  /** Opens the dialog of a semantic command on the current selection. */
+  function openCommand(kind: 'concept' | 'entity' | 'attach'): void {
     const editor = editorState.editor
     if (!editor || editor.state.selection.empty) return
-    const selectedText = editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ')
-    const name = window.prompt('Nome del nuovo Concept', selectedText)?.trim()
-    if (!name) return
-    const occurrenceId = uuidV7()
-    const knowledgeObjectId = uuidV7()
-    editor.chain().focus().setMark('knowledgeOccurrence', { occurrenceId, knowledgeObjectId, objectType: 'concept' }).run()
-    knownObjectTypes.set(knowledgeObjectId, 'concept')
-    onObjectCreate(knowledgeObjectId, { objectType: 'concept', name })
+    const { from, to } = editor.state.selection
+    dialogError = ''
+    pendingCommand = { kind, from, to, text: editor.state.doc.textBetween(from, to, ' ') }
+    if (kind === 'entity') void loadEntityTypes()
   }
 
-  async function createEntityFromSelection(): Promise<void> {
-    const editor = editorState.editor
-    if (!editor || editor.state.selection.empty) return
-    const selectedText = editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ')
-    const name = window.prompt('Nome della nuova Entity', selectedText)?.trim()
-    if (!name) return
-    const typeName = window.prompt('EntityType', 'Company')?.trim()
-    if (!typeName) return
+  function closeCommand(): void {
+    pendingCommand = null
+    dialogError = ''
+    editorState.editor?.commands.focus()
+  }
+
+  async function loadEntityTypes(): Promise<void> {
     try {
-      const entityType = await createEntityType(typeName)
-      const occurrenceId = uuidV7()
-      const knowledgeObjectId = uuidV7()
-      editor.chain().focus().setMark('knowledgeOccurrence', { occurrenceId, knowledgeObjectId, objectType: 'entity' }).run()
-      knownObjectTypes.set(knowledgeObjectId, 'entity')
-      onObjectCreate(knowledgeObjectId, { objectType: 'entity', name, entityTypeId: entityType.id })
+      entityTypes = await listEntityTypes()
     } catch (cause) {
-      window.alert(cause instanceof Error ? cause.message : 'Impossibile creare EntityType.')
+      dialogError = cause instanceof Error ? cause.message : 'EntityType non disponibili.'
     }
   }
 
-  async function attachExistingFromSelection(): Promise<void> {
+  /** Marks the remembered range, which the dialog may have moved the selection away from. */
+  function markRange(range: { from: number; to: number }, knowledgeObjectId: string, objectType: KnowledgeObjectType): void {
     const editor = editorState.editor
-    if (!editor || editor.state.selection.empty) return
-    const selectedText = editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ')
-    const query = window.prompt('Cerca Concept o Entity', selectedText)?.trim()
-    if (!query) return
+    if (!editor) return
+    editor.chain().focus().setTextSelection(range)
+      .setMark('knowledgeOccurrence', { occurrenceId: uuidV7(), knowledgeObjectId, objectType })
+      .run()
+    knownObjectTypes.set(knowledgeObjectId, objectType)
+  }
+
+  function confirmConcept(name: string): void {
+    const command = pendingCommand
+    if (!command) return
+    const knowledgeObjectId = uuidV7()
+    markRange(command, knowledgeObjectId, 'concept')
+    onObjectCreate(knowledgeObjectId, { objectType: 'concept', name })
+    closeCommand()
+  }
+
+  async function confirmEntity(name: string, entityTypeName: string): Promise<void> {
+    const command = pendingCommand
+    if (!command || dialogBusy) return
+    dialogBusy = true
+    dialogError = ''
     try {
-      const results = await searchKnowledge(query)
-      if (results.length === 0) {
-        window.alert('Nessun Concept o Entity trovato.')
+      const entityType = await createEntityType(entityTypeName)
+      if (entityType.status === 'archived') {
+        dialogError = 'L’EntityType è archiviato: ripristinalo dall’inspector prima di usarlo.'
         return
       }
-      const options = results.map((result, index) => `${index + 1}. ${result.object_type === 'concept' ? 'Concept' : 'Entity'} — ${result.name}`).join('\n')
-      const choice = Number(window.prompt(`Scegli il risultato:\n${options}`, '1')) - 1
-      const result = results[choice]
-      if (!result) return
-      const occurrenceId = uuidV7()
-      editor.chain().focus().setMark('knowledgeOccurrence', { occurrenceId, knowledgeObjectId: result.id, objectType: result.object_type }).run()
-      knownObjectTypes.set(result.id, result.object_type)
+      const knowledgeObjectId = uuidV7()
+      markRange(command, knowledgeObjectId, 'entity')
+      onObjectCreate(knowledgeObjectId, { objectType: 'entity', name, entityTypeId: entityType.id })
+      closeCommand()
     } catch (cause) {
-      window.alert(cause instanceof Error ? cause.message : 'Ricerca non disponibile.')
+      dialogError = cause instanceof Error ? cause.message : 'Impossibile creare l’EntityType.'
+    } finally {
+      dialogBusy = false
     }
+  }
+
+  function confirmAttach(result: KnowledgeSearchResult): void {
+    const command = pendingCommand
+    if (!command) return
+    markRange(command, result.id, result.object_type)
+    closeCommand()
   }
 
   /**
@@ -311,17 +343,17 @@
       <ToolbarButton
         command={editorStrings.createConcept}
         disabled={editorState.editor.state.selection.empty}
-        onclick={createConceptFromSelection}
+        onclick={() => openCommand('concept')}
       />
       <ToolbarButton
         command={editorStrings.createEntity}
         disabled={editorState.editor.state.selection.empty}
-        onclick={() => void createEntityFromSelection()}
+        onclick={() => openCommand('entity')}
       />
       <ToolbarButton
         command={editorStrings.attachExisting}
         disabled={editorState.editor.state.selection.empty}
-        onclick={() => void attachExistingFromSelection()}
+        onclick={() => openCommand('attach')}
       />
       <ToolbarButton
         command={editorStrings.palette}
@@ -394,6 +426,25 @@
     </div>
   {/if}
   <div class="editor-content" bind:this={element}></div>
+  {#if pendingCommand?.kind === 'concept'}
+    <ConceptDialog initialName={pendingCommand.text} onCancel={closeCommand} onConfirm={confirmConcept} />
+  {:else if pendingCommand?.kind === 'entity'}
+    <EntityDialog
+      initialName={pendingCommand.text}
+      {entityTypes}
+      busy={dialogBusy}
+      error={dialogError}
+      onCancel={closeCommand}
+      onConfirm={(name, entityTypeName) => void confirmEntity(name, entityTypeName)}
+    />
+  {:else if pendingCommand?.kind === 'attach'}
+    <AttachDialog
+      initialQuery={pendingCommand.text}
+      onSearch={searchKnowledge}
+      onCancel={closeCommand}
+      onConfirm={confirmAttach}
+    />
+  {/if}
   {#if editorState.editor && editorPopover}
     <div
       class="highlight-popover"

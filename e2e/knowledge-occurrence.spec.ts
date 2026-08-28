@@ -5,13 +5,7 @@ import { expect, test, type Page } from '@playwright/test'
 test('crea un Concept da selezione e lo conserva dopo save/reload', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Nuovo documento' }).click()
-  const editor = page.locator('.tiptap')
-  await editor.click()
-  await page.keyboard.type('Backlog')
-  await page.keyboard.press('Control+A')
-  page.once('dialog', (dialog) => dialog.accept('Backlog'))
-  await page.getByRole('button', { name: 'Crea Concept' }).click()
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
+  await createConceptFrom(page, 'Backlog', 'Backlog')
   await page.getByRole('button', { name: 'Salva' }).click()
   await page.reload()
   await expect(page.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
@@ -20,17 +14,7 @@ test('crea un Concept da selezione e lo conserva dopo save/reload', async ({ pag
 test('crea una Entity con EntityType da selezione e la conserva dopo save/reload', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Nuovo documento' }).click()
-  const editor = page.locator('.tiptap')
-  await editor.click()
-  await page.keyboard.type('Rocket Lab')
-  await page.keyboard.press('Control+A')
-  let promptCount = 0
-  page.on('dialog', (dialog) => {
-    promptCount += 1
-    void dialog.accept(promptCount === 1 ? 'Rocket Lab USA' : 'Company')
-  })
-  await page.getByRole('button', { name: 'Crea Entity' }).click()
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Rocket Lab')
+  await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab USA', 'Company')
   await page.getByRole('button', { name: 'Salva' }).click()
   await page.reload()
   await expect(page.locator('.nectrix-knowledge-occurrence')).toHaveText('Rocket Lab')
@@ -49,8 +33,26 @@ async function createConceptFrom(page: Page, text: string, name: string): Promis
   await page.keyboard.type(text)
   await expect(editor).toHaveText(text)
   await editor.press('Control+A')
-  page.once('dialog', (dialog) => dialog.accept(name))
   await page.getByRole('button', { name: 'Crea Concept' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Nuovo Concept' })
+  await dialog.getByLabel('Nome del Concept').fill(name)
+  await dialog.getByRole('button', { name: 'Crea Concept' }).click()
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText(text)
+}
+
+/** Creates an Entity from the whole content of the editor. */
+async function createEntityFrom(page: Page, text: string, name: string, entityType: string): Promise<void> {
+  const editor = page.locator('.tiptap')
+  await editor.click()
+  await expect(editor).toBeFocused()
+  await page.keyboard.type(text)
+  await expect(editor).toHaveText(text)
+  await editor.press('Control+A')
+  await page.getByRole('button', { name: 'Crea Entity' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Nuova Entity' })
+  await dialog.getByLabel('Nome della Entity').fill(name)
+  await dialog.getByLabel('Nome del nuovo EntityType').fill(entityType)
+  await dialog.getByRole('button', { name: 'Crea Entity' }).click()
   await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText(text)
 }
 
@@ -210,18 +212,7 @@ test('FASE 6: archive e restore di un Concept cambiano solo lo stato', async ({ 
 test('FASE 6: il popover di una Entity apre l’Entity Inspector con il suo EntityType', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Nuovo documento' }).click()
-  const editor = page.locator('.tiptap')
-  await editor.click()
-  await expect(editor).toBeFocused()
-  await page.keyboard.type('Rocket Lab')
-  await editor.press('Control+A')
-  let promptCount = 0
-  page.on('dialog', (dialog) => {
-    promptCount += 1
-    void dialog.accept(promptCount === 1 ? 'Rocket Lab USA' : 'Azienda')
-  })
-  await page.getByRole('button', { name: 'Crea Entity' }).click()
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Rocket Lab')
+  await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab USA', 'Azienda')
   await page.getByRole('button', { name: 'Salva' }).click()
   await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
 
@@ -286,4 +277,34 @@ test('FASE 6.1: il cestino è una vista di recupero e non elimina nulla', async 
   await page.getByRole('button', { name: 'Ripristina', exact: true }).click()
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Cestinato')
   await expect(page.getByRole('button', { name: 'Salva' })).toBeVisible()
+})
+
+test('la dialog di associazione cerca e collega un Concept esistente a un altro Document', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Metodo scientifico', 'Metodo scientifico')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  const editor = page.locator('.tiptap')
+  await editor.click()
+  await page.keyboard.type('Qui parlo del metodo')
+  await editor.press('Control+A')
+  await page.getByRole('button', { name: 'Associa esistente' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Associa un Concept o una Entity esistenti' })
+  await dialog.getByLabel('Cerca').fill('Metodo')
+  await dialog.getByRole('button', { name: 'Cerca', exact: true }).click()
+  await expect(dialog.getByText('Metodo scientifico')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Associa', exact: true }).click()
+
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Qui parlo del metodo')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Concept' }).click()
+  await expect(page.locator('.inspector-name')).toHaveText('Metodo scientifico')
+  await expect(page.locator('.inspector-occurrences li')).toHaveCount(2)
 })
