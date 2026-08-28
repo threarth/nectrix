@@ -481,7 +481,56 @@ async function occurrenceColours(page: Page): Promise<{ background: string; behi
   })
 }
 
-test('un Concept si vede sempre e copre l’evidenziazione sottostante', async ({ page }) => {
+/** Fixed canonical UUIDv7 values: the e2e database is rebuilt at every run. */
+const LEGACY_OCCURRENCE = '01a04800-0000-7000-8000-00000000ce01'
+const LEGACY_CONCEPT = '01a04800-0000-7000-8000-00000000c001'
+
+test('un Concept resta visibile anche sopra una evidenziazione già salvata', async ({ page }) => {
+  // Stato ereditato: prima che un Concept escludesse l'evidenziazione, i due mark potevano
+  // convivere sullo stesso testo. Il documento va costruito dall'API perché la UI non lo permette.
+  await page.goto('/')
+  const created = await page.request.post('/api/documents', { data: { title: 'Documento ereditato' } })
+  const documentId = (await created.json()).document.id
+  const highlight = { type: 'highlight', attrs: { color: '#f6dd79' } }
+  const occurrence = {
+    type: 'knowledgeOccurrence',
+    attrs: { occurrenceId: LEGACY_OCCURRENCE, knowledgeObjectId: LEGACY_CONCEPT, objectType: 'concept' },
+  }
+  const saved = await page.request.put(`/api/documents/${documentId}`, {
+    data: {
+      baseRevision: 0,
+      title: 'Documento ereditato',
+      documentJson: {
+        type: 'doc',
+        content: [{
+          type: 'paragraph',
+          content: [
+            { type: 'text', marks: [highlight], text: 'Gli a' },
+            { type: 'text', marks: [highlight, occurrence], text: 'rchetipi' },
+          ],
+        }],
+      },
+      occurrenceCreates: [{
+        occurrenceId: LEGACY_OCCURRENCE,
+        knowledgeObjectId: LEGACY_CONCEPT,
+        objectType: 'concept',
+        newObject: true,
+        name: 'Archetipo',
+      }],
+    },
+  })
+  expect(saved.ok()).toBe(true)
+
+  await page.goto('/')
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('rchetipi')
+
+  const colours = await occurrenceColours(page)
+  expect(colours.behind).toBe('rgb(246, 221, 121)')
+  expect(colours.background).not.toBe('rgba(0, 0, 0, 0)')
+  expect(colours.background).not.toBe(colours.behind)
+})
+
+test('creare un Concept toglie l’evidenziazione dal suo intervallo', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Nuovo documento' }).click()
   const editor = page.locator('.tiptap')
@@ -497,14 +546,27 @@ test('un Concept si vede sempre e copre l’evidenziazione sottostante', async (
   await editor.press('Control+A')
   await toolbarButton(page, 'Crea Concept').click()
   const dialog = page.getByRole('dialog', { name: 'Nuovo Concept' })
-  await dialog.getByLabel('Nome del Concept').fill('Visibile')
+  await dialog.getByLabel('Nome del Concept').fill('Senza evidenziazione')
   await dialog.getByRole('button', { name: 'Crea Concept' }).click()
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveCount(1)
 
-  const colours = await occurrenceColours(page)
-  expect(colours.background).not.toBe('rgba(0, 0, 0, 0)')
-  expect(colours.behind).not.toBe('rgba(0, 0, 0, 0)')
-  expect(colours.background).not.toBe(colours.behind)
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(editor.locator('mark.nectrix-highlight')).toHaveCount(0)
+  await expect(toolbarButton(page, 'Evidenzia')).toBeDisabled()
+})
+
+test('evidenziare un paragrafo che contiene un Concept lascia il Concept intatto', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  const editor = page.locator('.tiptap')
+  await conceptWithTail(page)
+
+  await editor.press('Control+A')
+  await toolbarButton(page, 'Evidenzia').click()
+
+  await expect(editor.locator('mark.nectrix-highlight')).toHaveText(' utile')
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
+  await expect(editor.locator('.nectrix-knowledge-occurrence mark.nectrix-highlight')).toHaveCount(0)
+  await expect(editor.locator('mark.nectrix-highlight .nectrix-knowledge-occurrence')).toHaveCount(0)
 })
 
 test('Concept ed Entity si distinguono a colpo d’occhio', async ({ page }) => {

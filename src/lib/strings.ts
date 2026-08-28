@@ -34,7 +34,7 @@ export const editorStrings = {
 
   highlight: {
     label: 'Evidenzia',
-    description: 'Evidenzia il testo selezionato. È solo visuale: non crea né associa Concept o Entity',
+    description: 'Evidenzia il testo selezionato. È solo visuale: non crea né associa Concept o Entity. Un Concept o una Entity hanno già la propria evidenziazione e non si evidenziano',
   },
   palette: {
     label: 'Palette',

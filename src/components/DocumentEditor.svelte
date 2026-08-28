@@ -8,6 +8,8 @@
     editorExtensions,
     normalizeHighlightColor,
     occurrenceClipboardExtension,
+    occurrenceFreeRanges,
+    occurrenceRangeAt,
     removeOccurrenceMarks,
     type HighlightColor,
   } from '../lib/editor'
@@ -79,6 +81,38 @@
 
   /** Discriminator of the KnowledgeObject already known to be valid, to avoid useless lookups. */
   const knownObjectTypes = new Map<string, 'concept' | 'entity'>()
+
+  /**
+   * A Concept or an Entity carries its own visual identity, so it cannot be highlighted: the
+   * command stays available only where a Highlight would actually be visible.
+   */
+  const canHighlight = $derived.by(() => {
+    const editor = editorState.editor
+    if (!editor || !editable) return false
+    const { from, to, empty } = editor.state.selection
+    if (empty) return occurrenceRangeAt(editor.state, from) === null
+    return editor.isActive('highlight') || occurrenceFreeRanges(editor.state, from, to).length > 0
+  })
+
+  /** Applies the Highlight only outside the occurrences, leaving them untouched. */
+  function toggleHighlight(): void {
+    const editor = editorState.editor
+    if (!editor || !canHighlight) return
+    if (editor.isActive('highlight')) {
+      editor.chain().focus().unsetMark('highlight').run()
+      return
+    }
+
+    const { from, to } = editor.state.selection
+    const ranges = occurrenceFreeRanges(editor.state, from, to)
+    if (ranges.length === 0) {
+      editor.chain().focus().setMark('highlight').run()
+      return
+    }
+    const chain = editor.chain().focus()
+    for (const range of ranges) chain.setTextSelection(range).setMark('highlight')
+    chain.setTextSelection({ from, to }).run()
+  }
 
   /** Distance kept from the toolbar and from the marked line, so nothing overlaps. */
   const POPOVER_MARGIN = 8
@@ -161,6 +195,7 @@
     const editor = editorState.editor
     if (!editor) return
     editor.chain().focus().setTextSelection(range)
+      .unsetMark('highlight')
       .setMark('knowledgeOccurrence', { occurrenceId: uuidV7(), knowledgeObjectId, objectType })
       .run()
     knownObjectTypes.set(knowledgeObjectId, objectType)
@@ -242,7 +277,7 @@
    */
   function syncEditorPopover(editor: Editor): void {
     const selectionActive = editable && !editor.state.selection.empty
-    const highlighted = editable && editor.isActive('highlight')
+    const highlighted = editable && editor.isActive('highlight') && occurrenceRangeAt(editor.state, editor.state.selection.from) === null
     const attributes = editor.getAttributes('knowledgeOccurrence')
     const occurrence = isOccurrenceAttributes(attributes) ? attributes : null
     if (!editorShell || (!highlighted && occurrence === null && !selectionActive)) {
@@ -359,7 +394,8 @@
         command={editorStrings.highlight}
         toggle
         active={editorState.editor.isActive('highlight')}
-        onclick={() => run((editor) => editor.chain().focus().toggleMark('highlight').run())}
+        disabled={!canHighlight}
+        onclick={toggleHighlight}
       />
       <ToolbarButton
         command={editorStrings.createConcept}

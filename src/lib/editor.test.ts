@@ -7,6 +7,7 @@ import {
   editorExtensions,
   moveOccurrenceBoundary,
   occurrenceClipboardExtension,
+  occurrenceFreeRanges,
   occurrenceRangeAt,
 } from './editor'
 import {
@@ -715,5 +716,40 @@ describe('maniglie di confine delle occurrence', () => {
 
     expect(moveOccurrenceBoundary(editor.view, range!, 'end', 20)).toBe(false)
     expect(editor.getJSON().content?.[1]?.content?.[0]?.marks ?? []).toEqual([])
+  })
+})
+
+describe('un Concept non si evidenzia', () => {
+  const mixed: JSONContent = {
+    type: 'doc',
+    content: [{
+      type: 'paragraph',
+      content: [
+        { type: 'text', text: 'Gli ' },
+        { type: 'text', marks: [occurrenceMark()], text: 'archetipi' },
+        { type: 'text', text: ' sono' },
+      ],
+    }],
+  }
+
+  test('gli intervalli evidenziabili escludono le occurrence', () => {
+    const editor = createEditor(mixed)
+
+    expect(occurrenceFreeRanges(editor.state, 1, 19)).toEqual([{ from: 1, to: 5 }, { from: 14, to: 19 }])
+  })
+
+  test('una selezione tutta dentro l’occurrence non lascia spazio all’evidenziazione', () => {
+    const editor = createEditor(mixed)
+
+    expect(occurrenceFreeRanges(editor.state, 6, 12)).toEqual([])
+  })
+
+  test('un testo senza occurrence resta interamente evidenziabile', () => {
+    const editor = createEditor({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Testo libero' }] }],
+    })
+
+    expect(occurrenceFreeRanges(editor.state, 1, 13)).toEqual([{ from: 1, to: 13 }])
   })
 })

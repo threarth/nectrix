@@ -372,6 +372,33 @@ export function removeOccurrenceMarks(editor: Editor, occurrenceIds: ReadonlySet
   return removed
 }
 
+export interface DocumentRange {
+  from: number
+  to: number
+}
+
+/**
+ * Parts of a range that carry no occurrence: the only places a Highlight may go. A Concept or an
+ * Entity already has its own visual identity, so highlighting it would only add invisible state.
+ */
+export function occurrenceFreeRanges(state: EditorState, from: number, to: number): DocumentRange[] {
+  const markType = state.schema.marks.knowledgeOccurrence
+  const ranges: DocumentRange[] = []
+  let cursor = from
+
+  state.doc.nodesBetween(from, to, (node, position) => {
+    if (!node.isText || !node.marks.some((mark) => mark.type === markType)) return true
+    const start = Math.max(position, from)
+    const end = Math.min(position + node.nodeSize, to)
+    if (start > cursor) ranges.push({ from: cursor, to: start })
+    cursor = Math.max(cursor, end)
+    return true
+  })
+
+  if (cursor < to) ranges.push({ from: cursor, to })
+  return ranges
+}
+
 /** One text node of a textblock, with the occurrence mark it carries. */
 interface OccurrenceFragment {
   from: number
