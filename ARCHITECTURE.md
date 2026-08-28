@@ -493,6 +493,8 @@ I log diagnostici non devono diventare una seconda fonte di verità.
 
 La FASE 6.1 aggiunge `active`, `archived` e `trashed`. Archive e trash sono reversibili, non eliminano contenuto o conoscenza collegata e non cambiano lo stato persistente delle occurrence. Gli archiviati sono in sola lettura e inclusi soltanto con scope esplicito; i trashed compaiono solo nella vista di recupero. Il purge fisico è un comando di manutenzione separato con preview, backup, controllo di figli, riferimenti entranti ed evidence. Solo dopo tali verifiche elimina in una transazione il Document e le manifestazioni Document-owned, senza cascade verso KnowledgeObject o dati Entity-owned.
 
+Nell'implementazione il purge è il comando `api/bin/purge-document.php`, deliberatamente fuori dall'API HTTP: la preview è il comportamento predefinito e serve `--apply` per agire. I riferimenti entranti vengono scoperti interrogando lo schema SQLite invece di essere elencati nel codice, così ogni tabella introdotta da una fase futura blocca il purge finché non viene gestita esplicitamente.
+
 I record `detached` non vengono eliminati automaticamente nella prima versione. Un purge futuro deve dimostrare che nessun riferimento, evidence o possibilità di recupero richiesta dipende dal record; soglie specifiche per SourceAnchor e Asset vengono stabilite nelle rispettive fasi.
 
 I test in browser reale diventano parte del gate dalla FASE 3 e coprono la sequenza critica delle FASI 3–6: creazione, editing, clipboard, salvataggio, reload e inspector delle KnowledgeOccurrence. La FASE 2 resta coperta da test editor/API vicini alle trasformazioni, salvo comportamenti che jsdom non possa rappresentare affidabilmente.

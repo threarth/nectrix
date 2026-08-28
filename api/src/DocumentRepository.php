@@ -15,13 +15,38 @@ final class DocumentRepository
     {
     }
 
-    /** @return list<array<string, mixed>> */
-    public function list(): array
+    /**
+     * Documents of one lifecycle scope. Archived and trashed ones never appear by default: the
+     * caller has to ask for them explicitly.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function list(string $status): array
     {
-        $rows = $this->pdo->query(
-            'SELECT id, title, revision, created_at, updated_at FROM documents ORDER BY updated_at DESC, id'
-        )->fetchAll();
-        return array_map($this->mapSummary(...), $rows);
+        $statement = $this->pdo->prepare(
+            'SELECT id, title, revision, status, created_at, updated_at FROM documents ' .
+            'WHERE status = :status ORDER BY updated_at DESC, id'
+        );
+        $statement->execute(['status' => $status]);
+        return array_map($this->mapSummary(...), $statement->fetchAll());
+    }
+
+    /** Archive, trash and restore change only the lifecycle state, never the content. */
+    public function setStatus(string $id, string $status): array
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $current = $this->get($id);
+            $statement = $this->pdo->prepare('UPDATE documents SET status = :status WHERE id = :id');
+            $statement->execute(['status' => $status, 'id' => $current['id']]);
+            $this->pdo->commit();
+        } catch (\Throwable $error) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $error;
+        }
+        return $this->get($id);
     }
 
     /** @return array<string, mixed> */
@@ -64,6 +89,14 @@ final class DocumentRepository
         $this->pdo->beginTransaction();
         try {
             $current = $this->get($id);
+            if ($current['status'] !== 'active') {
+                throw new ApiException(
+                    409,
+                    'document_read_only',
+                    'Un Document archiviato o nel cestino è in sola lettura: ripristinalo prima di modificarlo.',
+                    ['status' => $current['status']],
+                );
+            }
             if ($current['revision'] !== $baseRevision) {
                 throw new ApiException(
                     409,
@@ -109,6 +142,7 @@ final class DocumentRepository
             'id' => $row['id'],
             'title' => $row['title'],
             'revision' => (int) $row['revision'],
+            'status' => $row['status'],
             'createdAt' => $row['created_at'],
             'updatedAt' => $row['updated_at'],
         ];

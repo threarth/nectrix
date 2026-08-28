@@ -36,12 +36,15 @@
   let {
     documentId,
     initialContent,
+    editable = true,
     onChange,
     onObjectCreate,
     onOpenInspector,
   }: {
     documentId: string
     initialContent: JSONContent
+    /** An archived or trashed Document is shown without the editing commands. */
+    editable?: boolean
     onChange: (content: JSONContent) => void
     onObjectCreate: (knowledgeObjectId: string, object: PendingKnowledgeObject) => void
     onOpenInspector: (knowledgeObjectId: string) => void
@@ -79,6 +82,7 @@
         }),
       ],
       content: initialContent,
+      editable,
       onTransaction: ({ editor, transaction }) => {
         editorState = { editor }
         syncEditorPopover(editor)
@@ -92,6 +96,10 @@
   })
 
   onDestroy(() => editorState.editor?.destroy())
+
+  $effect(() => {
+    editorState.editor?.setEditable(editable)
+  })
 
   function run(command: (editor: Editor) => void): void {
     const editor = editorState.editor
@@ -192,7 +200,7 @@
    * and the way into the inspector when it is a KnowledgeOccurrence. The two can coexist.
    */
   function syncEditorPopover(editor: Editor): void {
-    const highlighted = editor.isActive('highlight')
+    const highlighted = editable && editor.isActive('highlight')
     const attributes = editor.getAttributes('knowledgeOccurrence')
     const occurrence = isOccurrenceAttributes(attributes) ? attributes : null
     if (!editorShell || (!highlighted && occurrence === null)) {
@@ -259,7 +267,7 @@
 </script>
 
 <div class="editor-shell" bind:this={editorShell}>
-  {#if editorState.editor}
+  {#if editorState.editor && editable}
     <div class="toolbar" role="toolbar" aria-label={editorStrings.toolbarLabel}>
       <ToolbarButton
         command={editorStrings.paragraph}

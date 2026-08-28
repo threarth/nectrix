@@ -12,6 +12,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 4 — Invarianti delle KnowledgeOccurrence: completata.
 - FASE 5 — Sincronizzazione DB ↔ documento: completata.
 - FASE 6 — Inspectors e popover: completata.
+- FASE 6.1 — Lifecycle e cancellazione dei Document: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
 - API PHP minimale e database SQLite in `data/nectrix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
@@ -20,21 +21,23 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 6.1 — Lifecycle e cancellazione dei Document
+### FASE 7 — ConceptAlias ed EntityIdentifier
 
-Introdurre `Document.status = active|archived|trashed` con archive, trash e restore non distruttivi. Gli archiviati sono in sola lettura e ricercabili con scope esplicito, i trashed compaiono solo nella vista di recupero. Il purge fisico resta un comando di manutenzione separato con preview, backup e verifica dei riferimenti.
+Implementare CRUD di ConceptAlias e EntityIdentifier come modelli distinti. EntityIdentifier conserva `scheme`, `value`, `normalized_value` e `authority_or_namespace`; la creazione di occurrence non promuove mai il testo ad Alias o Identifier.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- archive, trash e restore che conservano contenuto, associazioni e stato delle KnowledgeOccurrence;
-- nessuna cascade verso KnowledgeObject o dati strutturati;
-- purge bloccato in presenza di riferimenti non gestiti, con rollback completo su errore.
+- ambiguità degli Alias che mostra Concept distinti senza fonderli;
+- duplicati normalizzati nella stessa Entity rifiutati;
+- collisioni fra Entity che producono candidati duplicati senza merge automatico;
+- authority/namespace che partecipa all'identità dell'Identifier;
+- policy di normalizzazione versionata per ogni scheme.
 
-Gate: archive/trash/restore coperti da test; nessuna cascade verso KnowledgeObject o dati strutturati; purge bloccato in presenza di riferimenti non gestiti e rollback completo su errore.
+Gate: ambiguità degli Alias gestita mostrando Concept distinti; duplicati normalizzati nella stessa Entity rifiutati; collisioni tra Entity producono candidati duplicati senza merge automatico; authority/namespace partecipa all'identità dell'Identifier.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 6.1.
+Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 7.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

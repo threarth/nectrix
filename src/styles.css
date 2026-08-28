@@ -101,6 +101,54 @@ button:disabled {
   font-weight: 650;
 }
 
+.scope-switch {
+  display: flex;
+  gap: 4px;
+  margin-top: 18px;
+  padding: 3px;
+  border-radius: 9px;
+  background: #1c1f19;
+}
+
+.scope-switch button {
+  flex: 1;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 7px;
+  color: #b9bcb0;
+  background: transparent;
+  font-size: 12px;
+}
+
+.scope-switch button:hover {
+  color: #f2efe6;
+}
+
+.scope-switch button.active {
+  color: #20241d;
+  background: #c9d8c2;
+  font-weight: 650;
+}
+
+.read-only-badge {
+  white-space: nowrap;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #6b5310;
+  background: #f4e8c4;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.lifecycle-button {
+  padding: 7px 12px;
+  border: 1px solid #bcb3a1;
+  border-radius: 9px;
+  color: inherit;
+  background: #fbf8f1;
+  font-size: 13px;
+}
+
 .sidebar nav {
   margin-top: 24px;
 }

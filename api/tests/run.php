@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 use Nectrix\ApiException;
 use Nectrix\Database;
+use Nectrix\DocumentPurgeService;
 use Nectrix\DocumentRepository;
 use Nectrix\DocumentService;
 use Nectrix\DocumentValidator;
@@ -163,13 +164,13 @@ $suite->test('la connessione SQLite abilita sempre le foreign key', static funct
     assertSameValue(1, (int) $pdo->query('PRAGMA foreign_keys')->fetchColumn());
 });
 
-$suite->test('le migrazioni mantengono invariato lo schema Document della FASE 1', static function () use ($pdo): void {
-    $columns = $pdo->query('PRAGMA table_info(documents)')->fetchAll();
-    assertSameValue(
-        ['id', 'title', 'document_json', 'plain_text', 'revision', 'created_at', 'updated_at'],
-        array_column($columns, 'name'),
-    );
-    assertSameValue(3, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+$suite->test('le migrazioni estendono lo schema Document senza rimuovere le colonne della FASE 1', static function () use ($pdo): void {
+    $columns = array_column($pdo->query('PRAGMA table_info(documents)')->fetchAll(), 'name');
+    $phaseOne = ['id', 'title', 'document_json', 'plain_text', 'revision', 'created_at', 'updated_at'];
+
+    assertSameValue($phaseOne, array_slice($columns, 0, count($phaseOne)));
+    assertSameValue(['status'], array_slice($columns, count($phaseOne)));
+    assertSameValue(4, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
 });
 
 $domainFixture = [];
@@ -502,7 +503,7 @@ $suite->test('la migration Phase 1.1 aggiorna un database FASE 1 senza perdere D
 
     assertSameValue(1, (int) $upgradePdo->query('SELECT COUNT(*) FROM documents')->fetchColumn());
     assertSameValue('Documento preesistente', $upgradePdo->query('SELECT title FROM documents')->fetchColumn());
-    assertSameValue(3, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(4, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
     assertSameValue('field_values', $upgradePdo->query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'field_values'")->fetchColumn());
 });
 
@@ -1010,6 +1011,132 @@ $suite->test('l’inspector di un KnowledgeObject inesistente risponde 404', sta
         assertSameValue('knowledge_object_not_found', $error->errorCode);
         assertSameValue(404, $error->status);
     }
+});
+
+/** Document with one Concept occurrence, saved and ready for the lifecycle tests. */
+function documentWithConcept(DocumentService $service, string $occurrenceId, string $conceptId): array
+{
+    $document = $service->create(['title' => 'Lifecycle']);
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]), [
+        conceptCreate($occurrenceId, $conceptId, 'Backlog'),
+    ]);
+    return $service->get($document['id']);
+}
+
+$suite->test('archive e trash escludono il Document dalle liste predefinite senza toccare le occurrence', static function () use ($pdo, $service): void {
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $document = documentWithConcept($service, $occurrenceId, $conceptId);
+
+    assertSameValue('archived', $service->archive($document['id'])['status']);
+    assertTrue(!in_array($document['id'], array_column($service->list(), 'id'), true), 'Un Document archiviato non deve comparire fra gli attivi.');
+    assertTrue(in_array($document['id'], array_column($service->list('archived'), 'id'), true), 'Un Document archiviato deve comparire con scope esplicito.');
+    assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue('active', conceptStatus($pdo, $conceptId));
+
+    assertSameValue('trashed', $service->trash($document['id'])['status']);
+    assertTrue(in_array($document['id'], array_column($service->list('trashed'), 'id'), true), 'Un Document nel cestino deve comparire nella vista di recupero.');
+    assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
+
+    assertSameValue('active', $service->restore($document['id'])['status']);
+    assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
+});
+
+$suite->test('un Document archiviato o nel cestino è in sola lettura', static function () use ($service): void {
+    $document = documentWithConcept($service, UuidV7::generate(), UuidV7::generate());
+    $service->archive($document['id']);
+
+    try {
+        saveRevision($service, $document['id'], 1, emptyDocument());
+        throw new RuntimeException('Salvataggio su Document archiviato accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('document_read_only', $error->errorCode);
+    }
+
+    assertSameValue(1, $service->get($document['id'])['revision']);
+    $service->restore($document['id']);
+    assertSameValue(2, saveRevision($service, $document['id'], 1, emptyDocument())['revision']);
+});
+
+$suite->test('le transizioni di lifecycle non ammesse vengono rifiutate', static function () use ($service): void {
+    $document = documentWithConcept($service, UuidV7::generate(), UuidV7::generate());
+    $service->trash($document['id']);
+
+    try {
+        $service->archive($document['id']);
+        throw new RuntimeException('Transizione non ammessa accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_document_transition', $error->errorCode);
+    }
+
+    assertSameValue('trashed', $service->get($document['id'])['status']);
+});
+
+$suite->test('il purge rifiuta un Document non nel cestino e non modifica nulla', static function () use ($pdo, $service): void {
+    $occurrenceId = UuidV7::generate();
+    $document = documentWithConcept($service, $occurrenceId, UuidV7::generate());
+    $purge = new DocumentPurgeService($pdo, new DocumentRepository($pdo), new KnowledgeRepository($pdo));
+
+    $preview = $purge->preview($document['id']);
+    assertSameValue(false, $preview['canPurge']);
+    assertSameValue('document_not_trashed', $preview['blockers'][0]['reason']);
+
+    try {
+        $purge->purge($document['id'], sys_get_temp_dir() . '/nectrix-purge-test');
+        throw new RuntimeException('Purge eseguito su un Document non nel cestino.');
+    } catch (ApiException $error) {
+        assertSameValue('purge_blocked', $error->errorCode);
+    }
+
+    assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM documents WHERE id = :id', ['id' => $document['id']]));
+});
+
+$suite->test('un riferimento entrante scoperto dallo schema blocca il purge', static function () use ($pdo, $service): void {
+    $document = documentWithConcept($service, UuidV7::generate(), UuidV7::generate());
+    $service->trash($document['id']);
+    $pdo->exec('CREATE TABLE test_document_links (id TEXT PRIMARY KEY NOT NULL, document_id TEXT NOT NULL REFERENCES documents (id)) STRICT');
+    executeStatement($pdo, 'INSERT INTO test_document_links (id, document_id) VALUES (:id, :document_id)', [
+        'id' => UuidV7::generate(), 'document_id' => $document['id'],
+    ]);
+    $purge = new DocumentPurgeService($pdo, new DocumentRepository($pdo), new KnowledgeRepository($pdo));
+
+    $preview = $purge->preview($document['id']);
+
+    assertSameValue(false, $preview['canPurge']);
+    assertSameValue('incoming_reference', $preview['blockers'][0]['reason']);
+    assertSameValue('test_document_links.document_id: 1', $preview['blockers'][0]['detail']);
+
+    $pdo->exec('DROP TABLE test_document_links');
+    assertSameValue(true, $purge->preview($document['id'])['canPurge']);
+});
+
+$suite->test('il purge rimuove Document e occurrence con backup, senza toccare i KnowledgeObject', static function () use ($pdo, $service): void {
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $document = documentWithConcept($service, $occurrenceId, $conceptId);
+    $service->trash($document['id']);
+    $backupDirectory = sys_get_temp_dir() . '/nectrix-purge-' . bin2hex(random_bytes(6));
+    $purge = new DocumentPurgeService($pdo, new DocumentRepository($pdo), new KnowledgeRepository($pdo));
+
+    $preview = $purge->preview($document['id']);
+    assertSameValue(true, $preview['canPurge']);
+    assertSameValue(1, $preview['occurrences']['active']);
+
+    $result = $purge->purge($document['id'], $backupDirectory);
+
+    assertTrue(is_file($result['backupPath']), 'Il purge deve lasciare un backup leggibile.');
+    $backup = json_decode((string) file_get_contents($result['backupPath']), true, 16, JSON_THROW_ON_ERROR);
+    assertSameValue($document['id'], $backup['document']['id']);
+    assertSameValue(1, count($backup['occurrences']));
+
+    assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM documents WHERE id = :id', ['id' => $document['id']]));
+    assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM knowledge_occurrences WHERE id = :id', ['id' => $occurrenceId]));
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM knowledge_objects WHERE id = :id', ['id' => $conceptId]));
+    assertSameValue('orphan', conceptStatus($pdo, $conceptId));
+
+    unlink($result['backupPath']);
+    rmdir($backupDirectory);
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

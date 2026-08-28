@@ -133,3 +133,28 @@ export const inspectorStrings = {
     description: 'Rende di nuovo disponibile il tipo per nuove Entity',
   },
 } as const
+
+export const documentStrings = {
+  scopeLabel: 'Documenti da mostrare',
+  scopes: [
+    { value: 'active', label: 'Attivi', description: 'I documenti su cui stai lavorando' },
+    { value: 'archived', label: 'Archiviati', description: 'Documenti conservati in sola lettura, fuori dalle liste normali' },
+    { value: 'trashed', label: 'Cestino', description: 'Vista di recupero: nulla viene eliminato finché non lo chiedi esplicitamente' },
+  ] as const,
+
+  readOnly: 'Sola lettura',
+  readOnlyHint: {
+    archived: 'Documento archiviato: ripristinalo per modificarlo.',
+    trashed: 'Documento nel cestino: ripristinalo per modificarlo.',
+  } as Record<string, string>,
+
+  archive: { label: 'Archivia', description: 'Conserva il documento in sola lettura, senza eliminare nulla' },
+  trash: { label: 'Cestina', description: 'Sposta il documento nella vista di recupero, senza eliminare nulla' },
+  restore: { label: 'Ripristina', description: 'Riporta il documento fra quelli attivi e modificabili' },
+
+  emptyScope: {
+    active: 'Non ci sono ancora documenti.',
+    archived: 'Nessun documento archiviato.',
+    trashed: 'Il cestino è vuoto.',
+  } as Record<string, string>,
+} as const

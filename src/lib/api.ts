@@ -2,10 +2,13 @@
 
 import type { JSONContent } from '@tiptap/core'
 
+export type DocumentStatus = 'active' | 'archived' | 'trashed'
+
 export interface DocumentSummary {
   id: string
   title: string
   revision: number
+  status: DocumentStatus
   createdAt: string
   updatedAt: string
 }
@@ -89,9 +92,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload
 }
 
-export async function listDocuments(): Promise<DocumentSummary[]> {
-  const payload = await request<{ documents: DocumentSummary[] }>('/api/documents')
+/** Archived and trashed Documents are returned only when the scope asks for them. */
+export async function listDocuments(scope: DocumentStatus = 'active'): Promise<DocumentSummary[]> {
+  const payload = await request<{ documents: DocumentSummary[] }>(`/api/documents?scope=${scope}`)
   return payload.documents
+}
+
+/** Archive, trash and restore are reversible and never remove content. */
+export async function setDocumentLifecycle(
+  id: string,
+  action: 'archive' | 'trash' | 'restore',
+): Promise<DocumentRecord> {
+  const payload = await request<{ document: DocumentRecord }>(
+    `/api/documents/${encodeURIComponent(id)}/${action}`,
+    { method: 'POST' },
+  )
+  return payload.document
 }
 
 export async function getDocument(id: string): Promise<DocumentRecord> {

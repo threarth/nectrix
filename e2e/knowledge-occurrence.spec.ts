@@ -238,3 +238,52 @@ test('FASE 6: il popover di una Entity apre l’Entity Inspector con il suo Enti
   await inspector.getByRole('button', { name: 'Ripristina EntityType' }).click()
   await expect(inspector.locator('.inspector-badge')).toHaveCount(0)
 })
+
+test('FASE 6.1: archiviare un Document lo rende in sola lettura e lo toglie dagli attivi', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Archiviato', 'Archiviato')
+  const title = 'Documento archiviato'
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill(title)
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await expect(page.locator('.sidebar nav')).toContainText(title)
+
+  await page.getByRole('button', { name: 'Archivia', exact: true }).click()
+  await expect(page.getByText('Sola lettura')).toBeVisible()
+  await expect(page.getByRole('toolbar')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Salva' })).toHaveCount(0)
+  await expect(page.locator('.tiptap')).toHaveAttribute('contenteditable', 'false')
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+
+  await expect(page.locator('.sidebar nav')).not.toContainText(title)
+  await page.getByRole('button', { name: 'Archiviati' }).click()
+  await expect(page.locator('.sidebar nav')).toContainText(title)
+
+  await page.getByRole('button', { name: 'Ripristina', exact: true }).click()
+  await expect(page.getByRole('toolbar')).toHaveCount(1)
+  await expect(page.locator('.tiptap')).toHaveAttribute('contenteditable', 'true')
+})
+
+test('FASE 6.1: il cestino è una vista di recupero e non elimina nulla', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Cestinato', 'Cestinato')
+  const title = 'Documento nel cestino'
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill(title)
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Cestina', exact: true }).click()
+  await expect(page.getByText('Sola lettura')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Archivia', exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Cestino' }).click()
+  await expect(page.locator('.sidebar nav')).toContainText(title)
+  await page.getByRole('button', { name: 'Attivi' }).click()
+  await expect(page.locator('.sidebar nav')).not.toContainText(title)
+
+  await page.getByRole('button', { name: 'Ripristina', exact: true }).click()
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Cestinato')
+  await expect(page.getByRole('button', { name: 'Salva' })).toBeVisible()
+})

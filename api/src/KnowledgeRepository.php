@@ -356,10 +356,11 @@ final class KnowledgeRepository
     /**
      * A Concept that loses its last active occurrence becomes `orphan`, and returns `active` when
      * one comes back. Entities never use this state and no KnowledgeObject is ever deleted.
+     * Public because the purge of a Document has to refresh the Concept it touches as well.
      *
-     * @param array<string, string> $touched
+     * @param array<string, string> $touched KnowledgeObject id => discriminator
      */
-    private function refreshConceptStatus(array $touched): void
+    public function refreshConceptStatus(array $touched): void
     {
         foreach ($touched as $objectId => $type) {
             if ($type !== 'concept') {

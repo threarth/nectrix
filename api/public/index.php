@@ -68,7 +68,16 @@ try {
         respond(200, ['status' => 'ok']);
     }
     if ($method === 'GET' && $path === '/api/documents') {
-        respond(200, ['documents' => $service->list()]);
+        respond(200, ['documents' => $service->list((string) ($_GET['scope'] ?? 'active'))]);
+    }
+    if ($method === 'POST' && preg_match('#^/api/documents/([^/]+)/(archive|trash|restore)$#', (string) $path, $matches) === 1) {
+        $documentId = rawurldecode($matches[1]);
+        $document = match ($matches[2]) {
+            'archive' => $service->archive($documentId),
+            'trash' => $service->trash($documentId),
+            default => $service->restore($documentId),
+        };
+        respond(200, ['document' => $document]);
     }
     if ($method === 'GET' && $path === '/api/knowledge/search') {
         respond(200, ['results' => $knowledge->search((string) ($_GET['q'] ?? ''))]);

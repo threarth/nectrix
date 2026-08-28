@@ -11,17 +11,21 @@
     getKnowledgeObject,
     listDocuments,
     saveDocument,
+    setDocumentLifecycle,
     setEntityTypeArchived,
     setKnowledgeObjectArchived,
     type DocumentRecord,
+    type DocumentStatus,
     type DocumentSummary,
     type KnowledgeObjectDetail,
     type KnowledgeOccurrenceView,
   } from './lib/api'
   import KnowledgeInspector from './components/KnowledgeInspector.svelte'
+  import { documentStrings } from './lib/strings'
   import { collectOccurrences, deriveOccurrenceCreates, type PendingKnowledgeObject } from './lib/occurrences'
 
   let documents = $state<DocumentSummary[]>([])
+  let scope = $state<DocumentStatus>('active')
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
@@ -48,7 +52,7 @@
     loading = true
     error = ''
     try {
-      documents = await listDocuments()
+      documents = await listDocuments(scope)
       if (documents.length > 0) {
         await openDocument(documents[0].id)
       }
@@ -66,6 +70,45 @@
       applyDocument(await getDocument(id))
     } catch (cause) {
       showError(cause)
+    }
+  }
+
+  const readOnly = $derived(selected !== null && selected.status !== 'active')
+
+  /** Lifecycle commands available from the current state, in the order they are offered. */
+  function lifecycleActions(status: DocumentStatus): { command: 'archive' | 'trash' | 'restore'; label: string; description: string }[] {
+    const restore = { command: 'restore' as const, ...documentStrings.restore }
+    const archive = { command: 'archive' as const, ...documentStrings.archive }
+    const trash = { command: 'trash' as const, ...documentStrings.trash }
+    if (status === 'active') return [archive, trash]
+    if (status === 'archived') return [restore, trash]
+    return [restore]
+  }
+
+  async function changeScope(next: DocumentStatus): Promise<void> {
+    if (scope === next) return
+    scope = next
+    error = ''
+    try {
+      documents = await listDocuments(scope)
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
+  /** Archive, trash and restore are reversible and never touch content or occurrence. */
+  async function changeLifecycle(action: 'archive' | 'trash' | 'restore'): Promise<void> {
+    if (!selected || saving) return
+    if (dirty && !window.confirm('Le modifiche non salvate andranno perse. Continuare?')) return
+    saving = true
+    error = ''
+    try {
+      applyDocument(await setDocumentLifecycle(selected.id, action))
+      documents = await listDocuments(scope)
+    } catch (cause) {
+      showError(cause)
+    } finally {
+      saving = false
     }
   }
 
@@ -194,6 +237,7 @@
   }
 
   async function beginSidebarRename(document: DocumentSummary): Promise<void> {
+    if (document.status !== 'active') return
     sidebarRename = {
       id: document.id,
       title: selected?.id === document.id ? draftTitle : document.title,
@@ -280,11 +324,23 @@
 
     <button class="new-document" type="button" onclick={addDocument}>+ Nuovo documento</button>
 
+    <div class="scope-switch" role="group" aria-label={documentStrings.scopeLabel}>
+      {#each documentStrings.scopes as option}
+        <button
+          type="button"
+          class:active={scope === option.value}
+          aria-pressed={scope === option.value}
+          title={option.description}
+          onclick={() => void changeScope(option.value)}
+        >{option.label}</button>
+      {/each}
+    </div>
+
     <nav aria-label="Documenti">
       {#if loading}
         <p class="muted">Caricamento…</p>
       {:else if documents.length === 0}
-        <p class="empty-state">Non ci sono ancora documenti.</p>
+        <p class="empty-state">{documentStrings.emptyScope[scope]}</p>
       {:else}
         {#each documents as document (document.id)}
           {#if sidebarRename?.id === document.id}
@@ -346,10 +402,27 @@
           placeholder="Titolo del documento"
         ></textarea>
         <div class="save-area">
-          <span class:dirty class="save-status">{dirty ? 'Modifiche non salvate' : `Revisione ${selected.revision}`}</span>
-          <button class="save-button" type="button" disabled={!dirty || saving} onclick={persist}>
-            {saving ? 'Salvataggio…' : 'Salva'}
-          </button>
+          {#if readOnly}
+            <span class="read-only-badge" title={documentStrings.readOnlyHint[selected.status]}>
+              {documentStrings.readOnly}
+            </span>
+          {:else}
+            <span class:dirty class="save-status">{dirty ? 'Modifiche non salvate' : `Revisione ${selected.revision}`}</span>
+          {/if}
+          {#each lifecycleActions(selected.status) as action}
+            <button
+              class="lifecycle-button"
+              type="button"
+              disabled={saving}
+              title={action.description}
+              onclick={() => void changeLifecycle(action.command)}
+            >{action.label}</button>
+          {/each}
+          {#if !readOnly}
+            <button class="save-button" type="button" disabled={!dirty || saving} onclick={persist}>
+              {saving ? 'Salvataggio…' : 'Salva'}
+            </button>
+          {/if}
         </div>
       </header>
 
@@ -357,6 +430,7 @@
         <DocumentEditor
           documentId={selected.id}
           initialContent={draftJson}
+          editable={!readOnly}
           onChange={changeContent}
           onObjectCreate={addPendingObject}
           onOpenInspector={(knowledgeObjectId) => void openInspector(knowledgeObjectId)}

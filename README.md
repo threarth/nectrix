@@ -17,7 +17,7 @@ I Context formano gerarchie di profondità arbitraria. L'unità editoriale è il
 
 ## Stato del progetto
 
-La **FASE 1 — Bootstrap minimale**, la **Phase 1.1 — Domain Model Extension and Alignment**, la **FASE 2 — Highlight normale**, la **FASE 3 — KnowledgeObject e Semantic Occurrences** la **FASE 4 — Invarianti delle KnowledgeOccurrence** la **FASE 5 — Sincronizzazione DB ↔ documento** e la **FASE 6 — Inspectors e popover** sono completate. Il repository contiene editor Svelte/TipTap, API PHP/SQLite, Highlight visuale persistente, flussi atomici per creare o associare KnowledgeOccurrence di Concept ed Entity le regole di identità delle occurrence in editing, cancellazione, undo/redo, copy/paste, cut/paste verificato e input manipolato, la riconciliazione transazionale fra documento e database con stati `active`, `detached` e `deleted`, e gli inspector di Concept ed Entity con archive e restore espliciti. La prossima fase prevista è la FASE 6.1 — Lifecycle e cancellazione dei Document.
+La **FASE 1 — Bootstrap minimale**, la **Phase 1.1 — Domain Model Extension and Alignment**, la **FASE 2 — Highlight normale**, la **FASE 3 — KnowledgeObject e Semantic Occurrences** la **FASE 4 — Invarianti delle KnowledgeOccurrence** la **FASE 5 — Sincronizzazione DB ↔ documento** e la **FASE 6 — Inspectors e popover** e la **FASE 6.1 — Lifecycle e cancellazione dei Document** sono completate. Il repository contiene editor Svelte/TipTap, API PHP/SQLite, Highlight visuale persistente, flussi atomici per creare o associare KnowledgeOccurrence di Concept ed Entity le regole di identità delle occurrence in editing, cancellazione, undo/redo, copy/paste, cut/paste verificato e input manipolato, la riconciliazione transazionale fra documento e database con stati `active`, `detached` e `deleted`, gli inspector di Concept ed Entity con archive e restore espliciti, e il lifecycle non distruttivo dei Document con archive, cestino e purge di manutenzione. La prossima fase prevista è la FASE 7 — ConceptAlias ed EntityIdentifier.
 
 I documenti normativi sono:
 
@@ -63,6 +63,13 @@ npm run dev
 ```
 
 L'interfaccia è disponibile su `http://127.0.0.1:5173`; Vite inoltra `/api` a `http://127.0.0.1:8080`. Il database applicativo viene creato in `data/nectrix.sqlite` ed è escluso da Git. Il percorso può essere sostituito con la variabile `NECTRIX_DB_PATH` per test o installazioni locali differenti.
+
+Il purge fisico di un Document è manutenzione esplicita, non un comando dell'interfaccia. Mostra sempre prima l'impatto e agisce solo con `--apply`, su un Document nel cestino, scrivendo un backup:
+
+```bash
+php api/bin/purge-document.php --id=<uuid>
+php api/bin/purge-document.php --id=<uuid> --apply
+```
 
 Comandi di verifica:
 

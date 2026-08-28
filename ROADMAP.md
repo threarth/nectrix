@@ -104,11 +104,15 @@ Gate soddisfatto: nessuna copia del testo o dato di presentazione persistito, ve
 
 Alias, EntityIdentifier, Context derivati, KnowledgeRelation, SemanticBlock e Source ampliano gli inspector nelle rispettive fasi successive, come già previsto.
 
-## FASE 6.1 — Lifecycle e cancellazione dei Document
+## FASE 6.1 — Lifecycle e cancellazione dei Document (completata)
 
 Introdurre `Document.status = active|archived|trashed`, archive, trash e restore non distruttivi. Gli archiviati sono in sola lettura e ricercabili con scope esplicito; i trashed compaiono soltanto nella vista di recupero. Entrambi conservano contenuto, associazioni e stato delle KnowledgeOccurrence. Il purge fisico è un comando di manutenzione separato con preview, backup, controllo di figli, riferimenti entranti ed evidence; solo dopo tali verifiche rimuove le manifestazioni Document-owned senza eliminare KnowledgeObject o dati Entity-owned. Non è un `DELETE` CRUD implicito.
 
-Gate: archive/trash/restore coperti da test; nessuna cascade verso KnowledgeObject o dati strutturati; purge bloccato in presenza di riferimenti non gestiti e rollback completo su errore.
+Completato: `Document.status` arriva con una migration additiva. Archive e trash sono reversibili e non toccano contenuto, associazioni né stato delle KnowledgeOccurrence; gli archiviati e i cestinati sono in sola lettura, l'editor ne nasconde i comandi e il salvataggio li rifiuta con `document_read_only`. Le liste sono per scope esplicito: `active` è il predefinito, `archived` e `trashed` compaiono solo se richiesti, con un selettore dedicato nella sidebar. Le transizioni ammesse sono verificate e quelle impossibili rifiutate con `invalid_document_transition`.
+
+Il purge fisico è il comando di manutenzione `php api/bin/purge-document.php`, non un endpoint: senza `--apply` mostra soltanto la preview con impatto e impedimenti. Richiede un Document nel cestino, scrive un backup JSON del Document e delle sue occurrence prima di toccare i dati, poi rimuove in una sola transazione il Document e le manifestazioni che possiede, aggiornando lo stato dei soli Concept coinvolti. I riferimenti entranti non sono una lista scritta a mano: vengono scoperti interrogando lo schema, quindi qualunque tabella futura che punti a `documents` blocca automaticamente il purge finché non viene gestita esplicitamente.
+
+Gate soddisfatto: archive, trash e restore coperti da test backend ed end-to-end; nessuna cascade verso KnowledgeObject o dati strutturati, verificata dopo il purge; purge bloccato sia da un Document non cestinato sia da un riferimento entrante, con rollback completo su errore e backup conservato in ogni caso.
 
 ## FASE 7 — ConceptAlias ed EntityIdentifier
 

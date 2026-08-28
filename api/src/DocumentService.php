@@ -8,6 +8,8 @@ namespace Nectrix;
 
 final class DocumentService
 {
+    private const LIFECYCLE_SCOPES = ['active', 'archived', 'trashed'];
+
     /** @var array<string, mixed> */
     private const EMPTY_DOCUMENT = [
         'type' => 'doc',
@@ -23,10 +25,57 @@ final class DocumentService
     ) {
     }
 
-    /** @return list<array<string, mixed>> */
-    public function list(): array
+    /**
+     * Documents of one lifecycle scope. `archived` and `trashed` are never included implicitly.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function list(string $scope = 'active'): array
     {
-        return $this->repository->list();
+        if (!in_array($scope, self::LIFECYCLE_SCOPES, true)) {
+            throw new ApiException(422, 'invalid_request', 'Scope del lifecycle non supportato.');
+        }
+        return $this->repository->list($scope);
+    }
+
+    /** @return array<string, mixed> */
+    public function archive(string $id): array
+    {
+        return $this->changeStatus($id, 'archived', ['active']);
+    }
+
+    /** @return array<string, mixed> */
+    public function trash(string $id): array
+    {
+        return $this->changeStatus($id, 'trashed', ['active', 'archived']);
+    }
+
+    /** @return array<string, mixed> */
+    public function restore(string $id): array
+    {
+        return $this->changeStatus($id, 'active', ['archived', 'trashed']);
+    }
+
+    /**
+     * Lifecycle transitions are explicit and reversible: nothing is deleted and the state of the
+     * KnowledgeOccurrence of the Document does not change.
+     *
+     * @param list<string> $allowedFrom
+     * @return array<string, mixed>
+     */
+    private function changeStatus(string $id, string $status, array $allowedFrom): array
+    {
+        $this->validateId($id);
+        $current = $this->repository->get($id);
+        if (!in_array($current['status'], $allowedFrom, true)) {
+            throw new ApiException(
+                409,
+                'invalid_document_transition',
+                "Un Document {$current['status']} non può passare a {$status}.",
+                ['status' => $current['status']],
+            );
+        }
+        return $this->repository->setStatus($id, $status);
     }
 
     /** @return array<string, mixed> */
