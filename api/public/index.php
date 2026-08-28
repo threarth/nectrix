@@ -97,6 +97,18 @@ try {
     if ($method === 'GET' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
         respond(200, ['object' => $knowledge->object(rawurldecode($matches[1]))]);
     }
+    if ($method === 'POST' && preg_match('#^/api/knowledge-objects/([^/]+)/aliases$#', (string) $path, $matches) === 1) {
+        respond(201, ['object' => $knowledge->addAlias(rawurldecode($matches[1]), requestBody())]);
+    }
+    if ($method === 'DELETE' && preg_match('#^/api/concept-aliases/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, ['object' => $knowledge->removeAlias(rawurldecode($matches[1]))]);
+    }
+    if ($method === 'POST' && preg_match('#^/api/knowledge-objects/([^/]+)/identifiers$#', (string) $path, $matches) === 1) {
+        respond(201, $knowledge->addIdentifier(rawurldecode($matches[1]), requestBody()));
+    }
+    if ($method === 'DELETE' && preg_match('#^/api/entity-identifiers/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, ['object' => $knowledge->removeIdentifier(rawurldecode($matches[1]))]);
+    }
     if ($method === 'POST' && preg_match('#^/api/knowledge-objects/([^/]+)/(archive|restore)$#', (string) $path, $matches) === 1) {
         $objectId = rawurldecode($matches[1]);
         $object = $matches[2] === 'archive' ? $knowledge->archiveObject($objectId) : $knowledge->restoreObject($objectId);

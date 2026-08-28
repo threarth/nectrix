@@ -14,9 +14,15 @@
     setDocumentLifecycle,
     setEntityTypeArchived,
     setKnowledgeObjectArchived,
+    addConceptAlias,
+    addEntityIdentifier,
+    removeConceptAlias,
+    removeEntityIdentifier,
     type DocumentRecord,
     type DocumentStatus,
     type DocumentSummary,
+    type DuplicateCandidate,
+    type EntityIdentifierInput,
     type KnowledgeObjectDetail,
     type KnowledgeOccurrenceView,
   } from './lib/api'
@@ -40,6 +46,7 @@
   let pendingObjects = new Map<string, PendingKnowledgeObject>()
   let inspector = $state<KnowledgeObjectDetail | null>(null)
   let inspectorBusy = $state(false)
+  let duplicateCandidates = $state<DuplicateCandidate[]>([])
   let sidebarRename = $state<{ id: string; title: string } | null>(null)
   let sidebarRenameInput = $state<HTMLInputElement | undefined>(undefined)
   let titleInput = $state<HTMLTextAreaElement | undefined>(undefined)
@@ -181,6 +188,7 @@
     error = ''
     try {
       inspector = await getKnowledgeObject(knowledgeObjectId)
+      duplicateCandidates = []
     } catch (cause) {
       showError(cause)
     } finally {
@@ -203,6 +211,38 @@
     await withInspectorBusy(async () => {
       await setEntityTypeArchived(entityType.id, entityType.status !== 'archived')
       inspector = await getKnowledgeObject(object.id)
+    })
+  }
+
+  async function addAlias(alias: string): Promise<void> {
+    const object = inspector
+    if (!object) return
+    await withInspectorBusy(async () => {
+      inspector = await addConceptAlias(object.id, alias)
+    })
+  }
+
+  async function removeAlias(aliasId: string): Promise<void> {
+    await withInspectorBusy(async () => {
+      inspector = await removeConceptAlias(aliasId)
+    })
+  }
+
+  /** A collision with another Entity is reported as a duplicate candidate, never merged. */
+  async function addIdentifier(input: EntityIdentifierInput): Promise<void> {
+    const object = inspector
+    if (!object) return
+    await withInspectorBusy(async () => {
+      const added = await addEntityIdentifier(object.id, input)
+      inspector = added.object
+      duplicateCandidates = added.duplicateCandidates
+    })
+  }
+
+  async function removeIdentifier(identifierId: string): Promise<void> {
+    await withInspectorBusy(async () => {
+      inspector = await removeEntityIdentifier(identifierId)
+      duplicateCandidates = []
     })
   }
 
@@ -300,6 +340,10 @@
   }
 
   function showError(cause: unknown): void {
+    if (cause instanceof ApiError && cause.code === 'knowledge_object_not_found') {
+      error = 'Questo Concept o questa Entity esistono solo nella bozza: salva il documento per aprirne il dettaglio.'
+      return
+    }
     if (cause instanceof ApiError && cause.code === 'revision_conflict') {
       error = 'Il documento è cambiato dopo l’apertura. La bozza resta nell’editor: ricarica solo dopo averla copiata o verificata.'
       return
@@ -450,7 +494,12 @@
     <KnowledgeInspector
       object={inspector}
       busy={inspectorBusy}
+      {duplicateCandidates}
       onClose={() => (inspector = null)}
+      onAddAlias={(alias) => void addAlias(alias)}
+      onRemoveAlias={(aliasId) => void removeAlias(aliasId)}
+      onAddIdentifier={(input) => void addIdentifier(input)}
+      onRemoveIdentifier={(identifierId) => void removeIdentifier(identifierId)}
       onToggleArchived={() => void toggleInspectorArchived()}
       onToggleEntityTypeArchived={() => void toggleInspectorEntityTypeArchived()}
       onOpenOccurrence={(occurrence) => void openOccurrence(occurrence)}

@@ -17,7 +17,7 @@ I Context formano gerarchie di profondità arbitraria. L'unità editoriale è il
 
 ## Stato del progetto
 
-La **FASE 1 — Bootstrap minimale**, la **Phase 1.1 — Domain Model Extension and Alignment**, la **FASE 2 — Highlight normale**, la **FASE 3 — KnowledgeObject e Semantic Occurrences** la **FASE 4 — Invarianti delle KnowledgeOccurrence** la **FASE 5 — Sincronizzazione DB ↔ documento** e la **FASE 6 — Inspectors e popover** e la **FASE 6.1 — Lifecycle e cancellazione dei Document** sono completate. Il repository contiene editor Svelte/TipTap, API PHP/SQLite, Highlight visuale persistente, flussi atomici per creare o associare KnowledgeOccurrence di Concept ed Entity le regole di identità delle occurrence in editing, cancellazione, undo/redo, copy/paste, cut/paste verificato e input manipolato, la riconciliazione transazionale fra documento e database con stati `active`, `detached` e `deleted`, gli inspector di Concept ed Entity con archive e restore espliciti, e il lifecycle non distruttivo dei Document con archive, cestino e purge di manutenzione. La prossima fase prevista è la FASE 7 — ConceptAlias ed EntityIdentifier.
+La **FASE 1 — Bootstrap minimale**, la **Phase 1.1 — Domain Model Extension and Alignment**, la **FASE 2 — Highlight normale**, la **FASE 3 — KnowledgeObject e Semantic Occurrences** la **FASE 4 — Invarianti delle KnowledgeOccurrence** la **FASE 5 — Sincronizzazione DB ↔ documento** e la **FASE 6 — Inspectors e popover** e la **FASE 6.1 — Lifecycle e cancellazione dei Document** e la **FASE 7 — ConceptAlias ed EntityIdentifier** sono completate. Il repository contiene editor Svelte/TipTap, API PHP/SQLite, Highlight visuale persistente, flussi atomici per creare o associare KnowledgeOccurrence di Concept ed Entity le regole di identità delle occurrence in editing, cancellazione, undo/redo, copy/paste, cut/paste verificato e input manipolato, la riconciliazione transazionale fra documento e database con stati `active`, `detached` e `deleted`, gli inspector di Concept ed Entity con archive e restore espliciti, e il lifecycle non distruttivo dei Document con archive, cestino e purge di manutenzione. La prossima fase prevista è la FASE 8 — Context.
 
 I documenti normativi sono:
 
@@ -49,7 +49,7 @@ Nectrix è software libero distribuito secondo la [GNU Affero General Public Lic
 
 ## Avvio locale
 
-Requisiti: Node.js compatibile con Vite 8, PHP 8.2 o successivo con `pdo_sqlite`, e SQLite 3.37 o successivo.
+Requisiti: Node.js compatibile con Vite 8, PHP 8.2 o successivo con `pdo_sqlite`, e SQLite 3.37 o successivo. L'estensione `mbstring` non è richiesta ma è consigliata: senza, la normalizzazione degli identificatori è case-insensitive solo sui caratteri ASCII.
 
 ```bash
 npm install

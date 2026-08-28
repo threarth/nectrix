@@ -13,10 +13,12 @@ final class KnowledgeService
     private const MAX_RESOLVE_IDS = 200;
     private const MAX_QUERY_LENGTH = 200;
     private const MAX_JSON_DEPTH = 64;
+    private const MAX_TEXT_LENGTH = 200;
 
     public function __construct(
         private readonly KnowledgeRepository $repository,
         private readonly OccurrenceTextExtractor $occurrenceTextExtractor,
+        private readonly IdentifierNormalizer $identifierNormalizer = new IdentifierNormalizer(),
     ) {
     }
 
@@ -65,6 +67,104 @@ final class KnowledgeService
     public function object(string $objectId): array
     {
         return $this->present($this->requireObject($objectId));
+    }
+
+    /**
+     * INV-ALS-01 and INV-ALS-03: an alias is added only by an explicit command and touches no
+     * occurrence. The same alias may belong to different Concept.
+     *
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    public function addAlias(string $objectId, array $input): array
+    {
+        $object = $this->requireObject($objectId);
+        if ($object['object_type'] !== 'concept') {
+            throw new ApiException(422, 'alias_requires_concept', 'Solo un Concept può avere ConceptAlias.');
+        }
+        $this->repository->addConceptAlias($objectId, $this->text($input['alias'] ?? null, 'alias'));
+        return $this->object($objectId);
+    }
+
+    /** @return array<string, mixed> */
+    public function removeAlias(string $aliasId): array
+    {
+        $this->assertId($aliasId);
+        $alias = $this->repository->findConceptAlias($aliasId);
+        if ($alias === null) {
+            throw new ApiException(404, 'alias_not_found', 'ConceptAlias non trovato.');
+        }
+        $this->repository->removeConceptAlias($aliasId);
+        return $this->object((string) $alias['concept_id']);
+    }
+
+    /**
+     * INV-EID-03, INV-EID-04 and INV-EID-05: an identifier is declared explicitly, its scheme
+     * carries a versioned normalisation policy and the authority takes part in the identity when
+     * the scheme requires it. The same identity on another Entity is reported as a duplicate
+     * candidate, never merged.
+     *
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    public function addIdentifier(string $objectId, array $input): array
+    {
+        $object = $this->requireObject($objectId);
+        if ($object['object_type'] !== 'entity') {
+            throw new ApiException(422, 'identifier_requires_entity', 'Solo una Entity può avere EntityIdentifier.');
+        }
+        $scheme = Text::lower($this->text($input['scheme'] ?? null, 'scheme'));
+        $this->identifierNormalizer->assertScheme($scheme);
+        $value = $this->text($input['value'] ?? null, 'value');
+        $authority = $this->authority($input['authorityOrNamespace'] ?? null, $scheme);
+        $normalized = $this->identifierNormalizer->normalize($scheme, $value);
+
+        $this->repository->addEntityIdentifier(
+            $objectId,
+            $scheme,
+            $value,
+            $normalized,
+            $authority,
+            $this->identifierNormalizer->version($scheme),
+        );
+
+        return [
+            'object' => $this->object($objectId),
+            'duplicateCandidates' => $this->repository->duplicateIdentifierCandidates($scheme, $normalized, $authority, $objectId),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function removeIdentifier(string $identifierId): array
+    {
+        $this->assertId($identifierId);
+        $identifier = $this->repository->findEntityIdentifier($identifierId);
+        if ($identifier === null) {
+            throw new ApiException(404, 'identifier_not_found', 'EntityIdentifier non trovato.');
+        }
+        $this->repository->removeEntityIdentifier($identifierId);
+        return $this->object((string) $identifier['entity_id']);
+    }
+
+    /** INV-EID-05: an absent authority is NULL, never an empty string. */
+    private function authority(mixed $value, string $scheme): ?string
+    {
+        $authority = is_string($value) ? trim($value) : '';
+        if ($authority === '') {
+            if ($this->identifierNormalizer->requiresAuthority($scheme)) {
+                throw new ApiException(422, 'identifier_authority_required', "Lo scheme {$scheme} richiede un'authority o namespace.");
+            }
+            return null;
+        }
+        return $authority;
+    }
+
+    private function text(mixed $value, string $field): string
+    {
+        if (!is_string($value) || trim($value) === '' || Text::length(trim($value)) > self::MAX_TEXT_LENGTH) {
+            throw new ApiException(422, 'invalid_request', "Il campo {$field} è obbligatorio e non può superare i limiti.");
+        }
+        return trim($value);
     }
 
     /** @return array<string, mixed> */
@@ -133,6 +233,8 @@ final class KnowledgeService
             'description' => $isConcept ? $row['concept_description'] : $row['entity_description'],
             'status' => $isConcept ? $row['concept_status'] : $row['entity_status'],
             'entityType' => $entityType,
+            'aliases' => $isConcept ? $this->repository->conceptAliases((string) $row['id']) : [],
+            'identifiers' => $isConcept ? [] : $this->repository->entityIdentifiers((string) $row['id']),
             'occurrences' => $this->occurrences((string) $row['id']),
         ];
     }

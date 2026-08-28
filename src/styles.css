@@ -531,6 +531,103 @@ button:disabled {
   font-size: 11px;
 }
 
+.inspector-list h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6f7265;
+}
+
+.inspector-list ul {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.inspector-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #ded7c9;
+  border-radius: 8px;
+  background: #fbf8f1;
+  font-size: 13px;
+}
+
+.inspector-list li small {
+  color: #7c7f72;
+  font-size: 11px;
+}
+
+.inspector-list li button {
+  flex: none;
+  border: 0;
+  padding: 0 2px;
+  color: #7c7f72;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.inspector-list li button:hover {
+  color: #8d3a2e;
+}
+
+.inspector-add {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.inspector-add-identifier {
+  grid-template-columns: 1fr 1fr;
+}
+
+.inspector-add-identifier button {
+  grid-column: 1 / -1;
+}
+
+.inspector-add input {
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #cfc7b8;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.inspector-add button {
+  padding: 7px 12px;
+  border: 1px solid #bcb3a1;
+  border-radius: 8px;
+  background: #efeadf;
+  color: #292821;
+  font-size: 13px;
+}
+
+.inspector-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.inspector-duplicates {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid #c9a227;
+  border-radius: 8px;
+  background: #fbf3d6;
+  color: #6b5310;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .inspector-lifecycle,
 .inspector-secondary {
   align-self: flex-start;
@@ -577,15 +674,18 @@ button:disabled {
 
 .document-header {
   display: flex;
+  flex-wrap: wrap;
   max-width: 1060px;
   margin: 0 auto 20px;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 12px 24px;
 }
 
 .title-input {
-  width: min(720px, 70%);
+  flex: 1 1 320px;
+  min-width: 0;
+  max-width: 720px;
   padding: 4px 0 8px;
   border: 0;
   border-bottom: 1px solid transparent;

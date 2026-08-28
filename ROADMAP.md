@@ -114,11 +114,13 @@ Il purge fisico è il comando di manutenzione `php api/bin/purge-document.php`, 
 
 Gate soddisfatto: archive, trash e restore coperti da test backend ed end-to-end; nessuna cascade verso KnowledgeObject o dati strutturati, verificata dopo il purge; purge bloccato sia da un Document non cestinato sia da un riferimento entrante, con rollback completo su errore e backup conservato in ogni caso.
 
-## FASE 7 — ConceptAlias ed EntityIdentifier
+## FASE 7 — ConceptAlias ed EntityIdentifier (completata)
 
 Implementare CRUD ConceptAlias e EntityIdentifier come modelli distinti. EntityIdentifier conserva `scheme`, `value`, `normalized_value` e `authority_or_namespace`: ticker, CIK, LEI e identificatori clinici non sono Alias, mentre proprietà come exchange possono essere FieldValue. `scheme` è lowercase stabile, authority assente è `NULL` e ogni scheme dichiara una policy versionata di normalizzazione/case-sensitivity. La creazione di occurrence non promuove il testo ad Alias o Identifier.
 
-Gate: ambiguità degli Alias gestita mostrando Concept distinti; duplicati normalizzati nella stessa Entity rifiutati; collisioni tra Entity producono candidati duplicati senza merge automatico; authority/namespace partecipa all'identità dell'Identifier.
+Completato: ConceptAlias ed EntityIdentifier sono modelli distinti, aggiunti e rimossi solo da comandi espliciti dagli inspector. Un alias può ripetersi fra Concept diversi ma non dentro lo stesso; la ricerca lo usa restituendo Concept distinti, una sola volta ciascuno anche quando più alias corrispondono. Un EntityIdentifier conserva `scheme` lowercase, valore originale, valore normalizzato, authority nullable e la versione della policy applicata. Ogni scheme dichiara la propria policy versionata: `ticker` richiede l'authority, `cik` porta alla forma canonica a dieci cifre, gli scheme non dichiarati usano la policy predefinita che si limita a normalizzare gli spazi ed è case-insensitive. L'identità normalizzata non si ripete nella stessa Entity, mentre la stessa identità su un'altra Entity viene mostrata come candidato duplicato senza alcuna fusione. Aggiungere o rimuovere alias e identificatori non tocca occurrence né documenti.
+
+Gate soddisfatto: ambiguità degli Alias verificata con due Concept che condividono un alias e con un Concept che ne ha due corrispondenti; duplicati normalizzati nella stessa Entity rifiutati anche con maiuscole, spazi e zeri iniziali differenti; collisione fra Entity che produce candidati duplicati con entrambe le Entity intatte; authority obbligatoria dove lo scheme la richiede e parte dell'identità, così lo stesso ticker su exchange diversi resta ammesso.
 
 ## FASE 8 — Context
 

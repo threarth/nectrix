@@ -12,6 +12,7 @@ use Nectrix\DocumentService;
 use Nectrix\DocumentValidator;
 use Nectrix\KnowledgeOccurrenceExtractor;
 use Nectrix\KnowledgeRepository;
+use Nectrix\IdentifierNormalizer;
 use Nectrix\KnowledgeService;
 use Nectrix\OccurrenceTextExtractor;
 use Nectrix\Migrator;
@@ -1137,6 +1138,168 @@ $suite->test('il purge rimuove Document e occurrence con backup, senza toccare i
 
     unlink($result['backupPath']);
     rmdir($backupDirectory);
+});
+
+/** Concept created through the only real path: a Document with one occurrence. */
+function conceptWithOccurrence(DocumentService $service, string $name): string
+{
+    $document = $service->create(['title' => 'Alias']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([occurrenceText($name, $occurrenceId, $conceptId)]), [
+        conceptCreate($occurrenceId, $conceptId, $name),
+    ]);
+    return $conceptId;
+}
+
+function entityWithOccurrence(DocumentService $service, KnowledgeService $knowledge, string $name, string $typeName): string
+{
+    $entityType = $knowledge->createEntityType(['name' => $typeName]);
+    $document = $service->create(['title' => 'Identifier']);
+    $occurrenceId = UuidV7::generate();
+    $entityId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([occurrenceText($name, $occurrenceId, $entityId, 'entity')]), [[
+        'occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $entityId, 'objectType' => 'entity',
+        'newObject' => true, 'name' => $name, 'entityTypeId' => $entityType['id'],
+    ]]);
+    return $entityId;
+}
+
+$suite->test('INV-ALS-01: aggiungere e rimuovere un alias non tocca le occurrence', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $conceptId = conceptWithOccurrence($service, 'Metodo scientifico');
+    $before = $knowledge->object($conceptId)['occurrences'];
+
+    $object = $knowledge->addAlias($conceptId, ['alias' => 'Metodo sperimentale']);
+
+    assertSameValue(1, count($object['aliases']));
+    assertSameValue('Metodo sperimentale', $object['aliases'][0]['alias']);
+    assertSameValue($before, $object['occurrences']);
+
+    $afterRemoval = $knowledge->removeAlias($object['aliases'][0]['id']);
+    assertSameValue([], $afterRemoval['aliases']);
+    assertSameValue($before, $afterRemoval['occurrences']);
+});
+
+$suite->test('lo stesso alias è ammesso su Concept diversi ma non due volte nello stesso', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $first = conceptWithOccurrence($service, 'Primo concetto');
+    $second = conceptWithOccurrence($service, 'Secondo concetto');
+
+    $knowledge->addAlias($first, ['alias' => 'Ambiguo']);
+    $knowledge->addAlias($second, ['alias' => 'Ambiguo']);
+
+    try {
+        $knowledge->addAlias($first, ['alias' => 'ambiguo']);
+        throw new RuntimeException('Alias duplicato accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('alias_duplicate', $error->errorCode);
+    }
+
+    assertSameValue(1, count($knowledge->object($first)['aliases']));
+});
+
+$suite->test('la ricerca per alias mostra Concept distinti, una sola volta ciascuno', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $first = conceptWithOccurrence($service, 'Trasformata di Fourier');
+    $second = conceptWithOccurrence($service, 'Analisi armonica');
+    $knowledge->addAlias($first, ['alias' => 'Spettro']);
+    $knowledge->addAlias($first, ['alias' => 'Spettro di frequenza']);
+    $knowledge->addAlias($second, ['alias' => 'Spettro']);
+
+    $results = $knowledge->search('Spettro');
+    $ids = array_column($results, 'id');
+
+    assertSameValue(2, count($ids));
+    assertTrue(in_array($first, $ids, true) && in_array($second, $ids, true), 'Entrambi i Concept devono comparire.');
+    assertSameValue(2, count(array_unique($ids)));
+});
+
+$suite->test('un alias su una Entity e un identificatore su un Concept vengono rifiutati', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $conceptId = conceptWithOccurrence($service, 'Concetto puro');
+    $entityId = entityWithOccurrence($service, $knowledge, 'Entity pura', 'Tipo alias');
+
+    try {
+        $knowledge->addAlias($entityId, ['alias' => 'Non ammesso']);
+        throw new RuntimeException('Alias su Entity accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('alias_requires_concept', $error->errorCode);
+    }
+
+    try {
+        $knowledge->addIdentifier($conceptId, ['scheme' => 'lei', 'value' => 'ABC']);
+        throw new RuntimeException('Identifier su Concept accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('identifier_requires_entity', $error->errorCode);
+    }
+});
+
+$suite->test('INV-EID-02: la stessa identità normalizzata non si ripete nella stessa Entity', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityId = entityWithOccurrence($service, $knowledge, 'Apple', 'Azienda quotata');
+
+    $added = $knowledge->addIdentifier($entityId, ['scheme' => 'cik', 'value' => '320193']);
+    assertSameValue('0000320193', $added['object']['identifiers'][0]['normalized_value']);
+    assertSameValue('320193', $added['object']['identifiers'][0]['value']);
+    assertSameValue([], $added['duplicateCandidates']);
+
+    try {
+        $knowledge->addIdentifier($entityId, ['scheme' => 'CIK', 'value' => ' 0000320193 ']);
+        throw new RuntimeException('Identificatore duplicato accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('identifier_duplicate', $error->errorCode);
+    }
+
+    assertSameValue(1, count($knowledge->object($entityId)['identifiers']));
+});
+
+$suite->test('INV-EID-04: l’authority partecipa all’identità e quando serve è obbligatoria', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityId = entityWithOccurrence($service, $knowledge, 'Doppia quotazione', 'Azienda multipla');
+
+    try {
+        $knowledge->addIdentifier($entityId, ['scheme' => 'ticker', 'value' => 'RKLB']);
+        throw new RuntimeException('Ticker senza authority accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('identifier_authority_required', $error->errorCode);
+    }
+
+    $knowledge->addIdentifier($entityId, ['scheme' => 'ticker', 'value' => 'RKLB', 'authorityOrNamespace' => 'NASDAQ']);
+    $object = $knowledge->addIdentifier($entityId, ['scheme' => 'ticker', 'value' => 'RKLB', 'authorityOrNamespace' => 'XETRA'])['object'];
+
+    assertSameValue(2, count($object['identifiers']));
+    assertSameValue(1, $object['identifiers'][0]['normalization_version']);
+});
+
+$suite->test('INV-EID-02: la stessa identità su Entity diverse produce candidati duplicati senza merge', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $first = entityWithOccurrence($service, $knowledge, 'Prima società', 'Azienda duplicata');
+    $second = entityWithOccurrence($service, $knowledge, 'Seconda società', 'Azienda duplicata');
+    $knowledge->addIdentifier($first, ['scheme' => 'lei', 'value' => '5493001KJTIIGC8Y1R12']);
+
+    $added = $knowledge->addIdentifier($second, ['scheme' => 'lei', 'value' => '5493001kjtiigc8y1r12']);
+
+    assertSameValue(1, count($added['duplicateCandidates']));
+    assertSameValue($first, $added['duplicateCandidates'][0]['id']);
+    assertSameValue('Prima società', $added['duplicateCandidates'][0]['name']);
+    assertSameValue(1, count($knowledge->object($first)['identifiers']));
+    assertSameValue(1, count($knowledge->object($second)['identifiers']));
+    assertSameValue('active', $knowledge->object($first)['status']);
+});
+
+$suite->test('INV-EID-05: lo scheme è una chiave lowercase stabile con policy versionata', static function (): void {
+    $normalizer = new IdentifierNormalizer();
+
+    assertSameValue(1, $normalizer->version('ticker'));
+    assertSameValue(1, $normalizer->version('scheme_non_dichiarato'));
+    assertSameValue(false, $normalizer->requiresAuthority('lei'));
+    assertSameValue(true, $normalizer->requiresAuthority('ticker'));
+    assertSameValue('rklb', $normalizer->normalize('ticker', ' rk lb '));
+    assertSameValue('id clinico 12', $normalizer->normalize('internal_clinical_id', '  ID   Clinico 12 '));
+
+    assertThrows(static fn () => $normalizer->assertScheme('Ticker'), 'Uno scheme non lowercase deve essere rifiutato.');
+    assertThrows(static fn () => $normalizer->assertScheme('2ticker'), 'Uno scheme non stabile deve essere rifiutato.');
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

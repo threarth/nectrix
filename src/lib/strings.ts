@@ -204,3 +204,28 @@ export const attachDialogStrings = {
   kind: (objectType: 'concept' | 'entity'): string => (objectType === 'concept' ? 'Concept' : 'Entity'),
   confirm: 'Associa',
 } as const
+
+export const aliasStrings = {
+  label: 'Alias',
+  empty: 'Nessun alias.',
+  note: 'Un alias è un altro nome dello stesso Concept. Lo stesso alias può appartenere a Concept diversi.',
+  placeholder: 'Altro nome di questo Concept',
+  add: { label: 'Aggiungi alias', description: 'Aggiunge un nome alternativo senza toccare il testo dei documenti' },
+  remove: { label: '×', description: 'Rimuove l’alias, senza toccare occurrence o documenti' },
+} as const
+
+export const identifierStrings = {
+  label: 'Identificatori',
+  empty: 'Nessun identificatore.',
+  note: 'Un identificatore è strutturato: scheme, valore e, quando serve, authority. Non è un alias.',
+  schemePlaceholder: 'scheme, per esempio ticker',
+  valuePlaceholder: 'valore',
+  authorityPlaceholder: 'authority, per esempio NASDAQ',
+  normalizedLabel: 'normalizzato',
+  add: { label: 'Aggiungi identificatore', description: 'Registra un identificatore strutturato di questa Entity' },
+  remove: { label: '×', description: 'Rimuove l’identificatore' },
+  duplicates: (names: string[]): string =>
+    names.length === 1
+      ? `Stessa identità già dichiarata da: ${names[0]}. Nessuna fusione automatica: verifica se sono la stessa cosa.`
+      : `Stessa identità già dichiarata da: ${names.join(', ')}. Nessuna fusione automatica: verifica se sono la stessa cosa.`,
+} as const

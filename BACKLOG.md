@@ -13,6 +13,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 5 — Sincronizzazione DB ↔ documento: completata.
 - FASE 6 — Inspectors e popover: completata.
 - FASE 6.1 — Lifecycle e cancellazione dei Document: completata.
+- FASE 7 — ConceptAlias ed EntityIdentifier: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
 - API PHP minimale e database SQLite in `data/nectrix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
@@ -21,23 +22,22 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 7 — ConceptAlias ed EntityIdentifier
+### FASE 8 — Context
 
-Implementare CRUD di ConceptAlias e EntityIdentifier come modelli distinti. EntityIdentifier conserva `scheme`, `value`, `normalized_value` e `authority_or_namespace`; la creazione di occurrence non promuove mai il testo ad Alias o Identifier.
+CRUD di Context e sub-context a profondità arbitraria, breadcrumb, move aciclico di interi rami, assegnazione di un Context principale al Document e filtro `exact`/`subtree`.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- ambiguità degli Alias che mostra Concept distinti senza fonderli;
-- duplicati normalizzati nella stessa Entity rifiutati;
-- collisioni fra Entity che producono candidati duplicati senza merge automatico;
-- authority/namespace che partecipa all'identità dell'Identifier;
-- policy di normalizzazione versionata per ogni scheme.
+- lo stesso Concept o Entity presenti in più Context senza duplicazione;
+- query derivate attraverso il percorso Context→Document→KnowledgeOccurrence→KnowledgeObject;
+- query ricorsive, move di rami, anti-ciclo e filtro subtree;
+- cancellazione di nodi con figli o Document che richiede riassegnazione esplicita.
 
-Gate: ambiguità degli Alias gestita mostrando Concept distinti; duplicati normalizzati nella stessa Entity rifiutati; collisioni tra Entity producono candidati duplicati senza merge automatico; authority/namespace partecipa all'identità dell'Identifier.
+Gate: lo stesso Concept o Entity compare in più Context senza duplicazione; query derivate per entrambi i sottotipi, query ricorsive, move, anti-ciclo, filtro subtree e cancellazione prudente coperti da test verdi.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 7.
+Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 8.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

@@ -63,6 +63,7 @@
 
   let element: HTMLDivElement
   let editorShell: HTMLDivElement
+  let toolbarElement = $state<HTMLDivElement | undefined>(undefined)
   let editorState = $state<{ editor: Editor | null }>({ editor: null })
   let editorPopover = $state<{
     color: HighlightColor | null
@@ -76,6 +77,9 @@
 
   /** Discriminator of the KnowledgeObject already known to be valid, to avoid useless lookups. */
   const knownObjectTypes = new Map<string, 'concept' | 'entity'>()
+
+  /** Distance kept from the toolbar and from the marked line, so nothing overlaps. */
+  const POPOVER_MARGIN = 8
 
   /** Range the open dialog will mark, remembered because the dialog takes the focus. */
   let pendingCommand = $state<{ kind: 'concept' | 'entity' | 'attach'; text: string; from: number; to: number } | null>(null)
@@ -242,11 +246,16 @@
 
     const coordinates = editor.view.coordsAtPos(editor.state.selection.from)
     const shell = editorShell.getBoundingClientRect()
+    // Sotto la riga corrente e sempre sotto la toolbar, che puo occupare piu righe: i comandi
+    // contestuali non devono mai coprire quelli della barra.
+    const toolbarBottom = toolbarElement === undefined
+      ? 0
+      : toolbarElement.getBoundingClientRect().bottom - shell.top
     editorPopover = {
       color: highlighted ? normalizeHighlightColor(editor.getAttributes('highlight').color) : null,
       occurrence,
-      left: Math.max(12, Math.min(coordinates.left - shell.left - 84, shell.width - 238)),
-      top: Math.max(50, coordinates.top - shell.top - 48),
+      left: Math.max(POPOVER_MARGIN, Math.min(coordinates.left - shell.left - 84, shell.width - 238)),
+      top: Math.max(toolbarBottom + POPOVER_MARGIN, coordinates.bottom - shell.top + POPOVER_MARGIN),
     }
   }
 
@@ -300,7 +309,7 @@
 
 <div class="editor-shell" bind:this={editorShell}>
   {#if editorState.editor && editable}
-    <div class="toolbar" role="toolbar" aria-label={editorStrings.toolbarLabel}>
+    <div class="toolbar" role="toolbar" bind:this={toolbarElement} aria-label={editorStrings.toolbarLabel}>
       <ToolbarButton
         command={editorStrings.paragraph}
         toggle

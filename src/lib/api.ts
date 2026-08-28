@@ -41,6 +41,26 @@ export interface KnowledgeOccurrenceView {
   text: string
 }
 
+export interface ConceptAliasView { id: string; alias: string }
+
+export interface EntityIdentifierView {
+  id: string
+  scheme: string
+  value: string
+  normalized_value: string
+  authority_or_namespace: string | null
+  normalization_version: number
+}
+
+export interface EntityIdentifierInput {
+  scheme: string
+  value: string
+  authorityOrNamespace?: string
+}
+
+/** Another Entity already declaring the same normalised identity. Never merged automatically. */
+export interface DuplicateCandidate { id: string; name: string }
+
 export interface KnowledgeObjectDetail {
   id: string
   objectType: 'concept' | 'entity'
@@ -48,6 +68,8 @@ export interface KnowledgeObjectDetail {
   description: string | null
   status: 'active' | 'orphan' | 'archived'
   entityType: { id: string; name: string; status: 'active' | 'archived' } | null
+  aliases: ConceptAliasView[]
+  identifiers: EntityIdentifierView[]
   occurrences: KnowledgeOccurrenceView[]
 }
 export interface KnowledgeSearchResult { id: string; object_type: 'concept' | 'entity'; name: string; entity_type_name: string | null }
@@ -189,4 +211,38 @@ export async function setEntityTypeArchived(id: string, archived: boolean): Prom
 export async function listEntityTypes(): Promise<EntityType[]> {
   const payload = await request<{ entityTypes: EntityType[] }>('/api/entity-types')
   return payload.entityTypes
+}
+
+export async function addConceptAlias(objectId: string, alias: string): Promise<KnowledgeObjectDetail> {
+  const payload = await request<{ object: KnowledgeObjectDetail }>(
+    `/api/knowledge-objects/${encodeURIComponent(objectId)}/aliases`,
+    { method: 'POST', body: JSON.stringify({ alias }) },
+  )
+  return payload.object
+}
+
+export async function removeConceptAlias(aliasId: string): Promise<KnowledgeObjectDetail> {
+  const payload = await request<{ object: KnowledgeObjectDetail }>(
+    `/api/concept-aliases/${encodeURIComponent(aliasId)}`,
+    { method: 'DELETE' },
+  )
+  return payload.object
+}
+
+export async function addEntityIdentifier(
+  objectId: string,
+  input: EntityIdentifierInput,
+): Promise<{ object: KnowledgeObjectDetail; duplicateCandidates: DuplicateCandidate[] }> {
+  return request<{ object: KnowledgeObjectDetail; duplicateCandidates: DuplicateCandidate[] }>(
+    `/api/knowledge-objects/${encodeURIComponent(objectId)}/identifiers`,
+    { method: 'POST', body: JSON.stringify(input) },
+  )
+}
+
+export async function removeEntityIdentifier(identifierId: string): Promise<KnowledgeObjectDetail> {
+  const payload = await request<{ object: KnowledgeObjectDetail }>(
+    `/api/entity-identifiers/${encodeURIComponent(identifierId)}`,
+    { method: 'DELETE' },
+  )
+  return payload.object
 }

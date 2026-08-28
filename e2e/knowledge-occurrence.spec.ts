@@ -308,3 +308,55 @@ test('la dialog di associazione cerca e collega un Concept esistente a un altro 
   await expect(page.locator('.inspector-name')).toHaveText('Metodo scientifico')
   await expect(page.locator('.inspector-occurrences li')).toHaveCount(2)
 })
+
+test('FASE 7: gli alias di un Concept si aggiungono e si rimuovono senza toccare le occurrence', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Metodo', 'Metodo scientifico')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Concept' }).click()
+  const inspector = page.locator('.inspector')
+
+  await page.getByLabel('Aggiungi alias').fill('Metodo sperimentale')
+  await inspector.getByRole('button', { name: 'Aggiungi alias' }).click()
+  await expect(inspector.locator('.inspector-list li')).toContainText('Metodo sperimentale')
+  await expect(inspector.locator('.inspector-occurrences li')).toHaveCount(1)
+
+  await inspector.getByRole('button', { name: /Rimuove l’alias/ }).click()
+  await expect(inspector.locator('.inspector-list li')).toHaveCount(0)
+  await expect(inspector.locator('.inspector-occurrences li')).toHaveCount(1)
+})
+
+test('FASE 7: un identificatore duplicato su un’altra Entity produce un candidato, non una fusione', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createEntityFrom(page, 'Prima', 'Prima società', 'Azienda')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Entity' }).click()
+
+  const inspector = page.locator('.inspector')
+  await inspector.getByLabel('Scheme').fill('lei')
+  await inspector.getByLabel('Valore').fill('5493001KJTIIGC8Y1R12')
+  await inspector.getByRole('button', { name: 'Aggiungi identificatore' }).click()
+  await expect(inspector.locator('.inspector-list li').first()).toContainText('lei')
+  await expect(inspector.locator('.inspector-duplicates')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createEntityFrom(page, 'Seconda', 'Seconda società', 'Azienda')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Entity' }).click()
+
+  await inspector.getByLabel('Scheme').fill('lei')
+  await inspector.getByLabel('Valore').fill('5493001kjtiigc8y1r12')
+  await inspector.getByRole('button', { name: 'Aggiungi identificatore' }).click()
+
+  await expect(inspector.locator('.inspector-duplicates')).toContainText('Prima società')
+  await expect(inspector.locator('.inspector-name')).toHaveText('Seconda società')
+})

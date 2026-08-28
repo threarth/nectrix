@@ -63,14 +63,14 @@ final class IdentifierNormalizer
     {
         $policy = $this->policy($scheme);
         $normalized = trim((string) preg_replace('/\s+/u', ' ', $value));
-        if ($normalized === '' || mb_strlen($normalized) > self::MAX_VALUE_LENGTH) {
+        if ($normalized === '' || Text::length($normalized) > self::MAX_VALUE_LENGTH) {
             throw new ApiException(422, 'invalid_identifier_value', 'Il valore dell’identificatore non è utilizzabile.');
         }
         if ($policy['removeSpaces'] === true) {
             $normalized = str_replace(' ', '', $normalized);
         }
         if ($policy['caseSensitive'] !== true) {
-            $normalized = mb_strtolower($normalized);
+            $normalized = Text::lower($normalized);
         }
         $padDigits = (int) $policy['padDigits'];
         if ($padDigits > 0 && ctype_digit($normalized)) {

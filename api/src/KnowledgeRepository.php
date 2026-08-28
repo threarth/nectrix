@@ -15,7 +15,16 @@ final class KnowledgeRepository
     /** @return list<array<string, mixed>> */
     public function search(string $query): array
     {
-        $statement = $this->pdo->prepare("SELECT c.id, 'concept' AS object_type, c.canonical_name AS name, NULL AS entity_type_id, NULL AS entity_type_name FROM concepts c WHERE c.canonical_name LIKE :query UNION ALL SELECT e.id, 'entity', e.name, e.entity_type_id, t.name FROM entities e JOIN entity_types t ON t.id = e.entity_type_id WHERE e.name LIKE :query ORDER BY name COLLATE NOCASE LIMIT 30");
+        // Un Concept compare una sola volta anche se piu alias corrispondono: l'ambiguita si vede
+        // come Concept distinti, non come righe ripetute dello stesso Concept.
+        $statement = $this->pdo->prepare(
+            "SELECT c.id, 'concept' AS object_type, c.canonical_name AS name, NULL AS entity_type_id, NULL AS entity_type_name " .
+            'FROM concepts c WHERE c.canonical_name LIKE :query ' .
+            'OR EXISTS (SELECT 1 FROM concept_aliases a WHERE a.concept_id = c.id AND a.alias LIKE :query) ' .
+            "UNION ALL SELECT e.id, 'entity', e.name, e.entity_type_id, t.name " .
+            'FROM entities e JOIN entity_types t ON t.id = e.entity_type_id WHERE e.name LIKE :query ' .
+            'ORDER BY name COLLATE NOCASE LIMIT 30'
+        );
         $statement->execute(['query' => '%' . $query . '%']);
         return $statement->fetchAll();
     }
@@ -95,6 +104,120 @@ final class KnowledgeRepository
             'WHERE k.knowledge_object_id = :id ORDER BY d.updated_at DESC, k.created_at'
         );
         $statement->execute(['id' => $objectId]);
+        return $statement->fetchAll();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function conceptAliases(string $conceptId): array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT id, alias FROM concept_aliases WHERE concept_id = :id ORDER BY alias COLLATE NOCASE'
+        );
+        $statement->execute(['id' => $conceptId]);
+        return $statement->fetchAll();
+    }
+
+    /**
+     * INV-ALS-01: adding an alias touches no occurrence. The same alias may belong to different
+     * Concept, because language is ambiguous; only a repetition inside one Concept is refused.
+     */
+    public function addConceptAlias(string $conceptId, string $alias): void
+    {
+        $existing = $this->pdo->prepare('SELECT 1 FROM concept_aliases WHERE concept_id = :id AND alias = :alias COLLATE NOCASE');
+        $existing->execute(['id' => $conceptId, 'alias' => $alias]);
+        if ($existing->fetch() !== false) {
+            throw new ApiException(422, 'alias_duplicate', 'Il Concept ha già questo alias.');
+        }
+        $this->pdo->prepare('INSERT INTO concept_aliases (id, concept_id, alias) VALUES (:id, :concept_id, :alias)')
+            ->execute(['id' => UuidV7::generate(), 'concept_id' => $conceptId, 'alias' => $alias]);
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findConceptAlias(string $aliasId): ?array
+    {
+        $statement = $this->pdo->prepare('SELECT id, concept_id, alias FROM concept_aliases WHERE id = :id');
+        $statement->execute(['id' => $aliasId]);
+        $row = $statement->fetch();
+        return $row === false ? null : $row;
+    }
+
+    public function removeConceptAlias(string $aliasId): void
+    {
+        $this->pdo->prepare('DELETE FROM concept_aliases WHERE id = :id')->execute(['id' => $aliasId]);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function entityIdentifiers(string $entityId): array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT id, scheme, value, normalized_value, authority_or_namespace, normalization_version ' .
+            'FROM entity_identifiers WHERE entity_id = :id ORDER BY scheme, normalized_value'
+        );
+        $statement->execute(['id' => $entityId]);
+        return $statement->fetchAll();
+    }
+
+    /**
+     * INV-EID-02: the normalised identity is unique inside one Entity. The authority takes part in
+     * it, and an absent authority is compared as the empty key so two NULL are not distinct.
+     */
+    public function addEntityIdentifier(string $entityId, string $scheme, string $value, string $normalized, ?string $authority, int $version): void
+    {
+        $existing = $this->pdo->prepare(
+            'SELECT 1 FROM entity_identifiers WHERE entity_id = :entity_id AND scheme = :scheme ' .
+            "AND normalized_value = :normalized AND ifnull(authority_or_namespace, '') = :authority_key"
+        );
+        $existing->execute([
+            'entity_id' => $entityId, 'scheme' => $scheme,
+            'normalized' => $normalized, 'authority_key' => $authority ?? '',
+        ]);
+        if ($existing->fetch() !== false) {
+            throw new ApiException(422, 'identifier_duplicate', 'La Entity ha già questo identificatore.');
+        }
+        $timestamp = Clock::now();
+        $this->pdo->prepare(
+            'INSERT INTO entity_identifiers ' .
+            '(id, entity_id, scheme, value, normalized_value, authority_or_namespace, normalization_version, created_at, updated_at) ' .
+            'VALUES (:id, :entity_id, :scheme, :value, :normalized, :authority, :version, :created, :updated)'
+        )->execute([
+            'id' => UuidV7::generate(), 'entity_id' => $entityId, 'scheme' => $scheme, 'value' => $value,
+            'normalized' => $normalized, 'authority' => $authority, 'version' => $version,
+            'created' => $timestamp, 'updated' => $timestamp,
+        ]);
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findEntityIdentifier(string $identifierId): ?array
+    {
+        $statement = $this->pdo->prepare('SELECT id, entity_id, scheme FROM entity_identifiers WHERE id = :id');
+        $statement->execute(['id' => $identifierId]);
+        $row = $statement->fetch();
+        return $row === false ? null : $row;
+    }
+
+    public function removeEntityIdentifier(string $identifierId): void
+    {
+        $this->pdo->prepare('DELETE FROM entity_identifiers WHERE id = :id')->execute(['id' => $identifierId]);
+    }
+
+    /**
+     * Other Entity already declaring the same normalised identity. They are duplicate candidates,
+     * never a reason to merge automatically.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function duplicateIdentifierCandidates(string $scheme, string $normalized, ?string $authority, string $entityId): array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT e.id, e.name FROM entity_identifiers i JOIN entities e ON e.id = i.entity_id ' .
+            'WHERE i.scheme = :scheme AND i.normalized_value = :normalized ' .
+            "AND ifnull(i.authority_or_namespace, '') = :authority_key AND i.entity_id <> :entity_id " .
+            'ORDER BY e.name COLLATE NOCASE'
+        );
+        $statement->execute([
+            'scheme' => $scheme, 'normalized' => $normalized,
+            'authority_key' => $authority ?? '', 'entity_id' => $entityId,
+        ]);
         return $statement->fetchAll();
     }
 
