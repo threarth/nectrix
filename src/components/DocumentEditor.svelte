@@ -68,6 +68,7 @@
   let editorPopover = $state<{
     color: HighlightColor | null
     occurrence: OccurrenceAttributes | null
+    selectionActive: boolean
     left: number
     top: number
   } | null>(null)
@@ -236,10 +237,11 @@
    * and the way into the inspector when it is a KnowledgeOccurrence. The two can coexist.
    */
   function syncEditorPopover(editor: Editor): void {
+    const selectionActive = editable && !editor.state.selection.empty
     const highlighted = editable && editor.isActive('highlight')
     const attributes = editor.getAttributes('knowledgeOccurrence')
     const occurrence = isOccurrenceAttributes(attributes) ? attributes : null
-    if (!editorShell || (!highlighted && occurrence === null)) {
+    if (!editorShell || (!highlighted && occurrence === null && !selectionActive)) {
       editorPopover = null
       return
     }
@@ -254,6 +256,7 @@
     editorPopover = {
       color: highlighted ? normalizeHighlightColor(editor.getAttributes('highlight').color) : null,
       occurrence,
+      selectionActive,
       left: Math.max(POPOVER_MARGIN, Math.min(coordinates.left - shell.left - 84, shell.width - 238)),
       top: Math.max(toolbarBottom + POPOVER_MARGIN, coordinates.bottom - shell.top + POPOVER_MARGIN),
     }
@@ -461,6 +464,19 @@
       aria-label={occurrencePopoverStrings.dialogLabel}
       style={`left: ${editorPopover.left}px; top: ${editorPopover.top}px`}
     >
+      {#if editorPopover.selectionActive}
+        <div class="popover-group" role="group" aria-label={editorStrings.selectionGroupLabel}>
+          {#each [editorStrings.createConcept, editorStrings.createEntity, editorStrings.attachExisting] as command, index}
+            <button
+              type="button"
+              class="popover-command"
+              title={command.description}
+              onpointerdown={keepSelection}
+              onclick={() => openCommand((['concept', 'entity', 'attach'] as const)[index])}
+            >{command.label}</button>
+          {/each}
+        </div>
+      {/if}
       {#if editorPopover.occurrence}
         {@const occurrence = editorPopover.occurrence}
         <button

@@ -3,7 +3,12 @@
 import { Editor, type JSONContent } from '@tiptap/core'
 import type { Slice } from '@tiptap/pm/model'
 import { afterEach, describe, expect, test } from 'vitest'
-import { editorExtensions, occurrenceClipboardExtension } from './editor'
+import {
+  editorExtensions,
+  moveOccurrenceBoundary,
+  occurrenceClipboardExtension,
+  occurrenceRangeAt,
+} from './editor'
 import {
   collectOccurrences,
   CUT_CLIPBOARD_FORMAT,
@@ -586,5 +591,103 @@ describe('clipboard delle KnowledgeOccurrence (FASE 4)', () => {
     pasteInto(editor, cut, proof)
 
     expect(occurrenceIdsOf(editor)).not.toContain(OCCURRENCE_ID)
+  })
+})
+
+describe('maniglie di confine delle occurrence', () => {
+  /** Paragraph "Backlog utile", with the occurrence on "Backlog" at 1..8. */
+  const withTail: JSONContent = {
+    type: 'doc',
+    content: [{
+      type: 'paragraph',
+      content: [
+        { type: 'text', marks: [occurrenceMark()], text: 'Backlog' },
+        { type: 'text', text: ' utile' },
+      ],
+    }],
+  }
+
+  test('trova l’intervallo dell’occurrence, frammenti contigui inclusi', () => {
+    const editor = createEditor({
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', marks: [occurrenceMark()], text: 'Rocket' },
+          { type: 'text', marks: [occurrenceMark(), { type: 'bold' }], text: ' Lab' },
+        ],
+      }],
+    })
+
+    const range = occurrenceRangeAt(editor.state, 3)
+    expect(range?.from).toBe(1)
+    expect(range?.to).toBe(11)
+    expect(occurrenceRangeAt(editor.state, 0)).toBeNull()
+  })
+
+  test('spostare la fine estende l’intervallo mantenendo lo stesso occurrenceId', () => {
+    const editor = createEditor(withTail)
+    const range = occurrenceRangeAt(editor.state, 2)
+
+    expect(moveOccurrenceBoundary(editor.view, range!, 'end', 14)).toBe(true)
+
+    const occurrences = collectOccurrences(editor.getJSON())
+    expect([...occurrences.values()]).toEqual([
+      { occurrenceId: OCCURRENCE_ID, knowledgeObjectId: CONCEPT_ID, objectType: 'concept' },
+    ])
+    expect(editor.getHTML()).toContain('>Backlog utile</span>')
+  })
+
+  test('spostare l’inizio riduce l’intervallo senza cambiare identità', () => {
+    const editor = createEditor(withTail)
+    const range = occurrenceRangeAt(editor.state, 2)
+
+    expect(moveOccurrenceBoundary(editor.view, range!, 'start', 4)).toBe(true)
+
+    expect(occurrenceIdsOf(editor)).toEqual([OCCURRENCE_ID])
+    expect(editor.getHTML()).toContain('>klog</span>')
+  })
+
+  test('un intervallo vuoto o immutato viene rifiutato', () => {
+    const editor = createEditor(withTail)
+    const range = occurrenceRangeAt(editor.state, 2)
+
+    expect(moveOccurrenceBoundary(editor.view, range!, 'end', 1)).toBe(false)
+    expect(moveOccurrenceBoundary(editor.view, range!, 'end', 8)).toBe(false)
+    expect(occurrenceIdsOf(editor)).toEqual([OCCURRENCE_ID])
+  })
+
+  test('il confine non entra dentro un’altra occurrence', () => {
+    const other = '0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f0b01'
+    const editor = createEditor({
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', marks: [occurrenceMark()], text: 'Primo' },
+          { type: 'text', text: ' ' },
+          { type: 'text', marks: [occurrenceMark(other)], text: 'Secondo' },
+        ],
+      }],
+    })
+    const range = occurrenceRangeAt(editor.state, 2)
+
+    expect(moveOccurrenceBoundary(editor.view, range!, 'end', 10)).toBe(false)
+    expect(moveOccurrenceBoundary(editor.view, range!, 'end', 7)).toBe(true)
+    expect(collectOccurrences(editor.getJSON()).size).toBe(2)
+  })
+
+  test('il confine resta dentro il proprio textblock', () => {
+    const editor = createEditor({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', marks: [occurrenceMark()], text: 'Backlog' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Altro paragrafo' }] },
+      ],
+    })
+    const range = occurrenceRangeAt(editor.state, 2)
+
+    expect(moveOccurrenceBoundary(editor.view, range!, 'end', 20)).toBe(false)
+    expect(editor.getJSON().content?.[1]?.content?.[0]?.marks ?? []).toEqual([])
   })
 })

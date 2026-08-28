@@ -128,6 +128,8 @@ Comportamento iniziale dei bordi:
 
 Queste regole richiedono configurazione esplicita dell'inclusività del mark e test a livello ProseMirror; non vanno affidate ai default della libreria.
 
+I confini di una occurrence si correggono trascinando le maniglie ai suoi estremi. È una modifica della stessa manifestazione, non una riassegnazione: `occurrenceId`, `knowledgeObjectId` e `objectType` restano quelli di prima, mentre il range non può svuotarsi, uscire dal proprio textblock o sovrapporsi a un'altra occurrence. Riassegnare il range a un altro KnowledgeObject resta un'operazione diversa, che crea una nuova occurrence come prescrive INV-OCC-02.
+
 Per lo stesso motivo il collasso di una selezione non vuota con le frecce sinistra e destra è esplicito e avviene nella stessa transazione del tasto premuto. Lo stato ProseMirror altrimenti dipende dall'evento asincrono `selectionchange` e una battitura immediata dopo un select all verrebbe applicata alla selezione precedente, sostituendo l'intero contenuto invece di inserire al caret.
 
 ## 5. Lifecycle delle occurrence

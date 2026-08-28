@@ -238,6 +238,40 @@ button:disabled {
   line-height: 1;
 }
 
+.nectrix-occurrence-handle {
+  display: inline-block;
+  width: 5px;
+  height: 1.05em;
+  margin: 0 -1px;
+  vertical-align: text-bottom;
+  border-radius: 3px;
+  background: #93a689;
+  cursor: ew-resize;
+}
+
+.nectrix-occurrence-handle:hover {
+  background: #6d8263;
+}
+
+.popover-group {
+  display: flex;
+  gap: 6px;
+}
+
+.popover-command {
+  padding: 5px 10px;
+  border: 1px solid #b6c3ae;
+  border-radius: 7px;
+  color: #2f3a2b;
+  background: #dfe8d9;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.popover-command:hover {
+  background: #d2ddca;
+}
+
 /* Semantic mark: a discreet underline, never a background, which is the language of Highlight. */
 .nectrix-knowledge-occurrence {
   border-bottom: 1px solid #93a689;

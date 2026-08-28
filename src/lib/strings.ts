@@ -15,6 +15,7 @@ export interface CommandStrings {
 
 export const editorStrings = {
   toolbarLabel: 'Formattazione documento',
+  selectionGroupLabel: 'Comandi sul testo selezionato',
 
   paragraph: {
     label: 'Normale',
@@ -228,4 +229,10 @@ export const identifierStrings = {
     names.length === 1
       ? `Stessa identità già dichiarata da: ${names[0]}. Nessuna fusione automatica: verifica se sono la stessa cosa.`
       : `Stessa identità già dichiarata da: ${names.join(', ')}. Nessuna fusione automatica: verifica se sono la stessa cosa.`,
+} as const
+
+export const occurrenceHandleStrings = {
+  start: 'Sposta l’inizio dell’occurrence',
+  end: 'Sposta la fine dell’occurrence',
+  description: 'Trascina per correggere il confine, mantenendo lo stesso Concept o la stessa Entity',
 } as const

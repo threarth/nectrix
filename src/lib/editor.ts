@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { Extension, Mark, type Editor } from '@tiptap/core'
-import { AllSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
-import type { EditorView } from '@tiptap/pm/view'
-import type { Slice } from '@tiptap/pm/model'
+import { AllSelection, Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state'
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
+import type { Mark as ProseMirrorMark, Slice } from '@tiptap/pm/model'
 import { StarterKit } from '@tiptap/starter-kit'
 import {
   canKeepCutOccurrenceIds,
@@ -19,6 +19,7 @@ import {
   type CutToken,
   type OccurrenceAttributes,
 } from './occurrences'
+import { occurrenceHandleStrings } from './strings'
 
 export type HighlightColor = string
 
@@ -154,6 +155,33 @@ const SelectionCaret = Extension.create({
   },
 })
 
+/**
+ * Draggable handles on the boundaries of the occurrence under the caret. Moving them keeps the
+ * same occurrenceId: the range is corrected, not replaced by a different occurrence.
+ */
+const OccurrenceHandles = Extension.create({
+  name: 'occurrenceHandles',
+
+  addProseMirrorPlugins() {
+    const editor = this.editor
+    return [
+      new Plugin({
+        key: new PluginKey('occurrenceHandles'),
+        props: {
+          decorations(state) {
+            const range = editor.isEditable ? handledOccurrence(state) : null
+            if (range === null) return null
+            return DecorationSet.create(state.doc, [
+              Decoration.widget(range.from, (view) => boundaryHandle(view, 'start'), { side: -1, stopEvent: () => true }),
+              Decoration.widget(range.to, (view) => boundaryHandle(view, 'end'), { side: 1, stopEvent: () => true }),
+            ])
+          },
+        },
+      }),
+    ]
+  },
+})
+
 export const editorExtensions = [
   StarterKit.configure({
     code: false,
@@ -170,6 +198,7 @@ export const editorExtensions = [
   Highlight,
   KnowledgeOccurrence,
   SelectionCaret,
+  OccurrenceHandles,
 ]
 
 export interface OccurrenceClipboardOptions {
@@ -335,4 +364,123 @@ export function removeOccurrenceMarks(editor: Editor, occurrenceIds: ReadonlySet
 
   if (removed) editor.view.dispatch(transaction)
   return removed
+}
+
+/** Occurrence range containing a position, or null when the position carries no occurrence. */
+export function occurrenceRangeAt(state: EditorState, position: number): OccurrenceRange | null {
+  const markType = state.schema.marks.knowledgeOccurrence
+  const resolved = state.doc.resolve(position)
+  const parent = resolved.parent
+  if (!parent.isTextblock) return null
+
+  const blockStart = resolved.start()
+  let from = blockStart
+  let found: ProseMirrorMark | null = null
+  let rangeFrom = 0
+  let rangeTo = 0
+
+  parent.forEach((child, offset) => {
+    const childFrom = blockStart + offset
+    const childTo = childFrom + child.nodeSize
+    const mark = child.marks.find((candidate) => candidate.type === markType) ?? null
+    if (found !== null) {
+      if (mark !== null && mark.attrs.occurrenceId === found.attrs.occurrenceId && childFrom === rangeTo) {
+        rangeTo = childTo
+      }
+      return
+    }
+    if (mark === null || position < childFrom || position > childTo) return
+    found = mark
+    rangeFrom = childFrom
+    rangeTo = childTo
+  })
+
+  from = rangeFrom
+  return found === null ? null : { from, to: rangeTo, mark: found, blockStart, blockEnd: resolved.end() }
+}
+
+export interface OccurrenceRange {
+  from: number
+  to: number
+  mark: ProseMirrorMark
+  blockStart: number
+  blockEnd: number
+}
+
+/**
+ * Moves one boundary of an occurrence keeping its identity: the same mark is removed from the old
+ * range and applied to the new one, so occurrenceId, knowledgeObjectId and objectType survive.
+ * The range stays inside its textblock, never empties and never overlaps another occurrence.
+ */
+export function moveOccurrenceBoundary(view: EditorView, range: OccurrenceRange, side: 'start' | 'end', position: number): boolean {
+  const target = Math.max(range.blockStart, Math.min(position, range.blockEnd))
+  const from = side === 'start' ? target : range.from
+  const to = side === 'start' ? range.to : target
+  if (from >= to || (from === range.from && to === range.to)) return false
+  if (overlapsAnotherOccurrence(view.state, from, to, range.mark)) return false
+
+  const transaction = view.state.tr
+    .removeMark(range.from, range.to, range.mark)
+    .addMark(from, to, range.mark)
+  view.dispatch(transaction)
+  return true
+}
+
+function overlapsAnotherOccurrence(state: EditorState, from: number, to: number, mark: ProseMirrorMark): boolean {
+  const markType = state.schema.marks.knowledgeOccurrence
+  let overlaps = false
+  state.doc.nodesBetween(from, to, (node) => {
+    if (!node.isText || overlaps) return true
+    const other = node.marks.find((candidate) => candidate.type === markType)
+    if (other !== undefined && other.attrs.occurrenceId !== mark.attrs.occurrenceId) overlaps = true
+    return true
+  })
+  return overlaps
+}
+
+/** Occurrence whose boundaries can be moved right now, that is the one holding the selection. */
+function handledOccurrence(state: EditorState): OccurrenceRange | null {
+  const range = occurrenceRangeAt(state, state.selection.from)
+  if (range === null) return null
+  return state.selection.to <= range.to ? range : null
+}
+
+function startBoundaryDrag(view: EditorView, side: 'start' | 'end', event: PointerEvent): void {
+  const range = handledOccurrence(view.state)
+  if (range === null || !view.editable) return
+  event.preventDefault()
+  event.stopPropagation()
+
+  // Position that stays inside the occurrence while the opposite boundary moves.
+  const anchor = side === 'start' ? range.to - 1 : range.from + 1
+
+  const move = (moveEvent: PointerEvent): void => {
+    const coordinates = view.posAtCoords({ left: moveEvent.clientX, top: moveEvent.clientY })
+    const current = occurrenceRangeAt(view.state, anchor)
+    if (coordinates === null || current === null) return
+    moveOccurrenceBoundary(view, current, side, coordinates.pos)
+  }
+
+  const stop = (): void => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', stop)
+    window.removeEventListener('pointercancel', stop)
+  }
+
+  // The listeners live on the window: every move redraws the decoration, so the handle element
+  // itself is replaced and would lose the drag after the first step.
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', stop)
+  window.addEventListener('pointercancel', stop)
+}
+
+function boundaryHandle(view: EditorView, side: 'start' | 'end'): HTMLElement {
+  const handle = document.createElement('span')
+  handle.className = `nectrix-occurrence-handle nectrix-occurrence-handle-${side}`
+  handle.contentEditable = 'false'
+  handle.setAttribute('role', 'button')
+  handle.setAttribute('aria-label', occurrenceHandleStrings[side])
+  handle.title = occurrenceHandleStrings.description
+  handle.addEventListener('pointerdown', (event) => startBoundaryDrag(view, side, event))
+  return handle
 }

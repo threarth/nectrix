@@ -20,6 +20,11 @@ test('crea una Entity con EntityType da selezione e la conserva dopo save/reload
   await expect(page.locator('.nectrix-knowledge-occurrence')).toHaveText('Rocket Lab')
 })
 
+/** Toolbar command, distinguished from the same command offered on the selection. */
+function toolbarButton(page: Page, name: string) {
+  return page.getByRole('toolbar').getByRole('button', { name, exact: true })
+}
+
 /** Occurrence IDs currently rendered in the editor, in document order. */
 async function occurrenceIds(page: Page): Promise<(string | null)[]> {
   return page.locator('.tiptap .nectrix-knowledge-occurrence').evaluateAll((nodes) =>
@@ -33,7 +38,7 @@ async function createConceptFrom(page: Page, text: string, name: string): Promis
   await page.keyboard.type(text)
   await expect(editor).toHaveText(text)
   await editor.press('Control+A')
-  await page.getByRole('button', { name: 'Crea Concept' }).click()
+  await toolbarButton(page, 'Crea Concept').click()
   const dialog = page.getByRole('dialog', { name: 'Nuovo Concept' })
   await dialog.getByLabel('Nome del Concept').fill(name)
   await dialog.getByRole('button', { name: 'Crea Concept' }).click()
@@ -48,7 +53,7 @@ async function createEntityFrom(page: Page, text: string, name: string, entityTy
   await page.keyboard.type(text)
   await expect(editor).toHaveText(text)
   await editor.press('Control+A')
-  await page.getByRole('button', { name: 'Crea Entity' }).click()
+  await toolbarButton(page, 'Crea Entity').click()
   const dialog = page.getByRole('dialog', { name: 'Nuova Entity' })
   await dialog.getByLabel('Nome della Entity').fill(name)
   await dialog.getByLabel('Nome del nuovo EntityType').fill(entityType)
@@ -291,7 +296,7 @@ test('la dialog di associazione cerca e collega un Concept esistente a un altro 
   await editor.click()
   await page.keyboard.type('Qui parlo del metodo')
   await editor.press('Control+A')
-  await page.getByRole('button', { name: 'Associa esistente' }).click()
+  await toolbarButton(page, 'Associa esistente').click()
 
   const dialog = page.getByRole('dialog', { name: 'Associa un Concept o una Entity esistenti' })
   await dialog.getByLabel('Cerca').fill('Metodo')
@@ -359,4 +364,43 @@ test('FASE 7: un identificatore duplicato su un’altra Entity produce un candid
 
   await expect(inspector.locator('.inspector-duplicates')).toContainText('Prima società')
   await expect(inspector.locator('.inspector-name')).toHaveText('Seconda società')
+})
+
+test('le maniglie correggono il confine dell’occurrence mantenendo lo stesso ID', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  const editor = page.locator('.tiptap')
+  await editor.click()
+  await expect(editor).toBeFocused()
+  await page.keyboard.type('Backlog utile')
+  await page.keyboard.press('Home')
+  for (let index = 0; index < 7; index += 1) await page.keyboard.press('Shift+ArrowRight')
+
+  await page.getByLabel('Comandi sul testo selezionato').getByRole('button', { name: 'Crea Concept' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Nuovo Concept' })
+  await dialog.getByLabel('Nome del Concept').fill('Backlog')
+  await dialog.getByRole('button', { name: 'Crea Concept' }).click()
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  const [before] = await occurrenceIds(page)
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
+
+  await editor.locator('.nectrix-knowledge-occurrence').click()
+  const handle = page.locator('.nectrix-occurrence-handle-end')
+  await expect(handle).toBeVisible()
+  const box = await handle.boundingBox()
+  if (box === null) throw new Error('Maniglia non visibile.')
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 60, box.y + box.height / 2, { steps: 10 })
+  await page.mouse.up()
+
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog utile')
+  expect(await occurrenceIds(page)).toEqual([before])
+
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.reload()
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Backlog utile')
+  expect(await occurrenceIds(page)).toEqual([before])
 })
