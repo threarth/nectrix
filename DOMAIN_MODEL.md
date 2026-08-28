@@ -206,7 +206,7 @@ Classificazione configurabile di Entity, mai hardcoded nella UI o nel codice app
 | `created_at` | timestamp | immutabile |
 | `updated_at` | timestamp | aggiornato a ogni modifica |
 
-Esempi sono `Company`, `Lesion`, `Drug`, `Book`, `Paper`, `Person` e `Security`. La Phase 1.1 persiste il tipo senza anticiparne il lifecycle UI; `status` e i comandi archive/restore entrano nella FASE 6. Una EntityType usata da Entity non viene cancellata: può essere archiviata per impedirne nuove assegnazioni, restando valida per le Entity esistenti. Sostituzione e merge sono comandi distinti, confermati e transazionali.
+Esempi sono `Company`, `Lesion`, `Drug`, `Book`, `Paper`, `Person` e `Security`. La Phase 1.1 persiste il tipo senza anticiparne il lifecycle UI; la FASE 6 aggiunge la colonna `status` con una migration additiva e i comandi espliciti di archive e restore. Una EntityType usata da Entity non viene cancellata: può essere archiviata per impedirne nuove assegnazioni, restando valida per le Entity esistenti. Sostituzione e merge sono comandi distinti, confermati e transazionali.
 
 ### 3.7 Entity
 

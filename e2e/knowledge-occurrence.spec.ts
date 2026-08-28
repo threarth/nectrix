@@ -165,3 +165,76 @@ test('INV-OCC-09: un Concept creato, cancellato e ripristinato con undo viene cr
   await page.reload()
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Mai salvato')
 })
+
+/** Opens the inspector of the occurrence currently in the document. */
+async function openInspectorFromOccurrence(page: Page, label: string): Promise<void> {
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').first().click()
+  await page.getByRole('button', { name: label }).click()
+  await expect(page.locator('.inspector')).toBeVisible()
+}
+
+test('FASE 6: il popover di un Concept apre il Concept Inspector con le sue occurrence', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Backlog', 'Backlog')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await openInspectorFromOccurrence(page, 'Apri Concept')
+
+  const inspector = page.locator('.inspector')
+  await expect(inspector.locator('.inspector-kind')).toHaveText('Concept')
+  await expect(inspector.locator('.inspector-name')).toHaveText('Backlog')
+  await expect(inspector.locator('.inspector-status')).toContainText('attivo')
+  await expect(inspector.locator('.occurrence-text')).toHaveText('Backlog')
+})
+
+test('FASE 6: archive e restore di un Concept cambiano solo lo stato', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Archiviabile', 'Archiviabile')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await openInspectorFromOccurrence(page, 'Apri Concept')
+
+  const inspector = page.locator('.inspector')
+  await inspector.getByRole('button', { name: 'Archivia', exact: true }).click()
+  await expect(inspector.locator('.inspector-status')).toContainText('archiviato')
+  await expect(inspector.locator('.occurrence-text')).toHaveText('Archiviabile')
+
+  await inspector.getByRole('button', { name: 'Ripristina', exact: true }).click()
+  await expect(inspector.locator('.inspector-status')).toContainText('attivo')
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+})
+
+test('FASE 6: il popover di una Entity apre l’Entity Inspector con il suo EntityType', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  const editor = page.locator('.tiptap')
+  await editor.click()
+  await expect(editor).toBeFocused()
+  await page.keyboard.type('Rocket Lab')
+  await editor.press('Control+A')
+  let promptCount = 0
+  page.on('dialog', (dialog) => {
+    promptCount += 1
+    void dialog.accept(promptCount === 1 ? 'Rocket Lab USA' : 'Azienda')
+  })
+  await page.getByRole('button', { name: 'Crea Entity' }).click()
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Rocket Lab')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await openInspectorFromOccurrence(page, 'Apri Entity')
+
+  const inspector = page.locator('.inspector')
+  await expect(inspector.locator('.inspector-kind')).toHaveText('Entity')
+  await expect(inspector.locator('.inspector-name')).toHaveText('Rocket Lab USA')
+  await expect(inspector.locator('.inspector-fields dd').first()).toContainText('Azienda')
+
+  await inspector.getByRole('button', { name: 'Archivia EntityType' }).click()
+  await expect(inspector.locator('.inspector-badge')).toHaveText('archiviato')
+  await expect(inspector.locator('.inspector-name')).toHaveText('Rocket Lab USA')
+  await inspector.getByRole('button', { name: 'Ripristina EntityType' }).click()
+  await expect(inspector.locator('.inspector-badge')).toHaveCount(0)
+})

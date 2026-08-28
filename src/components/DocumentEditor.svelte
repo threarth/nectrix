@@ -11,7 +11,12 @@
     removeOccurrenceMarks,
     type HighlightColor,
   } from '../lib/editor'
-  import { collectOccurrences, type OccurrenceAttributes, type PendingKnowledgeObject } from '../lib/occurrences'
+  import {
+    collectOccurrences,
+    isOccurrenceAttributes,
+    type OccurrenceAttributes,
+    type PendingKnowledgeObject,
+  } from '../lib/occurrences'
   import {
     MAX_HIGHLIGHT_COLORS,
     MIN_HIGHLIGHT_COLORS,
@@ -20,7 +25,12 @@
   } from '../lib/highlightPalette'
   import { uuidV7 } from '../lib/uuid'
   import { createEntityType, resolveKnowledgeObjects, searchKnowledge } from '../lib/api'
-  import { editorStrings, highlightPopoverStrings, palettePanelStrings } from '../lib/strings'
+  import {
+    editorStrings,
+    highlightPopoverStrings,
+    occurrencePopoverStrings,
+    palettePanelStrings,
+  } from '../lib/strings'
   import ToolbarButton from './ToolbarButton.svelte'
 
   let {
@@ -28,17 +38,24 @@
     initialContent,
     onChange,
     onObjectCreate,
+    onOpenInspector,
   }: {
     documentId: string
     initialContent: JSONContent
     onChange: (content: JSONContent) => void
     onObjectCreate: (knowledgeObjectId: string, object: PendingKnowledgeObject) => void
+    onOpenInspector: (knowledgeObjectId: string) => void
   } = $props()
 
   let element: HTMLDivElement
   let editorShell: HTMLDivElement
   let editorState = $state<{ editor: Editor | null }>({ editor: null })
-  let highlightPopover = $state<{ color: HighlightColor; left: number; top: number } | null>(null)
+  let editorPopover = $state<{
+    color: HighlightColor | null
+    occurrence: OccurrenceAttributes | null
+    left: number
+    top: number
+  } | null>(null)
   let highlightPalette = $state<string[]>([...defaultHighlightColors])
   let paletteSelectorOpen = $state(false)
   let clipboardWarning = $state('')
@@ -64,12 +81,12 @@
       content: initialContent,
       onTransaction: ({ editor, transaction }) => {
         editorState = { editor }
-        syncHighlightPopover(editor)
+        syncEditorPopover(editor)
         if (transaction.docChanged) {
           onChange(editor.getJSON())
         }
       },
-      onSelectionUpdate: ({ editor }) => syncHighlightPopover(editor),
+      onSelectionUpdate: ({ editor }) => syncEditorPopover(editor),
     })
     editorState = { editor }
   })
@@ -170,17 +187,24 @@
     return knownObjectTypes.get(occurrence.knowledgeObjectId) === occurrence.objectType
   }
 
-  function syncHighlightPopover(editor: Editor): void {
-    if (!editorShell || !editor.isActive('highlight')) {
-      highlightPopover = null
+  /**
+   * One popover for the marks under the caret: the highlight colours when the range is highlighted
+   * and the way into the inspector when it is a KnowledgeOccurrence. The two can coexist.
+   */
+  function syncEditorPopover(editor: Editor): void {
+    const highlighted = editor.isActive('highlight')
+    const attributes = editor.getAttributes('knowledgeOccurrence')
+    const occurrence = isOccurrenceAttributes(attributes) ? attributes : null
+    if (!editorShell || (!highlighted && occurrence === null)) {
+      editorPopover = null
       return
     }
 
     const coordinates = editor.view.coordsAtPos(editor.state.selection.from)
     const shell = editorShell.getBoundingClientRect()
-    const color = normalizeHighlightColor(editor.getAttributes('highlight').color)
-    highlightPopover = {
-      color,
+    editorPopover = {
+      color: highlighted ? normalizeHighlightColor(editor.getAttributes('highlight').color) : null,
+      occurrence,
       left: Math.max(12, Math.min(coordinates.left - shell.left - 84, shell.width - 238)),
       top: Math.max(50, coordinates.top - shell.top - 48),
     }
@@ -227,9 +251,9 @@
     command(editor).setTextSelection(position).run()
     if (closePopover) {
       editor.commands.blur()
-      highlightPopover = null
+      editorPopover = null
     } else {
-      syncHighlightPopover(editor)
+      syncEditorPopover(editor)
     }
   }
 </script>
@@ -362,35 +386,48 @@
     </div>
   {/if}
   <div class="editor-content" bind:this={element}></div>
-  {#if editorState.editor && highlightPopover}
+  {#if editorState.editor && editorPopover}
     <div
       class="highlight-popover"
       role="dialog"
-      aria-label={highlightPopoverStrings.dialogLabel}
-      style={`left: ${highlightPopover.left}px; top: ${highlightPopover.top}px`}
+      aria-label={occurrencePopoverStrings.dialogLabel}
+      style={`left: ${editorPopover.left}px; top: ${editorPopover.top}px`}
     >
-      <span class="highlight-popover-label">{highlightPopoverStrings.colorLabel}</span>
-      <div class="highlight-colors" aria-label={highlightPopoverStrings.colorsGroupLabel} role="group">
-        {#each highlightPalette as color}
-          <button
-            type="button"
-            class:active={highlightPopover.color === color}
-            style={`background-color: ${color}`}
-            aria-label={highlightPopoverStrings.colorDescription(color)}
-            title={highlightPopoverStrings.colorDescription(color)}
-            aria-pressed={highlightPopover.color === color}
-            onpointerdown={keepSelection}
-            onclick={() => changeHighlightColor(color)}
-          ></button>
-        {/each}
-      </div>
-      <button
-        type="button"
-        class="highlight-remove"
-        title={highlightPopoverStrings.remove.description}
-        onpointerdown={keepSelection}
-        onclick={removeHighlight}
-      >{highlightPopoverStrings.remove.label}</button>
+      {#if editorPopover.occurrence}
+        {@const occurrence = editorPopover.occurrence}
+        <button
+          type="button"
+          class="occurrence-open"
+          title={occurrencePopoverStrings.open.description}
+          onpointerdown={keepSelection}
+          onclick={() => onOpenInspector(occurrence.knowledgeObjectId)}
+        >{occurrencePopoverStrings.open.label(occurrence.objectType)}</button>
+      {/if}
+      {#if editorPopover.color !== null}
+        {@const activeColor = editorPopover.color}
+        <span class="highlight-popover-label">{highlightPopoverStrings.colorLabel}</span>
+        <div class="highlight-colors" aria-label={highlightPopoverStrings.colorsGroupLabel} role="group">
+          {#each highlightPalette as color}
+            <button
+              type="button"
+              class:active={activeColor === color}
+              style={`background-color: ${color}`}
+              aria-label={highlightPopoverStrings.colorDescription(color)}
+              title={highlightPopoverStrings.colorDescription(color)}
+              aria-pressed={activeColor === color}
+              onpointerdown={keepSelection}
+              onclick={() => changeHighlightColor(color)}
+            ></button>
+          {/each}
+        </div>
+        <button
+          type="button"
+          class="highlight-remove"
+          title={highlightPopoverStrings.remove.description}
+          onpointerdown={keepSelection}
+          onclick={removeHighlight}
+        >{highlightPopoverStrings.remove.label}</button>
+      {/if}
     </div>
   {/if}
 </div>

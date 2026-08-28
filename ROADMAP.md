@@ -94,11 +94,15 @@ Gate soddisfatto: salvataggi ripetuti idempotenti su contenuto invariato, su can
 
 `INV-OCC-19`, cioè la cache del testo indicizzato, resta alla FASE 10 che introduce la ricerca full text. Il comando esplicito che porta una occurrence a `deleted` appartiene alle fasi di inspector e manutenzione: qui è coperto il fatto che quello stato non torni mai `active`.
 
-## FASE 6 — Inspectors e popover
+## FASE 6 — Inspectors e popover (completata)
 
 Introdurre Concept Inspector ed Entity Inspector e aprire quello appropriato dal popover di `knowledgeOccurrence`. Il Concept Inspector mostra inizialmente canonical name, descrizione e occurrence; l'Entity Inspector nome, EntityType e occurrence. Aggiungere archive/restore espliciti per Concept, Entity ed EntityType; i tipi referenziati archiviati restano validi per le Entity esistenti. Alias, EntityIdentifier, Context derivati, KnowledgeRelation, SemanticBlock e Source ampliano gli inspector soltanto dopo le rispettive fasi. Il testo delle occurrence viene sempre estratto dai Document.
 
-Gate: nessuna copia obsoleta del testo o dato di presentazione persistito; navigazione affidabile dopo editing/reload e scelta dell'inspector coerente con `objectType`.
+Completato: il mark `knowledgeOccurrence` ha ora un segno visivo discreto, distinto dal fondo colorato dell'Highlight, e il suo popover apre l'inspector. Il pannello si apre a destra dell'editor, che resta visibile e modificabile. Il Concept Inspector mostra canonical name, descrizione, stato e occurrence; l'Entity Inspector nome, EntityType con il suo stato, descrizione e occurrence. Il discriminator usato per scegliere l'inspector è quello autorevole del database, non quello del mark. Ogni occurrence è elencata con il Document di appartenenza, lo stato e il testo estratto al momento della lettura dal contenuto del Document; una occurrence `detached` compare senza testo invece di mostrarne una copia obsoleta. Il click su una occurrence apre il Document e porta il mark in vista. Archive e restore sono espliciti per Concept, Entity ed EntityType e non cancellano nulla: il restore di un Concept lo riporta ad `active` solo se ha ancora occurrence attive, altrimenti a `orphan`. Un EntityType archiviato resta valido per le Entity esistenti e rifiuta soltanto la creazione di nuove Entity, con errore `entity_type_archived`.
+
+Gate soddisfatto: nessuna copia del testo o dato di presentazione persistito, verificato da un test in cui il testo dell'occurrence cambia insieme al Document; navigazione fra Document e occurrence dopo editing e reload; inspector coerente con `objectType` per entrambi i discriminator; archive e restore coperti da test backend ed end-to-end senza cancellazioni.
+
+Alias, EntityIdentifier, Context derivati, KnowledgeRelation, SemanticBlock e Source ampliano gli inspector nelle rispettive fasi successive, come già previsto.
 
 ## FASE 6.1 — Lifecycle e cancellazione dei Document
 

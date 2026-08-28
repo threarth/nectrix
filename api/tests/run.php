@@ -12,6 +12,7 @@ use Nectrix\DocumentValidator;
 use Nectrix\KnowledgeOccurrenceExtractor;
 use Nectrix\KnowledgeRepository;
 use Nectrix\KnowledgeService;
+use Nectrix\OccurrenceTextExtractor;
 use Nectrix\Migrator;
 use Nectrix\PlainTextExtractor;
 use Nectrix\UuidV7;
@@ -168,7 +169,7 @@ $suite->test('le migrazioni mantengono invariato lo schema Document della FASE 1
         ['id', 'title', 'document_json', 'plain_text', 'revision', 'created_at', 'updated_at'],
         array_column($columns, 'name'),
     );
-    assertSameValue(2, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(3, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
 });
 
 $domainFixture = [];
@@ -501,7 +502,7 @@ $suite->test('la migration Phase 1.1 aggiorna un database FASE 1 senza perdere D
 
     assertSameValue(1, (int) $upgradePdo->query('SELECT COUNT(*) FROM documents')->fetchColumn());
     assertSameValue('Documento preesistente', $upgradePdo->query('SELECT title FROM documents')->fetchColumn());
-    assertSameValue(2, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(3, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
     assertSameValue('field_values', $upgradePdo->query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'field_values'")->fetchColumn());
 });
 
@@ -671,7 +672,7 @@ $suite->test('INV-OCC-13: risalvare lo stesso documento non duplica le occurrenc
 });
 
 $suite->test('la risoluzione dei KnowledgeObject espone solo esistenza e discriminator', static function () use ($pdo, $service): void {
-    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo));
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
     $document = $service->create(['title' => 'Risoluzione']);
     $occurrenceId = UuidV7::generate();
     $conceptId = UuidV7::generate();
@@ -803,7 +804,7 @@ $suite->test('la riconciliazione è idempotente su salvataggi ripetuti', static 
 });
 
 $suite->test('una Entity che perde l’ultima occurrence resta active e non viene cancellata', static function () use ($pdo, $service): void {
-    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo));
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
     $entityType = $knowledge->createEntityType(['name' => 'Agenzia spaziale']);
     $document = $service->create(['title' => 'Riconciliazione']);
     $occurrenceId = UuidV7::generate();
@@ -890,6 +891,125 @@ $suite->test('un conflitto di revisione non modifica lo stato delle occurrence',
 
     assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
     assertSameValue('active', conceptStatus($pdo, $conceptId));
+});
+
+$suite->test('l’inspector di un Concept espone stato e occurrence con testo letto dal Document', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $document = $service->create(['title' => 'Inspector']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]), [
+        conceptCreate($occurrenceId, $conceptId, 'Backlog'),
+    ]);
+
+    $object = $knowledge->object($conceptId);
+
+    assertSameValue('concept', $object['objectType']);
+    assertSameValue('Backlog', $object['name']);
+    assertSameValue('active', $object['status']);
+    assertSameValue(null, $object['entityType']);
+    assertSameValue(1, count($object['occurrences']));
+    assertSameValue('Backlog', $object['occurrences'][0]['text']);
+    assertSameValue($document['id'], $object['occurrences'][0]['documentId']);
+    assertSameValue('active', $object['occurrences'][0]['status']);
+});
+
+$suite->test('il testo dell’occurrence segue il Document e non una copia persistita', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $document = $service->create(['title' => 'Inspector']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]), [
+        conceptCreate($occurrenceId, $conceptId, 'Backlog'),
+    ]);
+    saveRevision($service, $document['id'], 1, documentOfParagraphs([occurrenceText('Backlog rivisto', $occurrenceId, $conceptId)]));
+
+    assertSameValue('Backlog rivisto', $knowledge->object($conceptId)['occurrences'][0]['text']);
+
+    saveRevision($service, $document['id'], 2, emptyDocument());
+    $detached = $knowledge->object($conceptId)['occurrences'][0];
+    assertSameValue('detached', $detached['status']);
+    assertSameValue('', $detached['text']);
+});
+
+$suite->test('l’inspector di una Entity espone il proprio EntityType', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityType = $knowledge->createEntityType(['name' => 'Azienda spaziale']);
+    $document = $service->create(['title' => 'Inspector']);
+    $occurrenceId = UuidV7::generate();
+    $entityId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([occurrenceText('Rocket Lab', $occurrenceId, $entityId, 'entity')]), [[
+        'occurrenceId' => $occurrenceId, 'knowledgeObjectId' => $entityId, 'objectType' => 'entity',
+        'newObject' => true, 'name' => 'Rocket Lab USA', 'entityTypeId' => $entityType['id'],
+    ]]);
+
+    $object = $knowledge->object($entityId);
+
+    assertSameValue('entity', $object['objectType']);
+    assertSameValue('Rocket Lab USA', $object['name']);
+    assertSameValue('Azienda spaziale', $object['entityType']['name']);
+    assertSameValue('Rocket Lab', $object['occurrences'][0]['text']);
+});
+
+$suite->test('archive e restore di un Concept non cancellano nulla e rispettano le occurrence', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $document = $service->create(['title' => 'Inspector']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    $json = documentOfParagraphs([occurrenceText('Backlog', $occurrenceId, $conceptId)]);
+    saveRevision($service, $document['id'], 0, $json, [conceptCreate($occurrenceId, $conceptId, 'Backlog')]);
+
+    assertSameValue('archived', $knowledge->archiveObject($conceptId)['status']);
+    assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue('active', $knowledge->restoreObject($conceptId)['status']);
+
+    saveRevision($service, $document['id'], 1, emptyDocument());
+    $knowledge->archiveObject($conceptId);
+    assertSameValue('orphan', $knowledge->restoreObject($conceptId)['status']);
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM knowledge_occurrences WHERE id = :id', ['id' => $occurrenceId]));
+});
+
+$suite->test('un EntityType archiviato resta valido per le Entity esistenti e blocca solo le nuove', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityType = $knowledge->createEntityType(['name' => 'Tipo da archiviare']);
+    $document = $service->create(['title' => 'Inspector']);
+    $firstOccurrence = UuidV7::generate();
+    $entityId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([occurrenceText('Esistente', $firstOccurrence, $entityId, 'entity')]), [[
+        'occurrenceId' => $firstOccurrence, 'knowledgeObjectId' => $entityId, 'objectType' => 'entity',
+        'newObject' => true, 'name' => 'Entity esistente', 'entityTypeId' => $entityType['id'],
+    ]]);
+
+    assertSameValue('archived', $knowledge->archiveEntityType($entityType['id'])['status']);
+    $existing = $knowledge->object($entityId);
+    assertSameValue('active', $existing['status']);
+    assertSameValue('archived', $existing['entityType']['status']);
+
+    $secondOccurrence = UuidV7::generate();
+    $newEntityId = UuidV7::generate();
+    try {
+        saveRevision($service, $document['id'], 1, documentOfParagraphs([occurrenceText('Nuova', $secondOccurrence, $newEntityId, 'entity')]), [[
+            'occurrenceId' => $secondOccurrence, 'knowledgeObjectId' => $newEntityId, 'objectType' => 'entity',
+            'newObject' => true, 'name' => 'Entity nuova', 'entityTypeId' => $entityType['id'],
+        ]]);
+        throw new RuntimeException('Nuova Entity creata con un EntityType archiviato.');
+    } catch (ApiException $error) {
+        assertSameValue('entity_type_archived', $error->errorCode);
+    }
+
+    assertSameValue('active', $knowledge->restoreEntityType($entityType['id'])['status']);
+});
+
+$suite->test('l’inspector di un KnowledgeObject inesistente risponde 404', static function () use ($pdo): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+
+    try {
+        $knowledge->object(UuidV7::generate());
+        throw new RuntimeException('KnowledgeObject inesistente accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('knowledge_object_not_found', $error->errorCode);
+        assertSameValue(404, $error->status);
+    }
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

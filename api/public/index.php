@@ -13,6 +13,7 @@ use Nectrix\Migrator;
 use Nectrix\KnowledgeOccurrenceExtractor;
 use Nectrix\KnowledgeRepository;
 use Nectrix\KnowledgeService;
+use Nectrix\OccurrenceTextExtractor;
 use Nectrix\PlainTextExtractor;
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -58,7 +59,7 @@ try {
         new KnowledgeOccurrenceExtractor(),
         $knowledgeRepository,
     );
-    $knowledge = new KnowledgeService($knowledgeRepository);
+    $knowledge = new KnowledgeService($knowledgeRepository, new OccurrenceTextExtractor());
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -83,6 +84,21 @@ try {
     }
     if ($method === 'POST' && $path === '/api/documents') {
         respond(201, ['document' => $service->create(requestBody())]);
+    }
+    if ($method === 'GET' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, ['object' => $knowledge->object(rawurldecode($matches[1]))]);
+    }
+    if ($method === 'POST' && preg_match('#^/api/knowledge-objects/([^/]+)/(archive|restore)$#', (string) $path, $matches) === 1) {
+        $objectId = rawurldecode($matches[1]);
+        $object = $matches[2] === 'archive' ? $knowledge->archiveObject($objectId) : $knowledge->restoreObject($objectId);
+        respond(200, ['object' => $object]);
+    }
+    if ($method === 'POST' && preg_match('#^/api/entity-types/([^/]+)/(archive|restore)$#', (string) $path, $matches) === 1) {
+        $entityTypeId = rawurldecode($matches[1]);
+        $entityType = $matches[2] === 'archive'
+            ? $knowledge->archiveEntityType($entityTypeId)
+            : $knowledge->restoreEntityType($entityTypeId);
+        respond(200, ['entityType' => $entityType]);
     }
     if (preg_match('#^/api/documents/([^/]+)$#', (string) $path, $matches) === 1) {
         $id = rawurldecode($matches[1]);

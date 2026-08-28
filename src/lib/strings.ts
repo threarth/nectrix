@@ -69,6 +69,15 @@ export const highlightPopoverStrings = {
   remove: { label: 'Rimuovi', description: 'Toglie l’evidenziazione da questo intervallo' },
 } as const
 
+export const occurrencePopoverStrings = {
+  dialogLabel: 'Opzioni del testo selezionato',
+  open: {
+    label: (objectType: 'concept' | 'entity'): string =>
+      objectType === 'concept' ? 'Apri Concept' : 'Apri Entity',
+    description: 'Apre l’inspector del Concept o della Entity associati a questo intervallo',
+  },
+} as const
+
 export const palettePanelStrings = {
   panelLabel: 'Configura palette Highlight',
   sizeLabel: 'Colori',
@@ -76,4 +85,51 @@ export const palettePanelStrings = {
   colorsLabel: 'Modifica colori palette',
   colorDescription: (index: number): string => `Modifica colore ${index}`,
   reset: { label: 'Ripristina predefiniti', description: 'Riporta la palette ai colori iniziali' },
+} as const
+
+export const inspectorStrings = {
+  panelLabel: 'Dettaglio del KnowledgeObject',
+  kind: (objectType: 'concept' | 'entity'): string => (objectType === 'concept' ? 'Concept' : 'Entity'),
+  close: { label: '×', ariaLabel: 'Chiudi il pannello', description: 'Chiude il pannello e torna al solo documento' },
+  loading: 'Caricamento…',
+
+  statusLabel: 'Stato',
+  objectStatus: {
+    active: 'attivo',
+    orphan: 'senza occurrence attive',
+    archived: 'archiviato',
+  } as Record<string, string>,
+
+  description: { label: 'Descrizione', empty: 'Nessuna descrizione.' },
+  entityType: { label: 'EntityType', archived: 'archiviato' },
+
+  occurrences: {
+    label: 'Occurrence',
+    empty: 'Nessuna occurrence registrata.',
+    /** The text is read from the Document, so a detached occurrence simply has none. */
+    missingText: 'Testo non più presente nel documento',
+    description: 'Apre il Document e porta al punto dell’occurrence',
+    status: {
+      active: 'attiva',
+      detached: 'staccata',
+      deleted: 'eliminata',
+    } as Record<string, string>,
+  },
+
+  archive: {
+    label: 'Archivia',
+    description: 'Archivia senza cancellare nulla: occurrence e dati restano al loro posto',
+  },
+  restore: {
+    label: 'Ripristina',
+    description: 'Riporta in uso l’oggetto archiviato',
+  },
+  archiveEntityType: {
+    label: 'Archivia EntityType',
+    description: 'Archivia il tipo: resta valido per le Entity esistenti e non può essere usato per nuove Entity',
+  },
+  restoreEntityType: {
+    label: 'Ripristina EntityType',
+    description: 'Rende di nuovo disponibile il tipo per nuove Entity',
+  },
 } as const

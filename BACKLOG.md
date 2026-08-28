@@ -11,6 +11,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 3 — KnowledgeObject e Semantic Occurrences: completata.
 - FASE 4 — Invarianti delle KnowledgeOccurrence: completata.
 - FASE 5 — Sincronizzazione DB ↔ documento: completata.
+- FASE 6 — Inspectors e popover: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
 - API PHP minimale e database SQLite in `data/nectrix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
@@ -19,22 +20,21 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 6 — Inspectors e popover
+### FASE 6.1 — Lifecycle e cancellazione dei Document
 
-Introdurre Concept Inspector ed Entity Inspector, aperti dal popover della KnowledgeOccurrence secondo `objectType`, con archive e restore espliciti per Concept, Entity ed EntityType.
+Introdurre `Document.status = active|archived|trashed` con archive, trash e restore non distruttivi. Gli archiviati sono in sola lettura e ricercabili con scope esplicito, i trashed compaiono solo nella vista di recupero. Il purge fisico resta un comando di manutenzione separato con preview, backup e verifica dei riferimenti.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- apertura dell'inspector corretto per ciascun discriminator;
-- testo delle occurrence sempre estratto dai Document, mai copiato nel database;
-- archive e restore che non cancellano nulla e lasciano validi i tipi già referenziati;
-- navigazione affidabile dopo editing e reload.
+- archive, trash e restore che conservano contenuto, associazioni e stato delle KnowledgeOccurrence;
+- nessuna cascade verso KnowledgeObject o dati strutturati;
+- purge bloccato in presenza di riferimenti non gestiti, con rollback completo su errore.
 
-Gate: nessuna copia obsoleta del testo o dato di presentazione persistito; navigazione affidabile dopo editing/reload e scelta dell'inspector coerente con `objectType`.
+Gate: archive/trash/restore coperti da test; nessuna cascade verso KnowledgeObject o dati strutturati; purge bloccato in presenza di riferimenti non gestiti e rollback completo su errore.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 6.
+Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 6.1.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

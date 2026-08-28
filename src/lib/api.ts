@@ -27,7 +27,26 @@ export interface OccurrenceCreate {
 /** Existence and discriminator of a KnowledgeObject, as returned by the resolution endpoint. */
 export interface KnowledgeObjectRef { id: string; object_type: 'concept' | 'entity' }
 
-export interface EntityType { id: string; name: string; description: string | null }
+export interface EntityType { id: string; name: string; description: string | null; status: 'active' | 'archived' }
+
+/** One occurrence as shown by an inspector: the text always comes from the Document content. */
+export interface KnowledgeOccurrenceView {
+  id: string
+  documentId: string
+  documentTitle: string
+  status: 'active' | 'detached' | 'deleted'
+  text: string
+}
+
+export interface KnowledgeObjectDetail {
+  id: string
+  objectType: 'concept' | 'entity'
+  name: string
+  description: string | null
+  status: 'active' | 'orphan' | 'archived'
+  entityType: { id: string; name: string; status: 'active' | 'archived' } | null
+  occurrences: KnowledgeOccurrenceView[]
+}
 export interface KnowledgeSearchResult { id: string; object_type: 'concept' | 'entity'; name: string; entity_type_name: string | null }
 
 interface ApiErrorPayload {
@@ -125,4 +144,28 @@ export async function resolveKnowledgeObjects(ids: string[]): Promise<KnowledgeO
     `/api/knowledge-objects?ids=${encodeURIComponent(ids.join(','))}`,
   )
   return payload.objects
+}
+
+export async function getKnowledgeObject(id: string): Promise<KnowledgeObjectDetail> {
+  const payload = await request<{ object: KnowledgeObjectDetail }>(`/api/knowledge-objects/${encodeURIComponent(id)}`)
+  return payload.object
+}
+
+/** Archive and restore are explicit and never delete: they only change the lifecycle state. */
+export async function setKnowledgeObjectArchived(id: string, archived: boolean): Promise<KnowledgeObjectDetail> {
+  const action = archived ? 'archive' : 'restore'
+  const payload = await request<{ object: KnowledgeObjectDetail }>(
+    `/api/knowledge-objects/${encodeURIComponent(id)}/${action}`,
+    { method: 'POST' },
+  )
+  return payload.object
+}
+
+export async function setEntityTypeArchived(id: string, archived: boolean): Promise<EntityType> {
+  const action = archived ? 'archive' : 'restore'
+  const payload = await request<{ entityType: EntityType }>(
+    `/api/entity-types/${encodeURIComponent(id)}/${action}`,
+    { method: 'POST' },
+  )
+  return payload.entityType
 }

@@ -38,6 +38,10 @@ button:disabled {
   grid-template-columns: 270px minmax(0, 1fr);
 }
 
+.app-frame.with-inspector {
+  grid-template-columns: 270px minmax(0, 1fr) 330px;
+}
+
 .sidebar {
   padding: 28px 20px;
   color: #f7f2e7;
@@ -184,6 +188,154 @@ button:disabled {
   background: transparent;
   font-size: 20px;
   line-height: 1;
+}
+
+/* Semantic mark: a discreet underline, never a background, which is the language of Highlight. */
+.nectrix-knowledge-occurrence {
+  border-bottom: 1px solid #93a689;
+  cursor: pointer;
+}
+
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 20px;
+  overflow-y: auto;
+  color: #292821;
+  background: #f3efe6;
+  border-left: 1px solid #d6cfc2;
+}
+
+.inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inspector-kind {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #6f7265;
+}
+
+.inspector-close {
+  border: 0;
+  padding: 0 4px;
+  color: inherit;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.inspector-name {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.inspector-status {
+  margin: 0;
+  font-size: 12px;
+  color: #6f7265;
+}
+
+.inspector-fields {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.inspector-fields dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6f7265;
+}
+
+.inspector-fields dd {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.inspector-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #6b5310;
+  background: #f4e8c4;
+}
+
+.inspector-occurrences h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6f7265;
+}
+
+.inspector-occurrences ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.inspector-occurrences button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  border: 1px solid #ded7c9;
+  border-radius: 9px;
+  color: inherit;
+  background: #fbf8f1;
+}
+
+.inspector-occurrences button:hover {
+  border-color: #bcb3a1;
+}
+
+.inspector-occurrences .occurrence-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.inspector-occurrences small {
+  color: #7c7f72;
+  font-size: 11px;
+}
+
+.inspector-lifecycle,
+.inspector-secondary {
+  align-self: flex-start;
+  padding: 8px 14px;
+  border: 1px solid #bcb3a1;
+  border-radius: 9px;
+  color: inherit;
+  background: #fbf8f1;
+}
+
+.inspector .muted {
+  color: #8a8d80;
+}
+
+.occurrence-open {
+  padding: 5px 10px;
+  border: 1px solid #b6c3ae;
+  border-radius: 7px;
+  color: #2f3a2b;
+  background: #dfe8d9;
+  font-size: 13px;
 }
 
 .clipboard-warning {
@@ -503,8 +655,14 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
-  .app-frame {
+  .app-frame,
+  .app-frame.with-inspector {
     grid-template-columns: 1fr;
+  }
+
+  .inspector {
+    border-left: 0;
+    border-top: 1px solid #d6cfc2;
   }
 
   .sidebar {

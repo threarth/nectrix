@@ -8,11 +8,17 @@
     ApiError,
     createDocument,
     getDocument,
+    getKnowledgeObject,
     listDocuments,
     saveDocument,
+    setEntityTypeArchived,
+    setKnowledgeObjectArchived,
     type DocumentRecord,
     type DocumentSummary,
+    type KnowledgeObjectDetail,
+    type KnowledgeOccurrenceView,
   } from './lib/api'
+  import KnowledgeInspector from './components/KnowledgeInspector.svelte'
   import { collectOccurrences, deriveOccurrenceCreates, type PendingKnowledgeObject } from './lib/occurrences'
 
   let documents = $state<DocumentSummary[]>([])
@@ -28,6 +34,8 @@
 
   /** KnowledgeObject created in this session and not yet persisted, by knowledgeObjectId. */
   let pendingObjects = new Map<string, PendingKnowledgeObject>()
+  let inspector = $state<KnowledgeObjectDetail | null>(null)
+  let inspectorBusy = $state(false)
   let sidebarRename = $state<{ id: string; title: string } | null>(null)
   let sidebarRenameInput = $state<HTMLInputElement | undefined>(undefined)
   let titleInput = $state<HTMLTextAreaElement | undefined>(undefined)
@@ -121,6 +129,70 @@
     dirty = true
   }
 
+  /**
+   * The inspector always shows the discriminator recorded in the database, never the one guessed
+   * from the mark, so a manipulated mark cannot open the wrong inspector.
+   */
+  async function openInspector(knowledgeObjectId: string): Promise<void> {
+    inspectorBusy = true
+    error = ''
+    try {
+      inspector = await getKnowledgeObject(knowledgeObjectId)
+    } catch (cause) {
+      showError(cause)
+    } finally {
+      inspectorBusy = false
+    }
+  }
+
+  async function toggleInspectorArchived(): Promise<void> {
+    const object = inspector
+    if (!object || inspectorBusy) return
+    await withInspectorBusy(async () => {
+      inspector = await setKnowledgeObjectArchived(object.id, object.status !== 'archived')
+    })
+  }
+
+  async function toggleInspectorEntityTypeArchived(): Promise<void> {
+    const object = inspector
+    const entityType = object?.entityType
+    if (!object || !entityType || inspectorBusy) return
+    await withInspectorBusy(async () => {
+      await setEntityTypeArchived(entityType.id, entityType.status !== 'archived')
+      inspector = await getKnowledgeObject(object.id)
+    })
+  }
+
+  async function withInspectorBusy(operation: () => Promise<void>): Promise<void> {
+    inspectorBusy = true
+    error = ''
+    try {
+      await operation()
+    } catch (cause) {
+      showError(cause)
+    } finally {
+      inspectorBusy = false
+    }
+  }
+
+  /** Opens the Document owning the occurrence and brings its mark into view. */
+  async function openOccurrence(occurrence: KnowledgeOccurrenceView): Promise<void> {
+    if (occurrence.documentId !== selected?.id) {
+      await openDocument(occurrence.documentId)
+    }
+    await tick()
+    if (!scrollToOccurrence(occurrence.id)) {
+      await new Promise((resolve) => window.requestAnimationFrame(resolve))
+      scrollToOccurrence(occurrence.id)
+    }
+  }
+
+  function scrollToOccurrence(occurrenceId: string): boolean {
+    const element = window.document.querySelector(`.tiptap [data-occurrence-id="${occurrenceId}"]`)
+    element?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    return element !== null
+  }
+
   async function beginSidebarRename(document: DocumentSummary): Promise<void> {
     sidebarRename = {
       id: document.id,
@@ -196,7 +268,7 @@
   <meta name="description" content="Nectrix, documenti per lo studio e la conoscenza personale" />
 </svelte:head>
 
-<div class="app-frame">
+<div class="app-frame" class:with-inspector={inspector !== null}>
   <aside class="sidebar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">N</span>
@@ -287,6 +359,7 @@
           initialContent={draftJson}
           onChange={changeContent}
           onObjectCreate={addPendingObject}
+          onOpenInspector={(knowledgeObjectId) => void openInspector(knowledgeObjectId)}
         />
       {/key}
     {:else if !loading}
@@ -298,4 +371,15 @@
       </section>
     {/if}
   </main>
+
+  {#if inspector}
+    <KnowledgeInspector
+      object={inspector}
+      busy={inspectorBusy}
+      onClose={() => (inspector = null)}
+      onToggleArchived={() => void toggleInspectorArchived()}
+      onToggleEntityTypeArchived={() => void toggleInspectorEntityTypeArchived()}
+      onOpenOccurrence={(occurrence) => void openOccurrence(occurrence)}
+    />
+  {/if}
 </div>

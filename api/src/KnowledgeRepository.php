@@ -23,13 +23,13 @@ final class KnowledgeRepository
     /** @return list<array<string, mixed>> */
     public function entityTypes(): array
     {
-        return $this->pdo->query('SELECT id, name, description FROM entity_types ORDER BY name COLLATE NOCASE')->fetchAll();
+        return $this->pdo->query('SELECT id, name, description, status FROM entity_types ORDER BY name COLLATE NOCASE')->fetchAll();
     }
 
     /** @return array<string, mixed> */
     public function createEntityType(string $name): array
     {
-        $existing = $this->pdo->prepare('SELECT id, name, description FROM entity_types WHERE name = :name COLLATE NOCASE');
+        $existing = $this->pdo->prepare('SELECT id, name, description, status FROM entity_types WHERE name = :name COLLATE NOCASE');
         $existing->execute(['name' => $name]);
         $row = $existing->fetch();
         if ($row !== false) return $row;
@@ -37,7 +37,7 @@ final class KnowledgeRepository
         $now = Clock::now();
         $statement = $this->pdo->prepare('INSERT INTO entity_types (id, name, created_at, updated_at) VALUES (:id, :name, :created, :updated)');
         $statement->execute(['id' => $id, 'name' => $name, 'created' => $now, 'updated' => $now]);
-        return ['id' => $id, 'name' => $name, 'description' => null];
+        return ['id' => $id, 'name' => $name, 'description' => null, 'status' => 'active'];
     }
 
     /**
@@ -56,6 +56,99 @@ final class KnowledgeRepository
         $statement = $this->pdo->prepare("SELECT id, object_type FROM knowledge_objects WHERE id IN ({$placeholders})");
         $statement->execute($ids);
         return $statement->fetchAll();
+    }
+
+    /**
+     * Identity, presentation fields and lifecycle of one KnowledgeObject, or null when unknown.
+     * Never returns occurrence text: that lives only in the Document content.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function objectDetail(string $objectId): ?array
+    {
+        $statement = $this->pdo->prepare(
+            "SELECT o.id, o.object_type, c.canonical_name, c.description AS concept_description, c.status AS concept_status, " .
+            "e.name AS entity_name, e.description AS entity_description, e.status AS entity_status, " .
+            "t.id AS entity_type_id, t.name AS entity_type_name, t.status AS entity_type_status " .
+            "FROM knowledge_objects o " .
+            "LEFT JOIN concepts c ON c.id = o.id " .
+            "LEFT JOIN entities e ON e.id = o.id " .
+            "LEFT JOIN entity_types t ON t.id = e.entity_type_id " .
+            "WHERE o.id = :id"
+        );
+        $statement->execute(['id' => $objectId]);
+        $row = $statement->fetch();
+        return $row === false ? null : $row;
+    }
+
+    /**
+     * Occurrence records of a KnowledgeObject with the content of the owning Document, so the
+     * caller can extract the current text instead of reading a stale copy.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function objectOccurrences(string $objectId): array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT k.id, k.document_id, k.status, d.title AS document_title, d.document_json ' .
+            'FROM knowledge_occurrences k JOIN documents d ON d.id = k.document_id ' .
+            'WHERE k.knowledge_object_id = :id ORDER BY d.updated_at DESC, k.created_at'
+        );
+        $statement->execute(['id' => $objectId]);
+        return $statement->fetchAll();
+    }
+
+    /** Archives a Concept or an Entity. Nothing is deleted and no occurrence changes state. */
+    public function archiveObject(string $objectId, string $type): void
+    {
+        if ($type === 'concept') {
+            $this->setConceptStatus($objectId, 'archived');
+            return;
+        }
+        $this->setEntityStatus($objectId, 'archived');
+    }
+
+    /**
+     * Restores an archived KnowledgeObject. A Concept comes back `active` only if it still has an
+     * active occurrence, otherwise it comes back `orphan`.
+     */
+    public function restoreObject(string $objectId, string $type): void
+    {
+        if ($type === 'entity') {
+            $this->setEntityStatus($objectId, 'active');
+            return;
+        }
+        $this->setConceptStatus($objectId, $this->activeOccurrenceCount($objectId) > 0 ? 'active' : 'orphan');
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findEntityType(string $entityTypeId): ?array
+    {
+        $statement = $this->pdo->prepare('SELECT id, name, description, status FROM entity_types WHERE id = :id');
+        $statement->execute(['id' => $entityTypeId]);
+        $row = $statement->fetch();
+        return $row === false ? null : $row;
+    }
+
+    public function setEntityTypeStatus(string $entityTypeId, string $status): void
+    {
+        $this->pdo->prepare('UPDATE entity_types SET status = :status, updated_at = :updated WHERE id = :id')
+            ->execute(['status' => $status, 'updated' => Clock::now(), 'id' => $entityTypeId]);
+    }
+
+    private function activeOccurrenceCount(string $objectId): int
+    {
+        $statement = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM knowledge_occurrences WHERE knowledge_object_id = :id AND status = 'active'"
+        );
+        $statement->execute(['id' => $objectId]);
+        return (int) $statement->fetchColumn();
+    }
+
+    private function setEntityStatus(string $objectId, string $status): void
+    {
+        $this->pdo->prepare('UPDATE entities SET status = :status WHERE id = :id')
+            ->execute(['status' => $status, 'id' => $objectId]);
     }
 
     /**
@@ -196,6 +289,10 @@ final class KnowledgeRepository
         if (!is_string($entityTypeId)) {
             throw new ApiException(422, 'entity_type_required', 'Una Entity richiede EntityType.');
         }
+        $entityType = $this->findEntityType($entityTypeId);
+        if ($entityType !== null && $entityType['status'] === 'archived') {
+            throw new ApiException(422, 'entity_type_archived', 'L’EntityType è archiviato: ripristinalo prima di creare nuove Entity.');
+        }
         $this->pdo->prepare('INSERT INTO entities (id, entity_type_id, name) VALUES (:id, :entity_type_id, :name)')
             ->execute(['id' => $objectId, 'entity_type_id' => $entityTypeId, 'name' => $name]);
     }
@@ -271,11 +368,7 @@ final class KnowledgeRepository
             $current = $this->pdo->prepare('SELECT status FROM concepts WHERE id = :id');
             $current->execute(['id' => $objectId]);
             $status = $current->fetchColumn();
-            $active = $this->pdo->prepare(
-                "SELECT COUNT(*) FROM knowledge_occurrences WHERE knowledge_object_id = :id AND status = 'active'"
-            );
-            $active->execute(['id' => $objectId]);
-            $count = (int) $active->fetchColumn();
+            $count = $this->activeOccurrenceCount($objectId);
             if ($status === 'active' && $count === 0) {
                 $this->setConceptStatus($objectId, 'orphan');
             }
