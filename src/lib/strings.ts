@@ -102,6 +102,14 @@ export const inspectorStrings = {
   } as Record<string, string>,
 
   description: { label: 'Descrizione', empty: 'Nessuna descrizione.' },
+  edit: {
+    label: 'Modifica',
+    description: 'Cambia nome e descrizione. Occurrence, alias e identificatori restano invariati',
+    nameLabel: 'Nome',
+    descriptionLabel: 'Descrizione',
+    save: 'Salva',
+    cancel: 'Annulla',
+  },
   entityType: { label: 'EntityType', archived: 'archiviato' },
 
   occurrences: {

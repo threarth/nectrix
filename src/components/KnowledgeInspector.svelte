@@ -23,6 +23,7 @@
     onRemoveAlias,
     onAddIdentifier,
     onRemoveIdentifier,
+    onRename,
   }: {
     object: KnowledgeObjectDetail
     busy?: boolean
@@ -36,7 +37,25 @@
     onRemoveAlias: (aliasId: string) => void
     onAddIdentifier: (input: EntityIdentifierInput) => void
     onRemoveIdentifier: (identifierId: string) => void
+    onRename: (name: string, description: string | null) => void
   } = $props()
+
+  function startEditing(): void {
+    draftName = object.name
+    draftDescription = object.description ?? ''
+    editing = true
+  }
+
+  function confirmEditing(): void {
+    const name = draftName.trim()
+    if (name === '' || busy) return
+    onRename(name, draftDescription.trim() === '' ? null : draftDescription.trim())
+    editing = false
+  }
+
+  let editing = $state(false)
+  let draftName = $state('')
+  let draftDescription = $state('')
 
   const archived = $derived(object.status === 'archived')
   const lifecycleAction = $derived(archived ? inspectorStrings.restore : inspectorStrings.archive)
@@ -54,10 +73,44 @@
     >{inspectorStrings.close.label}</button>
   </header>
 
-  <h2 class="inspector-name">{object.name}</h2>
-  <p class="inspector-status">
-    {inspectorStrings.statusLabel}: {inspectorStrings.objectStatus[object.status] ?? object.status}
-  </p>
+  {#if editing}
+    <form
+      class="inspector-edit"
+      onsubmit={(event) => {
+        event.preventDefault()
+        confirmEditing()
+      }}
+    >
+      <label class="dialog-field">
+        {inspectorStrings.edit.nameLabel}
+        <input bind:value={draftName} />
+      </label>
+      <label class="dialog-field">
+        {inspectorStrings.edit.descriptionLabel}
+        <textarea bind:value={draftDescription} rows="3"></textarea>
+      </label>
+      <div class="inspector-edit-actions">
+        <button type="button" class="dialog-cancel" onclick={() => (editing = false)}>
+          {inspectorStrings.edit.cancel}
+        </button>
+        <button type="submit" class="dialog-confirm" disabled={draftName.trim() === '' || busy}>
+          {inspectorStrings.edit.save}
+        </button>
+      </div>
+    </form>
+  {:else}
+    <h2 class="inspector-name">{object.name}</h2>
+    <p class="inspector-status">
+      {inspectorStrings.statusLabel}: {inspectorStrings.objectStatus[object.status] ?? object.status}
+      <button
+        type="button"
+        class="inspector-edit-open"
+        disabled={busy}
+        title={inspectorStrings.edit.description}
+        onclick={startEditing}
+      >{inspectorStrings.edit.label}</button>
+    </p>
+  {/if}
 
   {#if object.objectType === 'concept'}
     <ConceptInspector {object} {busy} {onAddAlias} {onRemoveAlias} />

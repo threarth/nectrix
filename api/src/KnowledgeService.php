@@ -14,6 +14,7 @@ final class KnowledgeService
     private const MAX_QUERY_LENGTH = 200;
     private const MAX_JSON_DEPTH = 64;
     private const MAX_TEXT_LENGTH = 200;
+    private const MAX_DESCRIPTION_LENGTH = 4000;
 
     public function __construct(
         private readonly KnowledgeRepository $repository,
@@ -165,6 +166,32 @@ final class KnowledgeService
             throw new ApiException(422, 'invalid_request', "Il campo {$field} è obbligatorio e non può superare i limiti.");
         }
         return trim($value);
+    }
+
+    /**
+     * Updates the presentation fields of a Concept or an Entity. Nothing else moves: occurrence,
+     * alias, identificatori e stato restano quelli di prima.
+     *
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    public function updateObject(string $objectId, array $input): array
+    {
+        $object = $this->requireObject($objectId);
+        foreach (array_keys($input) as $key) {
+            if (!in_array($key, ['name', 'description'], true)) {
+                throw new ApiException(422, 'invalid_request', "Campo non supportato: {$key}.");
+            }
+        }
+        $name = $this->text($input['name'] ?? null, 'name');
+        $description = $input['description'] ?? null;
+        if ($description !== null && (!is_string($description) || Text::length($description) > self::MAX_DESCRIPTION_LENGTH)) {
+            throw new ApiException(422, 'invalid_request', 'La descrizione supera il limite consentito.');
+        }
+        $trimmed = is_string($description) && trim($description) !== '' ? trim($description) : null;
+
+        $this->repository->updateObject($objectId, (string) $object['object_type'], $name, $trimmed);
+        return $this->object($objectId);
     }
 
     /** @return array<string, mixed> */

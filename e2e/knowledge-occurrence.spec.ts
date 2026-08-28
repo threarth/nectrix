@@ -585,3 +585,29 @@ test('Concept ed Entity si distinguono a colpo d’occhio', async ({ page }) => 
   expect(entity.background).not.toBe('rgba(0, 0, 0, 0)')
   expect(concept.background).not.toBe(entity.background)
 })
+
+test('CRUD: rinominare un Concept dall’inspector non tocca occurrence e alias', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Bozza', 'Nome provvisorio')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Concept' }).click()
+  const inspector = page.locator('.inspector')
+  await page.getByLabel('Aggiungi alias').fill('Alias stabile')
+  await inspector.getByRole('button', { name: 'Aggiungi alias' }).click()
+  await expect(inspector.locator('.inspector-list li')).toContainText('Alias stabile')
+
+  await inspector.getByRole('button', { name: 'Modifica' }).click()
+  await inspector.getByLabel('Nome').fill('Nome definitivo')
+  await inspector.getByLabel('Descrizione').fill('Spiegazione breve.')
+  await inspector.getByRole('button', { name: 'Salva', exact: true }).click()
+
+  await expect(inspector.locator('.inspector-name')).toHaveText('Nome definitivo')
+  await expect(inspector.locator('.inspector-fields dd').first()).toHaveText('Spiegazione breve.')
+  await expect(inspector.locator('.inspector-occurrences li')).toHaveCount(1)
+  await expect(inspector.locator('.inspector-list li')).toContainText('Alias stabile')
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Bozza')
+})

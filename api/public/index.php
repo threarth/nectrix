@@ -97,6 +97,9 @@ try {
     if ($method === 'GET' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
         respond(200, ['object' => $knowledge->object(rawurldecode($matches[1]))]);
     }
+    if ($method === 'PUT' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, ['object' => $knowledge->updateObject(rawurldecode($matches[1]), requestBody())]);
+    }
     if ($method === 'POST' && preg_match('#^/api/knowledge-objects/([^/]+)/aliases$#', (string) $path, $matches) === 1) {
         respond(201, ['object' => $knowledge->addAlias(rawurldecode($matches[1]), requestBody())]);
     }

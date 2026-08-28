@@ -221,6 +221,22 @@ final class KnowledgeRepository
         return $statement->fetchAll();
     }
 
+    /**
+     * Renames a KnowledgeObject and rewrites its description. Identity, occurrence, alias and
+     * identifier restano invariati: cambia soltanto come lo chiami.
+     */
+    public function updateObject(string $objectId, string $type, string $name, ?string $description): void
+    {
+        $table = $type === 'concept' ? 'concepts' : 'entities';
+        $column = $type === 'concept' ? 'canonical_name' : 'name';
+        $statement = $this->pdo->prepare(
+            "UPDATE {$table} SET {$column} = :name, description = :description WHERE id = :id"
+        );
+        $statement->execute(['name' => $name, 'description' => $description, 'id' => $objectId]);
+        $this->pdo->prepare('UPDATE knowledge_objects SET updated_at = :updated WHERE id = :id')
+            ->execute(['updated' => Clock::now(), 'id' => $objectId]);
+    }
+
     /** Archives a Concept or an Entity. Nothing is deleted and no occurrence changes state. */
     public function archiveObject(string $objectId, string $type): void
     {

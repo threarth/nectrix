@@ -14,6 +14,7 @@
     setDocumentLifecycle,
     setEntityTypeArchived,
     setKnowledgeObjectArchived,
+    updateKnowledgeObject,
     addConceptAlias,
     addEntityIdentifier,
     removeConceptAlias,
@@ -261,6 +262,14 @@
       const added = await addEntityIdentifier(object.id, input)
       inspector = added.object
       duplicateCandidates = added.duplicateCandidates
+    })
+  }
+
+  async function renameObject(name: string, description: string | null): Promise<void> {
+    const object = inspector
+    if (!object) return
+    await withInspectorBusy(async () => {
+      inspector = await updateKnowledgeObject(object.id, { name, description })
     })
   }
 
@@ -539,6 +548,7 @@
       onRemoveAlias={(aliasId) => void removeAlias(aliasId)}
       onAddIdentifier={(input) => void addIdentifier(input)}
       onRemoveIdentifier={(identifierId) => void removeIdentifier(identifierId)}
+      onRename={(name, description) => void renameObject(name, description)}
       onToggleArchived={() => void toggleInspectorArchived()}
       onToggleEntityTypeArchived={() => void toggleInspectorEntityTypeArchived()}
       onOpenOccurrence={(occurrence) => void openOccurrence(occurrence)}

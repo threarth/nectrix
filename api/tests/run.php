@@ -1302,6 +1302,57 @@ $suite->test('INV-EID-05: lo scheme è una chiave lowercase stabile con policy v
     assertThrows(static fn () => $normalizer->assertScheme('2ticker'), 'Uno scheme non stabile deve essere rifiutato.');
 });
 
+$suite->test('rinominare un KnowledgeObject non tocca occurrence, alias e identificatori', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $conceptId = conceptWithOccurrence($service, 'Nome iniziale');
+    $knowledge->addAlias($conceptId, ['alias' => 'Alias stabile']);
+    $before = $knowledge->object($conceptId);
+
+    $updated = $knowledge->updateObject($conceptId, ['name' => 'Nome corretto', 'description' => '  Una descrizione  ']);
+
+    assertSameValue('Nome corretto', $updated['name']);
+    assertSameValue('Una descrizione', $updated['description']);
+    assertSameValue($before['occurrences'], $updated['occurrences']);
+    assertSameValue($before['aliases'], $updated['aliases']);
+    assertSameValue($before['status'], $updated['status']);
+
+    $cleared = $knowledge->updateObject($conceptId, ['name' => 'Nome corretto', 'description' => '   ']);
+    assertSameValue(null, $cleared['description']);
+});
+
+$suite->test('rinominare una Entity non cambia EntityType ne identificatori', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityId = entityWithOccurrence($service, $knowledge, 'Entity da rinominare', 'Tipo stabile');
+    $knowledge->addIdentifier($entityId, ['scheme' => 'lei', 'value' => 'X1']);
+
+    $updated = $knowledge->updateObject($entityId, ['name' => 'Entity rinominata']);
+
+    assertSameValue('Entity rinominata', $updated['name']);
+    assertSameValue('Tipo stabile', $updated['entityType']['name']);
+    assertSameValue(1, count($updated['identifiers']));
+});
+
+$suite->test('un nome vuoto o un campo non previsto vengono rifiutati', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $conceptId = conceptWithOccurrence($service, 'Nome valido');
+
+    try {
+        $knowledge->updateObject($conceptId, ['name' => '   ']);
+        throw new RuntimeException('Nome vuoto accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_request', $error->errorCode);
+    }
+
+    try {
+        $knowledge->updateObject($conceptId, ['name' => 'Valido', 'status' => 'archived']);
+        throw new RuntimeException('Campo non previsto accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_request', $error->errorCode);
+    }
+
+    assertSameValue('Nome valido', $knowledge->object($conceptId)['name']);
+});
+
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {
     assertSameValue([], $pdo->query('PRAGMA foreign_key_check')->fetchAll());
     assertSameValue('ok', $pdo->query('PRAGMA integrity_check')->fetchColumn());

@@ -584,6 +584,40 @@ button:disabled {
   font-size: 11px;
 }
 
+.inspector-edit {
+  display: grid;
+  gap: 10px;
+}
+
+.inspector-edit textarea {
+  padding: 8px 10px;
+  border: 1px solid #cfc7b8;
+  border-radius: 9px;
+  background: #fff;
+  font: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: #292821;
+  resize: vertical;
+}
+
+.inspector-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inspector-edit-open {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid #cfc7b8;
+  border-radius: 999px;
+  color: #4a4d43;
+  background: transparent;
+  font-size: 11px;
+}
+
 .inspector-list h3 {
   margin: 0 0 8px;
   font-size: 12px;

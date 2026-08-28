@@ -246,3 +246,15 @@ export async function removeEntityIdentifier(identifierId: string): Promise<Know
   )
   return payload.object
 }
+
+/** Renames a Concept or an Entity and rewrites its description. Nothing else changes. */
+export async function updateKnowledgeObject(
+  id: string,
+  input: { name: string; description: string | null },
+): Promise<KnowledgeObjectDetail> {
+  const payload = await request<{ object: KnowledgeObjectDetail }>(
+    `/api/knowledge-objects/${encodeURIComponent(id)}`,
+    { method: 'PUT', body: JSON.stringify(input) },
+  )
+  return payload.object
+}
