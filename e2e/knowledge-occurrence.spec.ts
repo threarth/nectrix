@@ -469,3 +469,57 @@ test('la barra dei comandi compare sulla selezione e crea il Concept senza passa
   await page.reload()
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
 })
+
+/** Computed background of the first occurrence and of the element painted behind it. */
+async function occurrenceColours(page: Page): Promise<{ background: string; behind: string | null }> {
+  return page.locator('.tiptap .nectrix-knowledge-occurrence').first().evaluate((node) => {
+    const parent = node.parentElement
+    return {
+      background: window.getComputedStyle(node).backgroundColor,
+      behind: parent === null ? null : window.getComputedStyle(parent).backgroundColor,
+    }
+  })
+}
+
+test('un Concept si vede sempre e copre l’evidenziazione sottostante', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  const editor = page.locator('.tiptap')
+  await editor.click()
+  await expect(editor).toBeFocused()
+  await page.keyboard.type('Testo evidenziato')
+  await expect(editor).toHaveText('Testo evidenziato')
+
+  await editor.press('Control+A')
+  await toolbarButton(page, 'Evidenzia').click()
+  await expect(editor.locator('mark.nectrix-highlight')).toHaveCount(1)
+
+  await editor.press('Control+A')
+  await toolbarButton(page, 'Crea Concept').click()
+  const dialog = page.getByRole('dialog', { name: 'Nuovo Concept' })
+  await dialog.getByLabel('Nome del Concept').fill('Visibile')
+  await dialog.getByRole('button', { name: 'Crea Concept' }).click()
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveCount(1)
+
+  const colours = await occurrenceColours(page)
+  expect(colours.background).not.toBe('rgba(0, 0, 0, 0)')
+  expect(colours.behind).not.toBe('rgba(0, 0, 0, 0)')
+  expect(colours.background).not.toBe(colours.behind)
+})
+
+test('Concept ed Entity si distinguono a colpo d’occhio', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createConceptFrom(page, 'Idea', 'Idea')
+  const concept = await occurrenceColours(page)
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  await createEntityFrom(page, 'Cosa', 'Cosa specifica', 'Oggetto')
+  const entity = await occurrenceColours(page)
+
+  expect(concept.background).not.toBe('rgba(0, 0, 0, 0)')
+  expect(entity.background).not.toBe('rgba(0, 0, 0, 0)')
+  expect(concept.background).not.toBe(entity.background)
+})

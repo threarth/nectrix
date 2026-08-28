@@ -272,10 +272,29 @@ button:disabled {
   background: #d2ddca;
 }
 
-/* Semantic mark: a discreet underline, never a background, which is the language of Highlight. */
+/*
+ * A Concept or an Entity is always visible: it carries its own background, which covers any
+ * Highlight underneath. Neither padding nor rounded corners, because one occurrence can span
+ * several text nodes and every seam would show.
+ */
 .nectrix-knowledge-occurrence {
-  border-bottom: 1px solid #93a689;
+  background-color: #dfe9d9;
+  box-shadow: inset 0 -1px 0 #7c9471;
   cursor: pointer;
+}
+
+.nectrix-knowledge-occurrence[data-object-type="entity"] {
+  background-color: #dde4ef;
+  box-shadow: inset 0 -1px 0 #6f86a8;
+}
+
+/*
+ * Il mark Highlight e disegnato fuori dall'occurrence, quindi il fondo dell'occurrence lo copre
+ * gia. Questa regola vale per il caso inverso: l'evidenziazione non deve riemergere se un giorno
+ * l'ordine dei mark cambiasse. Serve !important perche il colore dell'Highlight e inline.
+ */
+.nectrix-knowledge-occurrence mark.nectrix-highlight {
+  background-color: transparent !important;
 }
 
 .dialog-backdrop {
