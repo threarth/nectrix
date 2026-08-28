@@ -885,6 +885,10 @@ button:disabled {
   box-shadow: 0 8px 24px rgb(57 52 41 / 18%);
 }
 
+.highlight-popover.above {
+  transform: translateY(-100%);
+}
+
 .highlight-popover-label {
   font-size: 12px;
   font-weight: 650;

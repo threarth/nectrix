@@ -28,7 +28,12 @@
   } from './lib/api'
   import KnowledgeInspector from './components/KnowledgeInspector.svelte'
   import { documentStrings } from './lib/strings'
-  import { collectOccurrences, deriveOccurrenceCreates, type PendingKnowledgeObject } from './lib/occurrences'
+  import {
+    collectOccurrences,
+    deriveOccurrenceCreates,
+    collectOccurrenceTexts,
+    type PendingKnowledgeObject,
+  } from './lib/occurrences'
 
   let documents = $state<DocumentSummary[]>([])
   let scope = $state<DocumentStatus>('active')
@@ -81,6 +86,25 @@
   }
 
   const readOnly = $derived(selected !== null && selected.status !== 'active')
+
+  /**
+   * The API reads the occurrence text from the last saved revision. For the Document open in the
+   * editor the draft is what the user is looking at, so the panel shows that instead of a text
+   * that would look like a change gone lost.
+   */
+  const inspectorObject = $derived.by(() => {
+    const object = inspector
+    const documentId = selected?.id
+    const draft = draftJson
+    if (object === null || documentId === undefined || draft === null) return object
+    const texts = collectOccurrenceTexts(draft)
+    return {
+      ...object,
+      occurrences: object.occurrences.map((occurrence) => occurrence.documentId === documentId
+        ? { ...occurrence, text: texts.get(occurrence.id) ?? '' }
+        : occurrence),
+    }
+  })
 
   /** Lifecycle commands available from the current state, in the order they are offered. */
   function lifecycleActions(status: DocumentStatus): { command: 'archive' | 'trash' | 'restore'; label: string; description: string }[] {
@@ -143,6 +167,7 @@
       }
       applyDocument(saved)
       documents = [saved, ...documents.filter((document) => document.id !== saved.id)]
+      await refreshInspector()
     } catch (cause) {
       showError(cause)
     } finally {
@@ -244,6 +269,20 @@
       inspector = await removeEntityIdentifier(identifierId)
       duplicateCandidates = []
     })
+  }
+
+  /**
+   * Realigns the panel with what was just saved. A failure here must not be reported as a failed
+   * save: the Document is stored, only the panel would stay one step behind.
+   */
+  async function refreshInspector(): Promise<void> {
+    const object = inspector
+    if (object === null) return
+    try {
+      inspector = await getKnowledgeObject(object.id)
+    } catch (cause) {
+      console.warn('Aggiornamento del pannello non riuscito dopo il salvataggio.', cause)
+    }
   }
 
   async function withInspectorBusy(operation: () => Promise<void>): Promise<void> {
@@ -492,7 +531,7 @@
 
   {#if inspector}
     <KnowledgeInspector
-      object={inspector}
+      object={inspectorObject ?? inspector}
       busy={inspectorBusy}
       {duplicateCandidates}
       onClose={() => (inspector = null)}

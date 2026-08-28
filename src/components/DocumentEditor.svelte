@@ -69,6 +69,7 @@
     color: HighlightColor | null
     occurrence: OccurrenceAttributes | null
     selectionActive: boolean
+    above: boolean
     left: number
     top: number
   } | null>(null)
@@ -81,6 +82,9 @@
 
   /** Distance kept from the toolbar and from the marked line, so nothing overlaps. */
   const POPOVER_MARGIN = 8
+
+  /** Room needed above the line to place the popover there instead of over the text below. */
+  const POPOVER_ROOM = 56
 
   /** Range the open dialog will mark, remembered because the dialog takes the focus. */
   let pendingCommand = $state<{ kind: 'concept' | 'entity' | 'attach'; text: string; from: number; to: number } | null>(null)
@@ -253,12 +257,17 @@
     const toolbarBottom = toolbarElement === undefined
       ? 0
       : toolbarElement.getBoundingClientRect().bottom - shell.top
+    // Sopra la riga quando c'è spazio fra toolbar e testo, così non copre le righe successive;
+    // altrimenti sotto. Sopra si posiziona per il proprio bordo inferiore, senza misurarne l'altezza.
+    const lineTop = coordinates.top - shell.top
+    const above = lineTop - POPOVER_MARGIN - toolbarBottom >= POPOVER_ROOM
     editorPopover = {
       color: highlighted ? normalizeHighlightColor(editor.getAttributes('highlight').color) : null,
       occurrence,
       selectionActive,
+      above,
       left: Math.max(POPOVER_MARGIN, Math.min(coordinates.left - shell.left - 84, shell.width - 238)),
-      top: Math.max(toolbarBottom + POPOVER_MARGIN, coordinates.bottom - shell.top + POPOVER_MARGIN),
+      top: above ? lineTop - POPOVER_MARGIN : coordinates.bottom - shell.top + POPOVER_MARGIN,
     }
   }
 
@@ -460,6 +469,7 @@
   {#if editorState.editor && editorPopover}
     <div
       class="highlight-popover"
+      class:above={editorPopover.above}
       role="dialog"
       aria-label={occurrencePopoverStrings.dialogLabel}
       style={`left: ${editorPopover.left}px; top: ${editorPopover.top}px`}

@@ -20,6 +20,44 @@ test('crea una Entity con EntityType da selezione e la conserva dopo save/reload
   await expect(page.locator('.nectrix-knowledge-occurrence')).toHaveText('Rocket Lab')
 })
 
+/** Drags the closing handle of the occurrence to the right, extending its range. */
+async function dragEndHandle(page: Page): Promise<void> {
+  const handle = page.locator('.nectrix-occurrence-handle-end')
+  await expect(handle).toBeVisible()
+  const box = await expect.poll(() => handle.boundingBox()).not.toBeNull().then(() => handle.boundingBox())
+  if (box === null) throw new Error('Maniglia non visibile.')
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 60, box.y + box.height / 2, { steps: 10 })
+  await page.mouse.up()
+}
+
+/**
+ * Document holding the occurrence "Backlog" followed by the unmarked tail " utile", saved.
+ * The tail is typed after the mark, which is not inclusive, so it stays outside the occurrence.
+ */
+async function conceptWithTail(page: Page): Promise<void> {
+  const editor = page.locator('.tiptap')
+  await editor.click()
+  await expect(editor).toBeFocused()
+  await page.keyboard.type('Backlog')
+  await expect(editor).toHaveText('Backlog')
+  await editor.press('Control+A')
+  await toolbarButton(page, 'Crea Concept').click()
+  const dialog = page.getByRole('dialog', { name: 'Nuovo Concept' })
+  await dialog.getByLabel('Nome del Concept').fill('Backlog')
+  await dialog.getByRole('button', { name: 'Crea Concept' }).click()
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
+
+  await editor.press('ArrowRight')
+  await page.keyboard.type(' utile')
+  await expect(editor).toHaveText('Backlog utile')
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
+
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+}
+
 /** Toolbar command, distinguished from the same command offered on the selection. */
 function toolbarButton(page: Page, name: string) {
   return page.getByRole('toolbar').getByRole('button', { name, exact: true })
@@ -370,30 +408,11 @@ test('le maniglie correggono il confine dell’occurrence mantenendo lo stesso I
   await page.goto('/')
   await page.getByRole('button', { name: 'Nuovo documento' }).click()
   const editor = page.locator('.tiptap')
-  await editor.click()
-  await expect(editor).toBeFocused()
-  await page.keyboard.type('Backlog utile')
-  await page.keyboard.press('Home')
-  for (let index = 0; index < 7; index += 1) await page.keyboard.press('Shift+ArrowRight')
-
-  await page.getByLabel('Comandi sul testo selezionato').getByRole('button', { name: 'Crea Concept' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Nuovo Concept' })
-  await dialog.getByLabel('Nome del Concept').fill('Backlog')
-  await dialog.getByRole('button', { name: 'Crea Concept' }).click()
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await conceptWithTail(page)
   const [before] = await occurrenceIds(page)
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
 
   await editor.locator('.nectrix-knowledge-occurrence').click()
-  const handle = page.locator('.nectrix-occurrence-handle-end')
-  await expect(handle).toBeVisible()
-  const box = await handle.boundingBox()
-  if (box === null) throw new Error('Maniglia non visibile.')
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(box.x + 60, box.y + box.height / 2, { steps: 10 })
-  await page.mouse.up()
+  await dragEndHandle(page)
 
   await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog utile')
   expect(await occurrenceIds(page)).toEqual([before])
@@ -403,4 +422,50 @@ test('le maniglie correggono il confine dell’occurrence mantenendo lo stesso I
   await page.reload()
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Backlog utile')
   expect(await occurrenceIds(page)).toEqual([before])
+})
+
+test('il pannello mostra il confine corretto subito dopo il trascinamento, prima del salvataggio', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  const editor = page.locator('.tiptap')
+  await conceptWithTail(page)
+
+  await editor.locator('.nectrix-knowledge-occurrence').click()
+  await dragEndHandle(page)
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog utile')
+
+  await page.getByRole('button', { name: 'Apri Concept' }).click()
+  const occurrence = page.locator('.inspector-occurrences .occurrence-text').first()
+  await expect(occurrence).toHaveText('Backlog utile')
+
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await expect(occurrence).toHaveText('Backlog utile')
+})
+
+test('la barra dei comandi compare sulla selezione e crea il Concept senza passare dalla toolbar', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Nuovo documento' }).click()
+  const editor = page.locator('.tiptap')
+  await editor.click()
+  await expect(editor).toBeFocused()
+  await page.keyboard.type('Il metodo scientifico')
+  await expect(editor).toHaveText('Il metodo scientifico')
+
+  await editor.locator('p').dblclick()
+  const bar = page.getByLabel('Comandi sul testo selezionato')
+  await expect(bar.getByRole('button', { name: 'Crea Concept' })).toBeVisible()
+  await expect(bar.getByRole('button', { name: 'Crea Entity' })).toBeVisible()
+  await expect(bar.getByRole('button', { name: 'Associa esistente' })).toBeVisible()
+
+  await bar.getByRole('button', { name: 'Crea Concept' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Nuovo Concept' })
+  await dialog.getByLabel('Nome del Concept').fill('Scienza')
+  await dialog.getByRole('button', { name: 'Crea Concept' }).click()
+
+  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.reload()
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
 })

@@ -7,6 +7,7 @@ import {
   collectOccurrences,
   deriveOccurrenceCreates,
   occurrenceFingerprint,
+  collectOccurrenceTexts,
   parseCutClipboardPayload,
   planOccurrenceIdRewrite,
   validateOccurrences,
@@ -232,5 +233,22 @@ describe('policy prudente di cut/paste', () => {
     expect(mapping.size).toBe(2)
     expect(mapping.get(OCCURRENCE_A)).toBe(uuid('f001'))
     expect(mapping.get(OCCURRENCE_B)).toBe(uuid('f002'))
+  })
+})
+
+describe('testo corrente di una occurrence', () => {
+  test('unisce i frammenti contigui della stessa occurrence', () => {
+    const document = doc(paragraph(
+      marked('Rocket', OCCURRENCE_A),
+      { type: 'text', marks: [{ type: 'bold' }, { type: 'knowledgeOccurrence', attrs: { occurrenceId: OCCURRENCE_A, knowledgeObjectId: CONCEPT, objectType: 'concept' } }], text: ' Lab' },
+      { type: 'text', text: ' resta fuori' },
+    ))
+
+    expect(collectOccurrenceTexts(document).get(OCCURRENCE_A)).toBe('Rocket Lab')
+  })
+
+  test('non elenca una occurrence il cui mark non è più nel contenuto', () => {
+    const texts = collectOccurrenceTexts(doc(paragraph({ type: 'text', text: 'niente' })))
+    expect(texts.has(OCCURRENCE_A)).toBe(false)
   })
 })

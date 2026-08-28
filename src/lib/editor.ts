@@ -171,9 +171,15 @@ const OccurrenceHandles = Extension.create({
           decorations(state) {
             const range = editor.isEditable ? handledOccurrence(state) : null
             if (range === null) return null
+            // La key rende il widget riconoscibile fra un ridisegno e l'altro: senza, l'elemento
+            // verrebbe ricreato a ogni transazione e sparirebbe da sotto il puntatore.
             return DecorationSet.create(state.doc, [
-              Decoration.widget(range.from, (view) => boundaryHandle(view, 'start'), { side: -1, stopEvent: () => true }),
-              Decoration.widget(range.to, (view) => boundaryHandle(view, 'end'), { side: 1, stopEvent: () => true }),
+              Decoration.widget(range.from, (view) => boundaryHandle(view, 'start'), {
+                side: -1, key: 'occurrence-handle-start', stopEvent: () => true,
+              }),
+              Decoration.widget(range.to, (view) => boundaryHandle(view, 'end'), {
+                side: 1, key: 'occurrence-handle-end', stopEvent: () => true,
+              }),
             ])
           },
         },

@@ -119,6 +119,23 @@ export function validateOccurrences(root: JSONContent): OccurrenceProblem[] {
   return scanOccurrences(root).problems
 }
 
+/**
+ * Current text of every occurrence in the content, read live in a single walk. Mirrors what the API
+ * extracts from the saved revision, so an editor draft can show the text it has instead of the
+ * persisted one, without re-reading the document once per occurrence.
+ */
+export function collectOccurrenceTexts(root: JSONContent): Map<string, string> {
+  const texts = new Map<string, string>()
+  visitInlineContainers(root, (children) => {
+    for (const child of children) {
+      const id = occurrenceAttributesOf(child)?.occurrenceId
+      if (id === undefined) continue
+      texts.set(id, (texts.get(id) ?? '') + (child.text ?? ''))
+    }
+  })
+  return texts
+}
+
 /** Occurrence runs of a clipboard slice, one entry per contiguous run, in slice order. */
 export function collectSliceOccurrenceRuns(slice: Slice): OccurrenceAttributes[] {
   const runs: OccurrenceAttributes[] = []
