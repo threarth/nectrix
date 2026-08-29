@@ -91,10 +91,10 @@ export const palettePanelStrings = {
 export const inspectorStrings = {
   panelLabel: 'Dettaglio del KnowledgeObject',
   remove: {
-    label: 'Elimina',
-    description: 'Elimina Concept o Entity, le sue occurrence e i mark nel testo: le parole restano',
-    confirm: (name: string, occurrences: number): string =>
-      `Elimino «${name}»?${occurrences === 0 ? '' : ` Toglie ${occurrences === 1 ? 'una marcatura' : `${occurrences} marcature`} dal testo; le parole restano.`}`,
+    label: 'Cestina',
+    confirmLabel: 'Confermi?',
+    description: 'Sposta nel cestino: le marcature restano nel testo e l’oggetto può tornare',
+    confirm: 'Premi di nuovo per spostare nel cestino',
   },
   kind: (objectType: 'concept' | 'entity'): string => (objectType === 'concept' ? 'Concept' : 'Entity'),
   close: { label: '×', ariaLabel: 'Chiudi il pannello', description: 'Chiude il pannello e torna al solo documento' },
@@ -278,8 +278,8 @@ export const contextStrings = {
   },
   move: { label: 'Sposta', description: 'Sposta il contesto selezionato, con tutto il suo ramo, sotto un altro' },
   remove: {
-    label: 'Elimina',
-    description: 'Elimina il contesto e toglie le sue marcature dal testo, senza cambiare una parola',
+    label: 'Cestina',
+    description: 'Sposta il contesto nel cestino: le marcature restano nel testo, pronte a tornare',
     /** Explains the refusal next to the command, before attempting it. */
     blocked: (children: number): string =>
       `Non eliminabile: ha ${children === 1 ? 'un sotto-contesto' : `${children} sotto-contesti`}. ` +
@@ -287,8 +287,8 @@ export const contextStrings = {
     /** What the deletion will take away, said before it happens. */
     impact: (ranges: number): string =>
       ranges === 0
-        ? 'Nessun frammento marcato: elimina solo il contesto.'
-        : `Toglie ${ranges === 1 ? '1 frammento marcato' : `${ranges} frammenti marcati`} dal testo, senza cancellare parole.`,
+        ? 'Nessun frammento marcato: nel cestino resta solo il contesto.'
+        : `Nel cestino con ${ranges === 1 ? '1 frammento marcato' : `${ranges} frammenti marcati`}: il testo non cambia.`,
     confirm: (name: string, ranges: number): string =>
       `Elimino «${name}»?${ranges === 0 ? '' : ` Toglie ${ranges === 1 ? 'una marcatura' : `${ranges} marcature`} dal testo; le parole restano.`}`,
   },
@@ -606,4 +606,30 @@ export const contextCommandStrings = {
   },
   open: { label: 'Apri Context', description: 'Mostra il Context che contiene questo frammento' },
   remove: { label: 'Togli Context', description: 'Toglie questo frammento dal Context, senza toccare il testo' },
+} as const
+
+export const removeButtonStrings = {
+  glyph: '×',
+  armedGlyph: '×?',
+  label: (what: string): string => `Elimina ${what}`,
+  confirmLabel: (what: string): string => `Conferma: elimina ${what}`,
+} as const
+
+export const trashStrings = {
+  panelLabel: 'Cestino della conoscenza',
+  empty: 'Cestino vuoto.',
+  hint: 'Cestinare non tocca il testo: le marcature restano finché non elimini davvero.',
+  restore: { label: 'Ripristina', description: 'Rimette l’oggetto negli elenchi e nelle ricerche' },
+  purge: {
+    label: 'Elimina davvero',
+    description: 'Elimina l’oggetto, le sue occurrence e i mark nel testo: le parole restano',
+    confirm: 'Premi di nuovo per eliminare davvero: le marcature spariscono dal testo',
+  },
+  ranges: (count: number): string => (count === 1 ? '1 frammento marcato' : `${count} frammenti marcati`),
+  kind: (objectType: 'concept' | 'entity' | 'context'): string =>
+    objectType === 'concept' ? 'Concept' : objectType === 'entity' ? 'Entity' : 'Context',
+  trashObject: { description: 'Sposta nel cestino: resta ripristinabile e il testo non cambia' },
+  trashObjectConfirm: 'Premi di nuovo per spostare nel cestino',
+  trashDocument: { description: 'Sposta il documento nel cestino: resta ripristinabile' },
+  trashDocumentConfirm: 'Premi di nuovo per spostare il documento nel cestino',
 } as const

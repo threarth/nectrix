@@ -12,6 +12,9 @@
     assignTag,
     createContext,
     deleteKnowledgeObject,
+    fetchTrash,
+    trashContext,
+    trashKnowledgeObject,
     createTag,
     deleteTag,
     derivedKnowledgeObjects,
@@ -59,6 +62,7 @@
     type EvidenceView,
     type RelationView,
     type StructuredEntity,
+    type TrashContents,
     type Template,
     type Tag,
     type TagSummary,
@@ -74,6 +78,8 @@
   import DerivedObjects from './components/DerivedObjects.svelte'
   import CompareDialog from './components/CompareDialog.svelte'
   import MatrixDialog from './components/MatrixDialog.svelte'
+  import RemoveButton from './components/RemoveButton.svelte'
+  import TrashPanel from './components/TrashPanel.svelte'
   import RelationDialog from './components/RelationDialog.svelte'
   import SearchPanel from './components/SearchPanel.svelte'
   import TemplatePanel from './components/TemplatePanel.svelte'
@@ -81,7 +87,7 @@
   import TagPanel from './components/TagPanel.svelte'
   import KnowledgeInspector from './components/KnowledgeInspector.svelte'
   import { contextPathLabel, orderContexts, type ContextNode } from './lib/contexts'
-  import { compareStrings, contextStrings, documentStrings, matrixStrings, tagStrings } from './lib/strings'
+  import { compareStrings, contextStrings, documentStrings, matrixStrings, tagStrings, trashStrings } from './lib/strings'
   import {
     collectContextOccurrences,
     collectOccurrences,
@@ -124,6 +130,7 @@
 
   /** Grows when a deletion rewrote the open Document: the editor has to take the new content. */
   let editorReloadToken = $state(0)
+  let trash = $state<TrashContents>({ knowledgeObjects: [], contexts: [] })
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined
   /** Grows at every edit: tells whether the draft moved on while a save was in flight. */
   let draftVersion = 0
@@ -165,6 +172,7 @@
       contexts = await listContexts()
       tags = await listTags()
       templates = await listTemplates()
+      trash = await fetchTrash()
       documents = await listDocuments(scope, selectedContextId, contextMode, selectedTagIds)
       if (documents.length > 0) {
         await openDocument(documents[0].id)
@@ -356,24 +364,80 @@
    * moment when the user knows what the note is about.
    */
   /**
-   * Deletes the Concept or the Entity of the inspector. The server rewrites the documents that
-   * carried its marks, so the open one is reloaded: its revision has moved on.
+   * Moves a Concept or an Entity to the trash. Nothing is destroyed: the marks stay in the text and
+   * the object comes back whole from the trash, so the gesture costs nothing to try.
    */
-  async function removeKnowledgeObject(): Promise<void> {
-    const object = inspector
-    if (!object || inspectorBusy) return
-    inspectorBusy = true
+  async function moveObjectToTrash(objectId: string): Promise<void> {
     error = ''
     try {
-      await deleteKnowledgeObject(object.id)
-      inspector = null
-      compareQueue = compareQueue.filter((entry) => entry.id !== object.id)
+      await trashKnowledgeObject(objectId)
+      if (inspector?.id === objectId) inspector = null
+      compareQueue = compareQueue.filter((entry) => entry.id !== objectId)
+      await refreshTrash()
+      await refreshFilters()
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
+  /** Moves a Context to the trash: the ranges stay in the text, ready to come back. */
+  async function moveContextToTrash(contextId: string): Promise<void> {
+    error = ''
+    try {
+      await trashContext(contextId)
+      if (selectedContextId === contextId) selectedContextId = null
+      contexts = await listContexts()
+      await refreshTrash()
+      await refreshFilters()
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
+  /** The Document lifecycle already has a trash: the × uses it, it does not invent a second one. */
+  async function moveDocumentToTrash(documentId: string): Promise<void> {
+    error = ''
+    try {
+      await setDocumentLifecycle(documentId, 'trash')
+      documents = documents.filter((document) => document.id !== documentId)
+      if (selected?.id === documentId) {
+        selected = null
+        draftJson = null
+      }
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
+  async function restoreFromTrash(kind: 'object' | 'context', id: string): Promise<void> {
+    error = ''
+    try {
+      if (kind === 'object') await trashKnowledgeObject(id, false)
+      else {
+        await trashContext(id, false)
+        contexts = await listContexts()
+      }
+      await refreshTrash()
+      await refreshFilters()
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
+  async function purgeFromTrash(kind: 'object' | 'context', id: string): Promise<void> {
+    error = ''
+    try {
+      if (kind === 'object') await deleteKnowledgeObject(id)
+      else await deleteContext(id)
+      await refreshTrash()
       await reloadAfterDeletion()
     } catch (cause) {
       showError(cause)
-    } finally {
-      inspectorBusy = false
     }
+  }
+
+  async function refreshTrash(): Promise<void> {
+    trash = await fetchTrash()
   }
 
   /** Reloads what a deletion may have rewritten: the open Document, the lists and the filters. */
@@ -871,15 +935,7 @@
       onMove={(contextId, parentId) => void withContexts(async () => {
         await moveContext(contextId, parentId)
       })}
-      onDelete={(contextId) => void withContexts(async () => {
-        await deleteContext(contextId)
-        if (selectedContextId === contextId) selectedContextId = null
-        // La cancellazione riscrive i Document che portavano le marcature: quello aperto va riletto.
-        if (selected) {
-          applyDocument(await getDocument(selected.id))
-          editorReloadToken += 1
-        }
-      })}
+      onDelete={(contextId) => void moveContextToTrash(contextId)}
     />
 
     <TagPanel
@@ -914,6 +970,15 @@
       onOpenEntity={(entityId) => void openInspector(entityId)}
     />
 
+    <TrashPanel
+      contents={trash}
+      busy={saving}
+      onRestoreObject={(objectId) => void restoreFromTrash('object', objectId)}
+      onRestoreContext={(contextId) => void restoreFromTrash('context', contextId)}
+      onPurgeObject={(objectId) => void purgeFromTrash('object', objectId)}
+      onPurgeContext={(contextId) => void purgeFromTrash('context', contextId)}
+    />
+
     <button
       type="button"
       class="matrix-open"
@@ -922,7 +987,12 @@
     >{matrixStrings.open.label}</button>
 
     {#if selectedContextId !== null || selectedTagIds.length > 0}
-      <DerivedObjects objects={contextObjects} />
+      <DerivedObjects
+        objects={contextObjects}
+        busy={saving}
+        onOpen={(objectId) => void openInspector(objectId)}
+        onTrash={(objectId) => void moveObjectToTrash(objectId)}
+      />
     {/if}
 
     <nav aria-label="Documenti">
@@ -954,16 +1024,27 @@
               />
             </form>
           {:else}
-            <button
-              type="button"
-              class="document-item"
-              class:active={selected?.id === document.id}
-              onclick={() => openDocument(document.id)}
-              ondblclick={() => void beginSidebarRename(document)}
-            >
-              <span>{document.title || 'Senza titolo'}</span>
-              <small>rev. {document.revision}</small>
-            </button>
+            <div class="document-row">
+              <button
+                type="button"
+                class="document-item"
+                class:active={selected?.id === document.id}
+                onclick={() => openDocument(document.id)}
+                ondblclick={() => void beginSidebarRename(document)}
+              >
+                <span>{document.title || 'Senza titolo'}</span>
+                <small>rev. {document.revision}</small>
+              </button>
+              {#if scope === 'active'}
+                <RemoveButton
+                  label={document.title || 'Senza titolo'}
+                  disabled={saving}
+                  description={trashStrings.trashDocument.description}
+                  confirmDescription={trashStrings.trashDocumentConfirm}
+                  onRemove={() => void moveDocumentToTrash(document.id)}
+                />
+              {/if}
+            </div>
           {/if}
         {/each}
       {/if}
@@ -1112,12 +1193,13 @@
   {/if}
 
   {#if inspector}
+    {@const shown = inspectorObject ?? inspector}
     <KnowledgeInspector
-      object={inspectorObject ?? inspector}
+      object={shown}
       busy={inspectorBusy}
       {duplicateCandidates}
       onClose={() => (inspector = null)}
-      onDelete={() => void removeKnowledgeObject()}
+      onDelete={() => void moveObjectToTrash(shown.id)}
       onAddAlias={(alias) => void addAlias(alias)}
       onRemoveAlias={(aliasId) => void removeAlias(aliasId)}
       onAddIdentifier={(input) => void addIdentifier(input)}

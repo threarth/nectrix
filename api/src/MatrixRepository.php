@@ -56,7 +56,9 @@ final class MatrixRepository
         'LEFT JOIN context_memberships m ON m.knowledge_occurrence_id = k.id ' .
         "LEFT JOIN context_occurrences co ON co.id = m.context_occurrence_id AND co.status = 'active' ";
 
-    private const ACTIVE = "WHERE k.status = 'active' AND d.status = 'active' ";
+    private const ACTIVE = "WHERE k.status = 'active' AND d.status = 'active' " .
+        'AND NOT EXISTS (SELECT 1 FROM knowledge_object_trash kt ' .
+        'WHERE kt.knowledge_object_id = k.knowledge_object_id) ';
 
     /** The column a fragment falls in: the Context of its containing range, or none. */
     private const COLUMN = 'CASE WHEN co.id IS NULL THEN NULL ELSE m.context_id END';

@@ -240,6 +240,18 @@ Nella stessa fase Concept, Entity e Context diventano davvero CRUD: la cancellaz
 
 Gate soddisfatto: un Context marcato attraversa più paragrafi e sopravvive a salvataggio e reload, il contenimento parziale non produce appartenenza, la cancellazione dei tre organizzatori non tocca il testo, e le query derivate restano coerenti con matrici, confronto e ricerca.
 
+## FASE 14.2 — Cestino e cancellazione con due pressioni (completata)
+
+I tre organizzatori del caos devono avere un CRUD completo, e un indice che non si può disfare è una trappola. Ogni Concept, Entity, Context e Document porta accanto a sé una × che si preme due volte: la prima arma il comando e dichiara che cosa farà, la seconda lo esegue. Nessuna dialog di conferma interrompe la lettura.
+
+Completato: la migration 012 aggiunge `knowledge_object_trash` e `context_trash`, additive e senza toccare lo `status`, che continua a descrivere il lifecycle semantico. Cestinare nasconde l'oggetto dagli elenchi, dalle ricerche, dai derivati e dalle matrici, ma non distrugge nulla: occurrence e mark restano nel testo, e il ripristino riporta l'indice intero. Il Document usa il cestino che aveva già dalla FASE 6.1, senza inventarne un secondo.
+
+Dal cestino della conoscenza si ripristina oppure si elimina davvero: la cancellazione definitiva toglie occurrence, mark e ciò che l'oggetto possedeva, senza cambiare una parola scritta dall'utente, e viene rifiutata solo quando un FieldValue di un'altra Entity punta lì.
+
+Nella stessa fase la struttura a colonne indipendenti sostituisce lo scorrimento unico della pagina: barra laterale, documento e inspector scorrono ciascuno per conto proprio, così i pannelli restano raggiungibili mentre il documento scorre.
+
+Gate soddisfatto: due pressioni al posto della dialog, cestino reversibile che non tocca il testo, eliminazione definitiva solo dal cestino e liste, ricerche e matrici che ignorano ciò che è cestinato.
+
 ## FASE 15 — Knowledge Map
 
 Valutare Cytoscape.js e Sigma.js, quindi usare una libreria esistente. Consentire viste Concept only, Entity only e Concept+Entity; i nodi KnowledgeObject sono distinti visivamente e gli archi sono KnowledgeRelation. SemanticBlock, TemplateField, FieldValue, Context, Tag e KnowledgeOccurrence non diventano nodi principali; Context e Tag restano filtri/grouping/coloring.

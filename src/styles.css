@@ -32,8 +32,14 @@ button:disabled {
   opacity: 0.45;
 }
 
+/*
+ * Colonne che scorrono ciascuna per conto suo: la barra laterale resta raggiungibile mentre il
+ * documento scorre. Niente position: sticky, che creerebbe un contesto di impilamento e
+ * nasconderebbe dietro il documento le dialog aperte dai pannelli.
+ */
 .app-frame {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 270px minmax(0, 1fr);
 }
@@ -43,11 +49,6 @@ button:disabled {
 }
 
 .sidebar {
-  /* Scorre con il documento restando raggiungibile: i pannelli sono piu alti dello schermo. */
-  position: sticky;
-  top: 0;
-  align-self: start;
-  max-height: 100vh;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 28px 20px;
@@ -749,6 +750,7 @@ button:disabled {
 
 .workspace {
   min-width: 0;
+  overflow-y: auto;
   padding: 28px clamp(24px, 5vw, 76px) 64px;
   background: #f5f1e8;
 }
@@ -1044,10 +1046,6 @@ button:disabled {
 }
 
 .inspector {
-  position: sticky;
-  top: 0;
-  align-self: start;
-  max-height: 100vh;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -2112,4 +2110,139 @@ button:disabled {
 .inspector-danger:hover:not(:disabled) {
   color: #fff;
   background: #a8503f;
+}
+
+.remove-button {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #8f9286;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.remove-button:hover:not(:disabled) {
+  color: #f2efe6;
+  border-color: #6b5148;
+  background: #4a2f2a;
+}
+
+.remove-button.armed {
+  color: #fff;
+  border-color: #a8503f;
+  background: #a8503f;
+  font-weight: 700;
+}
+
+.trash-panel {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #34382e;
+}
+
+.trash-panel h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #9a9d90;
+}
+
+.trash-panel ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.trash-panel li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid #34382e;
+  border-radius: 8px;
+}
+
+.trash-kind {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #8f9286;
+}
+
+.trash-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #d8d6cd;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trash-panel small {
+  color: #8f9286;
+  font-size: 10px;
+}
+
+.trash-panel li > button {
+  padding: 3px 7px;
+  border: 1px solid #3d4137;
+  border-radius: 7px;
+  color: #b9bcb0;
+  background: transparent;
+  font-size: 11px;
+}
+
+.context-derived li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.derived-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  padding: 3px 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.derived-open:hover {
+  text-decoration: underline;
+}
+
+.context-line {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.context-line .context-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.document-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.document-row .document-item {
+  flex: 1 1 auto;
+  min-width: 0;
 }

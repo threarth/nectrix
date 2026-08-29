@@ -25,7 +25,27 @@ test('crea una Entity con EntityType da selezione e la conserva dopo save/reload
  * it — the button disables itself the moment the write starts.
  */
 async function save(page: Page): Promise<void> {
+  // Il segnale «non salvato» compare un istante dopo l'ultimo tasto: si attende che si accenda,
+  // altrimenti l'attesa finirebbe prima ancora che ci sia qualcosa da scrivere.
+  await page.waitForTimeout(250)
   await expect(page.locator('.save-status.dirty')).toHaveCount(0, { timeout: 15000 })
+}
+
+/** The row of one Context in the sidebar, told apart from its × button. */
+function contextRow(page: Page, name: string) {
+  return page.getByLabel('Contesti', { exact: true }).locator('.context-row').filter({ hasText: name })
+}
+
+/**
+ * Presses a × twice: the first press arms the command, the second runs it. The arming is retried
+ * because a background refresh can disarm it, exactly as it would for a person.
+ */
+async function pressTwice(page: Page, area: string, what: string): Promise<void> {
+  const panel = page.getByLabel(area)
+  await expect(async () => {
+    await panel.getByRole('button', { name: `Elimina ${what}` }).click()
+    await panel.getByRole('button', { name: `Conferma: elimina ${what}` }).click({ timeout: 2000 })
+  }).toPass({ timeout: 15000 })
 }
 
 /**
@@ -333,7 +353,7 @@ test('FASE 6.1: il cestino è una vista di recupero e non elimina nulla', async 
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill(title)
   await save(page)
 
-  await page.getByRole('button', { name: 'Cestina', exact: true }).click()
+  await page.locator('.lifecycle-button').filter({ hasText: 'Cestina' }).click()
   await expect(page.getByText('Sola lettura')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Archivia', exact: true })).toHaveCount(0)
 
@@ -629,7 +649,7 @@ test('CRUD: rinominare un Concept dall’inspector non tocca occurrence e alias'
 
 test('FASE 8: il Context marcato sul testo filtra i documenti e ne deriva Concept ed Entity', async ({ page }) => {
   await page.goto('/')
-  const panel = page.getByLabel('Contesti')
+  const panel = page.getByLabel('Contesti', { exact: true })
 
   await newDocument(page)
   await createConceptFrom(page, 'Inconscio', 'Inconscio collettivo')
@@ -645,24 +665,23 @@ test('FASE 8: il Context marcato sul testo filtra i documenti e ne deriva Concep
   await markContext(page, 'Psicologia', 'Università')
 
   // Il ramo vede entrambi i documenti, il solo Context padre vede il suo.
-  await panel.getByRole('button', { name: 'Università' }).click()
+  await contextRow(page, 'Università').click()
   await expect(page.locator('.sidebar nav')).toContainText('Appunti di psicologia')
   await expect(page.locator('.sidebar nav')).toContainText('Appunti del ramo')
-  await expect(page.getByLabel('Concept ed Entity qui')).toContainText('Inconscio collettivo')
+  await expect(page.getByLabel('Concept ed Entity qui', { exact: true })).toContainText('Inconscio collettivo')
 
   await panel.getByRole('button', { name: 'Solo questo' }).click()
   await expect(page.locator('.sidebar nav')).not.toContainText('Appunti del ramo')
   await expect(page.locator('.sidebar nav')).toContainText('Appunti di psicologia')
 
-  await panel.getByRole('button', { name: 'Psicologia' }).click()
+  await contextRow(page, 'Psicologia').click()
   await expect(page.locator('.sidebar nav')).toContainText('Appunti del ramo')
   // Il Concept vive nell'altro documento: la co-presenza non lo porta dentro questo Context.
-  await expect(page.getByLabel('Concept ed Entity qui')).toContainText('Nessun Concept o Entity')
+  await expect(page.getByLabel('Concept ed Entity qui', { exact: true })).toContainText('Nessun Concept o Entity')
 })
 
-test('FASE 14.1: eliminare un Context toglie le marcature e lascia intatte le parole', async ({ page }) => {
+test('FASE 14.2: il Context si cestina con due pressioni e si elimina davvero dal cestino', async ({ page }) => {
   await page.goto('/')
-  const panel = page.getByLabel('Contesti')
 
   await newDocument(page)
   await page.locator('.tiptap').click()
@@ -671,14 +690,24 @@ test('FASE 14.1: eliminare un Context toglie le marcature e lascia intatte le pa
   await save(page)
   await markContext(page, 'Context eliminabile')
 
-  await panel.getByRole('button', { name: /Context eliminabile/ }).click()
-  // Il comando dichiara che cosa toglie prima di toglierlo.
-  await expect(panel).toContainText('Toglie 1 frammento marcato dal testo, senza cancellare parole.')
+  // Una sola pressione arma il comando e dichiara che cosa farà: nessuna dialog di conferma.
+  await pressTwice(page, 'Contesti', 'Context eliminabile')
 
-  page.once('dialog', (confirmation) => void confirmation.accept())
-  await panel.getByRole('button', { name: 'Elimina', exact: true }).click()
+  // Nel cestino il testo non è cambiato: la marcatura è ancora lì, pronta a tornare.
+  await expect(contextRow(page, 'Context eliminabile')).toHaveCount(0)
+  const trash = page.getByLabel('Cestino della conoscenza', { exact: true })
+  await expect(trash).toContainText('Context eliminabile')
+  await expect(trash).toContainText('1 frammento marcato')
+  await expect(page.locator('.nectrix-context-occurrence')).toHaveCount(1)
 
-  await expect(panel.getByRole('button', { name: /Context eliminabile/ })).toHaveCount(0)
+  await trash.getByRole('button', { name: 'Ripristina' }).click()
+  await expect(contextRow(page, 'Context eliminabile')).toHaveCount(1)
+
+  // Dal cestino l'eliminazione è definitiva: toglie le marcature, non le parole.
+  await pressTwice(page, 'Contesti', 'Context eliminabile')
+  await pressTwice(page, 'Cestino della conoscenza', 'Context eliminabile')
+
+  await expect(trash).toContainText('Cestino vuoto')
   await expect(page.locator('.tiptap')).toContainText('Parole che restano dopo la cancellazione')
   await expect(page.locator('.nectrix-context-occurrence')).toHaveCount(0)
 })
@@ -707,7 +736,7 @@ test('FASE 9: i Tag filtrano i documenti e restano separati dai Concept', async 
   await tagPanel.getByRole('button', { name: /Da rileggere/ }).click()
   await expect(page.locator('.sidebar nav')).toContainText('Documento con tag')
   await expect(page.locator('.sidebar nav')).not.toContainText('Documento senza tag')
-  await expect(page.getByLabel('Concept ed Entity qui').getByText('Sincronicità')).toBeVisible()
+  await expect(page.getByLabel('Concept ed Entity qui', { exact: true }).getByText('Sincronicità')).toBeVisible()
 
   await tagPanel.getByRole('button', { name: /Da rileggere/ }).click()
   await expect(page.locator('.sidebar nav')).toContainText('Documento senza tag')
@@ -773,7 +802,7 @@ test('FASE 10: la ricerca distingue testo, alias e identità', async ({ page }) 
 
 test('FASE 10: dalla ricerca si aprono documento, Concept e contesto', async ({ page }) => {
   await page.goto('/')
-  const contexts = page.getByLabel('Contesti')
+  const contexts = page.getByLabel('Contesti', { exact: true })
   await contexts.getByRole('button', { name: 'Nuovo' }).click()
   const contextDialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
   await contextDialog.getByLabel('Nome del contesto').fill('Ricerca contesto')
@@ -789,7 +818,7 @@ test('FASE 10: dalla ricerca si aprono documento, Concept e contesto', async ({ 
   await panel.getByRole('button', { name: 'Cerca', exact: true }).click()
 
   await panel.locator('.search-results li').filter({ hasText: 'Contesto · nome' }).getByRole('button').first().click()
-  await expect(contexts.getByRole('button', { name: 'Ricerca contesto' })).toHaveClass(/active/)
+  await expect(contextRow(page, 'Ricerca contesto')).toHaveClass(/active/)
 
   await panel.getByRole('searchbox').fill('Ombra')
   await panel.getByRole('button', { name: 'Cerca', exact: true }).click()
@@ -987,7 +1016,7 @@ test('FASE 11: una relazione si dichiara, ha una direzione e non nasce da sola',
   // Il Concept non ha relazioni malgrado la co-occorrenza.
   await page.locator('.tiptap .nectrix-knowledge-occurrence').first().click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
-  const relations = page.getByLabel('Relazioni')
+  const relations = page.getByLabel('Relazioni', { exact: true })
   await expect(relations).toContainText('Nessuna relazione dichiarata')
 
   await relations.getByRole('button', { name: 'Collega' }).click()
@@ -1006,8 +1035,8 @@ test('FASE 11: una relazione si dichiara, ha una direzione e non nasce da sola',
   // Dall'altro capo la stessa relazione risulta entrante.
   await relations.getByRole('button', { name: /Carl Gustav Jung/ }).first().click()
   await expect(page.locator('.inspector-name')).toHaveText('Carl Gustav Jung')
-  await expect(page.getByLabel('Relazioni').locator('.relation-direction')).toHaveText('←')
-  await expect(page.getByLabel('Relazioni')).toContainText('Individuazione junghiana')
+  await expect(page.getByLabel('Relazioni', { exact: true }).locator('.relation-direction')).toHaveText('←')
+  await expect(page.getByLabel('Relazioni', { exact: true })).toContainText('Individuazione junghiana')
 })
 
 test('FASE 12: una relazione dichiara su quali dati si basa', async ({ page }) => {
@@ -1024,7 +1053,7 @@ test('FASE 12: una relazione dichiara su quali dati si basa', async ({ page }) =
 
   await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
-  const relations = page.getByLabel('Relazioni')
+  const relations = page.getByLabel('Relazioni', { exact: true })
   await relations.getByRole('button', { name: 'Collega' }).click()
   const dialog = page.getByRole('dialog', { name: 'Nuova relazione' })
   await dialog.getByLabel('Predicato').fill('si oppone a')
@@ -1115,4 +1144,35 @@ test('FASE 14: la matrice conta per Context, dichiara il percorso e apre il dril
   await expect(drill).toContainText('Documento della matrice')
   await drill.getByRole('button', { name: 'Documento della matrice' }).click()
   await expect(page.getByRole('textbox', { name: 'Titolo documento' })).toHaveValue('Documento della matrice')
+})
+
+test('FASE 14.2: la × cestina documento e Concept con due pressioni, senza dialog', async ({ page }) => {
+  await page.goto('/')
+  await newDocument(page)
+  await createConceptFrom(page, 'Rimozione', 'Concept da cestinare')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento da cestinare')
+  await save(page)
+
+  // Il Concept va nel cestino dall'inspector: due pressioni, nessuna dialog di conferma.
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Concept' }).click()
+  const trashButton = page.locator('.inspector-danger')
+  await trashButton.click()
+  await expect(trashButton).toHaveText('Confermi?')
+  await trashButton.click()
+
+  const trash = page.getByLabel('Cestino della conoscenza', { exact: true })
+  await expect(trash).toContainText('Concept da cestinare')
+  await expect(trash).toContainText('1 frammento marcato')
+  // La marcatura resta nel testo: cestinare non tocca le parole né l'indice del documento.
+  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+
+  await trash.getByRole('button', { name: 'Ripristina' }).click()
+  await expect(trash).toContainText('Cestino vuoto')
+
+  // Il documento usa il cestino che ha già: la × non ne inventa un secondo.
+  await pressTwice(page, 'Documenti', 'Documento da cestinare')
+  await expect(page.locator('.sidebar nav')).not.toContainText('Documento da cestinare')
+  await page.getByRole('button', { name: 'Cestino', exact: true }).click()
+  await expect(page.locator('.sidebar nav')).toContainText('Documento da cestinare')
 })

@@ -14,6 +14,10 @@ use PDO;
  */
 final class SearchRepository
 {
+    /** Un oggetto cestinato sparisce dalle ricerche finche non viene ripristinato. */
+    private const NOT_TRASHED =
+        'NOT EXISTS (SELECT 1 FROM knowledge_object_trash t WHERE t.knowledge_object_id = ';
+
     private const LIMIT = 20;
     private const SNIPPET_TOKENS = 10;
 
@@ -42,7 +46,8 @@ final class SearchRepository
     {
         $statement = $this->pdo->prepare(
             'SELECT c.id, c.canonical_name AS name, c.status, NULL AS matched_text ' .
-            'FROM concepts c WHERE c.canonical_name LIKE :like ORDER BY c.canonical_name COLLATE NOCASE LIMIT ' . self::LIMIT
+            'FROM concepts c WHERE c.canonical_name LIKE :like AND ' . self::NOT_TRASHED . 'c.id) ' .
+            'ORDER BY c.canonical_name COLLATE NOCASE LIMIT ' . self::LIMIT
         );
         $statement->execute(['like' => $like]);
         return $statement->fetchAll();
@@ -54,7 +59,8 @@ final class SearchRepository
         $statement = $this->pdo->prepare(
             'SELECT c.id, c.canonical_name AS name, c.status, a.alias AS matched_text ' .
             'FROM concept_aliases a JOIN concepts c ON c.id = a.concept_id ' .
-            'WHERE a.alias LIKE :like ORDER BY a.alias COLLATE NOCASE LIMIT ' . self::LIMIT
+            'WHERE a.alias LIKE :like AND ' . self::NOT_TRASHED . 'c.id) ' .
+            'ORDER BY a.alias COLLATE NOCASE LIMIT ' . self::LIMIT
         );
         $statement->execute(['like' => $like]);
         return $statement->fetchAll();
@@ -66,7 +72,8 @@ final class SearchRepository
         $statement = $this->pdo->prepare(
             'SELECT e.id, e.name, e.status, t.name AS entity_type_name, NULL AS matched_text ' .
             'FROM entities e JOIN entity_types t ON t.id = e.entity_type_id ' .
-            'WHERE e.name LIKE :like ORDER BY e.name COLLATE NOCASE LIMIT ' . self::LIMIT
+            'WHERE e.name LIKE :like AND ' . self::NOT_TRASHED . 'e.id) ' .
+            'ORDER BY e.name COLLATE NOCASE LIMIT ' . self::LIMIT
         );
         $statement->execute(['like' => $like]);
         return $statement->fetchAll();
@@ -80,7 +87,7 @@ final class SearchRepository
             "i.scheme || ' ' || i.value AS matched_text " .
             'FROM entity_identifiers i JOIN entities e ON e.id = i.entity_id ' .
             'JOIN entity_types t ON t.id = e.entity_type_id ' .
-            'WHERE i.value LIKE :like OR i.normalized_value LIKE :like ' .
+            'WHERE (i.value LIKE :like OR i.normalized_value LIKE :like) AND ' . self::NOT_TRASHED . 'e.id) ' .
             'ORDER BY i.value COLLATE NOCASE LIMIT ' . self::LIMIT
         );
         $statement->execute(['like' => $like]);
@@ -101,7 +108,9 @@ final class SearchRepository
     public function contexts(string $like): array
     {
         $statement = $this->pdo->prepare(
-            'SELECT id, parent_id, name FROM contexts WHERE name LIKE :like ORDER BY name COLLATE NOCASE LIMIT ' . self::LIMIT
+            'SELECT id, parent_id, name FROM contexts WHERE name LIKE :like ' .
+            'AND NOT EXISTS (SELECT 1 FROM context_trash t WHERE t.context_id = contexts.id) ' .
+            'ORDER BY name COLLATE NOCASE LIMIT ' . self::LIMIT
         );
         $statement->execute(['like' => $like]);
         return $statement->fetchAll();

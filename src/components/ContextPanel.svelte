@@ -10,8 +10,9 @@
     possibleParents,
     type ContextNode,
   } from '../lib/contexts'
-  import { contextStrings } from '../lib/strings'
+  import { contextStrings, trashStrings } from '../lib/strings'
   import NameDialog from './NameDialog.svelte'
+  import RemoveButton from './RemoveButton.svelte'
 
   let {
     contexts,
@@ -45,9 +46,8 @@
 
   let naming = $state<'create' | 'rename' | null>(null)
 
-  /** A deletion rewrites the documents that carried the ranges: it is asked once, explicitly. */
-  function confirmDelete(context: ContextNode): void {
-    if (window.confirm(contextStrings.remove.confirm(context.name, impact))) onDelete(context.id)
+  function blockedFor(contextId: string): boolean {
+    return deletionBlockers(rows, contextId) !== null
   }
 </script>
 
@@ -66,17 +66,26 @@
     <p class="empty-state">{contextStrings.empty}</p>
   {:else}
     {#each rows as row (row.id)}
-      <button
-        type="button"
-        class="context-row"
-        class:active={selectedId === row.id}
-        style={`padding-left: ${12 + row.depth * 14}px`}
-        title={contextPathLabel(row)}
-        aria-label={(row.occurrences ?? 0) > 0
-          ? `${row.name}, ${contextStrings.rangeCount(row.occurrences ?? 0)}`
-          : row.name}
-        onclick={() => onSelect(row.id)}
-      >{row.name}{#if (row.occurrences ?? 0) > 0}<small>{row.occurrences}</small>{/if}</button>
+      <div class="context-line">
+        <button
+          type="button"
+          class="context-row"
+          class:active={selectedId === row.id}
+          style={`padding-left: ${12 + row.depth * 14}px`}
+          title={contextPathLabel(row)}
+          aria-label={(row.occurrences ?? 0) > 0
+            ? `${row.name}, ${contextStrings.rangeCount(row.occurrences ?? 0)}`
+            : row.name}
+          onclick={() => onSelect(row.id)}
+        >{row.name}{#if (row.occurrences ?? 0) > 0}<small>{row.occurrences}</small>{/if}</button>
+        <RemoveButton
+          label={row.name}
+          disabled={busy || blockedFor(row.id)}
+          description={trashStrings.trashObject.description}
+          confirmDescription={trashStrings.trashObjectConfirm}
+          onRemove={() => onDelete(row.id)}
+        />
+      </div>
     {/each}
   {/if}
 
@@ -107,7 +116,7 @@
       title={blocked === null
         ? contextStrings.remove.impact(impact)
         : contextStrings.remove.blocked(blocked.children)}
-      onclick={() => selected !== null && confirmDelete(selected)}
+      onclick={() => selected !== null && onDelete(selected.id)}
     >{contextStrings.remove.label}</button>
   </div>
 

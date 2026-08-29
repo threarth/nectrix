@@ -30,6 +30,7 @@ final class ContextRepository
             'SELECT c.id, c.parent_id, c.name, COUNT(o.id) AS occurrences, ' .
             'COUNT(DISTINCT o.document_id) AS documents FROM contexts c ' .
             "LEFT JOIN context_occurrences o ON o.context_id = c.id AND o.status = 'active' " .
+            'WHERE NOT EXISTS (SELECT 1 FROM context_trash t WHERE t.context_id = c.id) ' .
             'GROUP BY c.id, c.parent_id, c.name ORDER BY c.name COLLATE NOCASE'
         )->fetchAll();
     }
@@ -182,6 +183,8 @@ final class ContextRepository
             'LEFT JOIN concepts c ON c.id = m.knowledge_object_id ' .
             'LEFT JOIN entities e ON e.id = m.knowledge_object_id ' .
             "WHERE o.status = 'active' AND m.context_id IN ({$placeholders}) " .
+            'AND NOT EXISTS (SELECT 1 FROM knowledge_object_trash t ' .
+            'WHERE t.knowledge_object_id = m.knowledge_object_id) ' .
             'ORDER BY name COLLATE NOCASE'
         );
         $statement->execute($contextIds);

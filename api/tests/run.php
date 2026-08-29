@@ -7,6 +7,7 @@ declare(strict_types=1);
 use Nectrix\ApiException;
 use Nectrix\ContextOccurrenceExtractor;
 use Nectrix\DeletionService;
+use Nectrix\TrashService;
 use Nectrix\DocumentPruner;
 use Nectrix\ContextOccurrenceRepository;
 use Nectrix\ContextRepository;
@@ -211,7 +212,7 @@ $suite->test('le migrazioni estendono lo schema Document senza rimuovere le colo
     assertSameValue($phaseOne, array_slice($columns, 0, count($phaseOne)));
     // FASE 14.1: il Document non possiede piu un Context, resta solo il proprio lifecycle.
     assertSameValue(['status'], array_slice($columns, count($phaseOne)));
-    assertSameValue(11, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(12, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
 });
 
 $domainFixture = [];
@@ -544,7 +545,7 @@ $suite->test('la migration Phase 1.1 aggiorna un database FASE 1 senza perdere D
 
     assertSameValue(1, (int) $upgradePdo->query('SELECT COUNT(*) FROM documents')->fetchColumn());
     assertSameValue('Documento preesistente', $upgradePdo->query('SELECT title FROM documents')->fetchColumn());
-    assertSameValue(11, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(12, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
     assertSameValue('field_values', $upgradePdo->query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'field_values'")->fetchColumn());
 });
 
@@ -3025,6 +3026,62 @@ function contextOccurrenceStatus(PDO $pdo, string $occurrenceId): string
     $statement->execute(['id' => $occurrenceId]);
     return (string) $statement->fetchColumn();
 }
+
+$suite->test('FASE 14.2: cestinare nasconde senza distruggere e il ripristino riporta tutto', static function () use ($pdo, $service): void {
+    $trash = new TrashService($pdo);
+    $contexts = contextService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $contesto = $contexts->create(['name' => 'Contesto cestinabile']);
+    $document = $service->create(['title' => 'Documento del cestino']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([
+        occurrenceText('Rimozione', $occurrenceId, $conceptId),
+    ]), [conceptCreate($occurrenceId, $conceptId, 'Concept cestinabile')], 'Documento del cestino');
+    markWholeDocument($service, $document['id'], $contesto['id']);
+
+    $trash->trashKnowledgeObject($conceptId);
+    $trash->trashContext($contesto['id']);
+    $contents = $trash->list();
+
+    // Nel cestino, ma nulla e stato distrutto: occurrence e testo restano dove sono.
+    assertSameValue([$conceptId], array_column($contents['knowledgeObjects'], 'id'));
+    assertSameValue([$contesto['id']], array_column($contents['contexts'], 'id'));
+    assertSameValue('active', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM context_occurrences WHERE document_id = ?', [$document['id']]));
+
+    // Sparisce dagli elenchi e dalle ricerche finche resta cestinato.
+    assertSameValue([], array_column($knowledge->search('Concept cestinabile'), 'id'));
+    assertSameValue([], array_column($contexts->list(), 'id') === [] ? [] : array_filter(
+        array_column($contexts->list(), 'id'),
+        static fn (string $id): bool => $id === $contesto['id'],
+    ));
+
+    $trash->restoreKnowledgeObject($conceptId);
+    $trash->restoreContext($contesto['id']);
+
+    assertSameValue([$conceptId], array_column($knowledge->search('Concept cestinabile'), 'id'));
+    assertTrue(in_array($contesto['id'], array_column($contexts->list(), 'id'), true), 'Il Context ripristinato torna nell’elenco.');
+    assertSameValue(['knowledgeObjects' => [], 'contexts' => []], $trash->list());
+});
+
+$suite->test('FASE 14.2: dal cestino l’eliminazione definitiva toglie anche la riga del cestino', static function () use ($pdo, $service): void {
+    $trash = new TrashService($pdo);
+    $deletions = deletionService($pdo);
+    $contexts = contextService($pdo);
+    $contesto = $contexts->create(['name' => 'Contesto da eliminare davvero']);
+    $document = $service->create(['title' => 'Documento definitivo']);
+    markWholeDocument($service, $document['id'], $contesto['id']);
+    $before = $service->get($document['id'])['plainText'];
+
+    $trash->trashContext($contesto['id']);
+    $removed = $deletions->deleteContext($contesto['id']);
+
+    assertSameValue(1, $removed['occurrences']);
+    assertSameValue($before, $service->get($document['id'])['plainText']);
+    assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM context_trash WHERE context_id = ?', [$contesto['id']]));
+    assertSameValue(['knowledgeObjects' => [], 'contexts' => []], $trash->list());
+});
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {
     assertSameValue([], $pdo->query('PRAGMA foreign_key_check')->fetchAll());

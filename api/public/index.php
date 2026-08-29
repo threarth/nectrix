@@ -7,6 +7,7 @@ declare(strict_types=1);
 use Nectrix\ApiException;
 use Nectrix\ContextOccurrenceExtractor;
 use Nectrix\DeletionService;
+use Nectrix\TrashService;
 use Nectrix\DocumentPruner;
 use Nectrix\ContextOccurrenceRepository;
 use Nectrix\ContextRepository;
@@ -97,6 +98,7 @@ try {
     $contextRepository = new ContextRepository($pdo);
     $contexts = new ContextService($contextRepository);
     $deletions = new DeletionService($pdo, $documentRepository, new DocumentPruner(), new PlainTextExtractor());
+    $trash = new TrashService($pdo);
     $tags = new TagService(new TagRepository($pdo), $documentRepository);
     $query = new QueryService($contexts, $tags, $service, $knowledgeRepository);
     $search = new SearchService(new SearchRepository($pdo), $contextRepository);
@@ -298,6 +300,21 @@ try {
     }
     if ($method === 'GET' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
         respond(200, ['object' => $knowledge->object(rawurldecode($matches[1]))]);
+    }
+    if ($method === 'GET' && $path === '/api/trash') {
+        respond(200, $trash->list());
+    }
+    if ($method === 'POST' && preg_match('#^/api/knowledge-objects/([^/]+)/(trash|untrash)$#', (string) $path, $matches) === 1) {
+        $objectId = rawurldecode($matches[1]);
+        respond(200, ['object' => $matches[2] === 'trash'
+            ? $trash->trashKnowledgeObject($objectId)
+            : $trash->restoreKnowledgeObject($objectId)]);
+    }
+    if ($method === 'POST' && preg_match('#^/api/contexts/([^/]+)/(trash|untrash)$#', (string) $path, $matches) === 1) {
+        $contextId = rawurldecode($matches[1]);
+        respond(200, ['context' => $matches[2] === 'trash'
+            ? $trash->trashContext($contextId)
+            : $trash->restoreContext($contextId)]);
     }
     if ($method === 'DELETE' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
         respond(200, ['deleted' => $deletions->deleteKnowledgeObject(rawurldecode($matches[1]))]);

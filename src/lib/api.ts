@@ -781,3 +781,36 @@ export async function searchIndex(query: string): Promise<IndexSearchResult[]> {
   )
   return payload.results
 }
+
+export interface TrashedObject {
+  id: string
+  object_type?: 'concept' | 'entity'
+  name: string
+  trashed_at: string
+  /** Ranges still marked in the text: what a definitive deletion would take away. */
+  occurrences: number
+}
+
+export interface TrashContents {
+  knowledgeObjects: TrashedObject[]
+  contexts: TrashedObject[]
+}
+
+/** What sits in the trash of the three organisers, with what each one still holds in the text. */
+export async function fetchTrash(): Promise<TrashContents> {
+  return request<TrashContents>('/api/trash')
+}
+
+/** Moves a Concept or an Entity to the trash: nothing is destroyed, the marks stay in the text. */
+export async function trashKnowledgeObject(objectId: string, trashed = true): Promise<void> {
+  await request(`/api/knowledge-objects/${encodeURIComponent(objectId)}/${trashed ? 'trash' : 'untrash'}`, {
+    method: 'POST',
+  })
+}
+
+/** Moves a Context to the trash, or brings it back. */
+export async function trashContext(contextId: string, trashed = true): Promise<void> {
+  await request(`/api/contexts/${encodeURIComponent(contextId)}/${trashed ? 'trash' : 'untrash'}`, {
+    method: 'POST',
+  })
+}

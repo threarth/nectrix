@@ -10,6 +10,10 @@ use PDO;
 
 final class KnowledgeRepository
 {
+    /** Un oggetto cestinato sparisce dagli elenchi, ma le sue occurrence restano nel testo. */
+    private const NOT_TRASHED =
+        'NOT EXISTS (SELECT 1 FROM knowledge_object_trash t WHERE t.knowledge_object_id = ';
+
     public function __construct(private readonly PDO $pdo) {}
 
     /** @return list<array<string, mixed>> */
@@ -19,10 +23,11 @@ final class KnowledgeRepository
         // come Concept distinti, non come righe ripetute dello stesso Concept.
         $statement = $this->pdo->prepare(
             "SELECT c.id, 'concept' AS object_type, c.canonical_name AS name, NULL AS entity_type_id, NULL AS entity_type_name " .
-            'FROM concepts c WHERE c.canonical_name LIKE :query ' .
-            'OR EXISTS (SELECT 1 FROM concept_aliases a WHERE a.concept_id = c.id AND a.alias LIKE :query) ' .
+            'FROM concepts c WHERE ' . self::NOT_TRASHED . 'c.id) AND (c.canonical_name LIKE :query ' .
+            'OR EXISTS (SELECT 1 FROM concept_aliases a WHERE a.concept_id = c.id AND a.alias LIKE :query)) ' .
             "UNION ALL SELECT e.id, 'entity', e.name, e.entity_type_id, t.name " .
-            'FROM entities e JOIN entity_types t ON t.id = e.entity_type_id WHERE e.name LIKE :query ' .
+            'FROM entities e JOIN entity_types t ON t.id = e.entity_type_id ' .
+            'WHERE ' . self::NOT_TRASHED . 'e.id) AND e.name LIKE :query ' .
             'ORDER BY name COLLATE NOCASE LIMIT 30'
         );
         $statement->execute(['query' => '%' . $query . '%']);
@@ -41,12 +46,14 @@ final class KnowledgeRepository
     {
         $statement = $this->pdo->prepare(
             "SELECT c.id, 'concept' AS object_type, c.canonical_name AS name, NULL AS entity_type_name, NULL AS parent_id " .
-            'FROM concepts c WHERE c.canonical_name LIKE :query ' .
-            'OR EXISTS (SELECT 1 FROM concept_aliases a WHERE a.concept_id = c.id AND a.alias LIKE :query) ' .
+            'FROM concepts c WHERE ' . self::NOT_TRASHED . 'c.id) AND (c.canonical_name LIKE :query ' .
+            'OR EXISTS (SELECT 1 FROM concept_aliases a WHERE a.concept_id = c.id AND a.alias LIKE :query)) ' .
             "UNION ALL SELECT e.id, 'entity', e.name, t.name, NULL " .
-            'FROM entities e JOIN entity_types t ON t.id = e.entity_type_id WHERE e.name LIKE :query ' .
+            'FROM entities e JOIN entity_types t ON t.id = e.entity_type_id ' .
+            'WHERE ' . self::NOT_TRASHED . 'e.id) AND e.name LIKE :query ' .
             "UNION ALL SELECT x.id, 'context', x.name, NULL, x.parent_id " .
             'FROM contexts x WHERE x.name LIKE :query ' .
+            'AND NOT EXISTS (SELECT 1 FROM context_trash ct WHERE ct.context_id = x.id) ' .
             'ORDER BY name COLLATE NOCASE LIMIT 40'
         );
         $statement->execute(['query' => '%' . $query . '%']);
@@ -266,7 +273,7 @@ final class KnowledgeRepository
             'LEFT JOIN concepts c ON c.id = o.id ' .
             'LEFT JOIN entities e ON e.id = o.id ' .
             "WHERE k.status = 'active' AND k.document_id IN ({$placeholders}) " .
-            'ORDER BY name COLLATE NOCASE'
+            'AND ' . self::NOT_TRASHED . 'o.id) ORDER BY name COLLATE NOCASE'
         );
         $statement->execute($documentIds);
         return $statement->fetchAll();

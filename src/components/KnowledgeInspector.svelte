@@ -1,6 +1,8 @@
 <script lang="ts">
   // SPDX-License-Identifier: AGPL-3.0-or-later
 
+  import { onDestroy } from 'svelte'
+
   import type {
     DuplicateCandidate,
     EntityIdentifierInput,
@@ -96,11 +98,27 @@
   let draftName = $state('')
   let draftDescription = $state('')
 
+  /** How long the trash button stays armed. */
+  const ARMED_MS = 4000
+
   const archived = $derived(object.status === 'archived')
 
-  /** The deletion rewrites the documents that carried the marks: it is asked once, explicitly. */
-  function confirmDelete(): void {
-    if (window.confirm(inspectorStrings.remove.confirm(object.name, object.occurrences.length))) onDelete()
+  let armed = $state(false)
+  let armedTimer: ReturnType<typeof setTimeout> | undefined
+
+  onDestroy(() => clearTimeout(armedTimer))
+
+  /** Two presses instead of a dialog: the first says what will happen, the second does it. */
+  function arm(): void {
+    if (!armed) {
+      armed = true
+      clearTimeout(armedTimer)
+      armedTimer = setTimeout(() => (armed = false), ARMED_MS)
+      return
+    }
+    clearTimeout(armedTimer)
+    armed = false
+    onDelete()
   }
   const lifecycleAction = $derived(archived ? inspectorStrings.restore : inspectorStrings.archive)
 </script>
@@ -298,9 +316,10 @@
     <button
       type="button"
       class="inspector-danger"
+      class:armed={armed}
       disabled={busy}
-      title={inspectorStrings.remove.description}
-      onclick={confirmDelete}
-    >{inspectorStrings.remove.label}</button>
+      title={armed ? inspectorStrings.remove.confirm : inspectorStrings.remove.description}
+      onclick={arm}
+    >{armed ? inspectorStrings.remove.confirmLabel : inspectorStrings.remove.label}</button>
   </div>
 </aside>

@@ -81,6 +81,7 @@ final class DeletionService
 
         return $this->inTransaction(function () use ($contextId, $occurrences): array {
             $documents = $this->pruneDocuments([], $occurrences, []);
+            $this->execute('DELETE FROM context_trash WHERE context_id = :id', ['id' => $contextId]);
             $this->execute('DELETE FROM context_memberships WHERE context_id = :id', ['id' => $contextId]);
             $this->execute('DELETE FROM context_occurrences WHERE context_id = :id', ['id' => $contextId]);
             $this->execute('DELETE FROM contexts WHERE id = :id', ['id' => $contextId]);
@@ -169,6 +170,7 @@ final class DeletionService
      */
     private function deleteOwnedKnowledge(string $objectId, string $type, array $occurrenceIds): void
     {
+        $this->execute('DELETE FROM knowledge_object_trash WHERE knowledge_object_id = :id', ['id' => $objectId]);
         $this->deleteEvidenceOfOccurrences($occurrenceIds);
         $this->execute('DELETE FROM context_memberships WHERE knowledge_object_id = :id', ['id' => $objectId]);
         $this->deleteRelationsOf($objectId);
