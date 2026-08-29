@@ -7,21 +7,16 @@ declare(strict_types=1);
 namespace Nectrix;
 
 /**
- * Commands on the Context hierarchy. Cycles are refused, deletion of a node that still holds
- * children or Document is refused, and no KnowledgeObject is ever touched: a Context reaches them
- * only through the explicit path Context→Document→KnowledgeOccurrence.
+ * Commands on the Context hierarchy. A Context organises fragments of text, not Document: it
+ * reaches Concept and Entity through the containment of its own ranges, and a Document never owns
+ * one. Cycles are refused and a node that still holds children is refused.
  */
 final class ContextService
 {
     private const MAX_NAME_LENGTH = 200;
     private const MODES = ['exact', 'subtree'];
 
-    public function __construct(
-        private readonly ContextRepository $repository,
-        private readonly DocumentRepository $documents,
-        private readonly KnowledgeRepository $knowledge,
-    ) {
-    }
+    public function __construct(private readonly ContextRepository $repository) {}
 
     /** @return list<array<string, mixed>> */
     public function list(): array
@@ -65,18 +60,17 @@ final class ContextService
         return $this->require($contextId);
     }
 
-    /** Deletion is prudent: children and assigned Document must be reassigned explicitly first. */
+    /**
+     * Deleting a Context is an ordinary command: it is one of the three tools that put order in the
+     * chaos, so it must be reversible in the head of the user, not blocked forever. Sub-context are
+     * still refused, because their meaning depends on the parent; the ranges are removed from the
+     * text by the caller before the node disappears.
+     */
     public function delete(string $contextId): void
     {
         $this->require($contextId);
         if ($this->repository->hasChildren($contextId)) {
-            throw new ApiException(409, 'context_has_children', 'Il Context ha sub-context: riassegnali prima di eliminarlo.');
-        }
-        $documents = $this->repository->documentCount($contextId);
-        if ($documents > 0) {
-            throw new ApiException(409, 'context_has_documents', "Il Context è assegnato a {$documents} Document: riassegnali prima di eliminarlo.", [
-                'documents' => $documents,
-            ]);
+            throw new ApiException(409, 'context_has_children', 'Il Context ha sub-context: eliminali o spostali prima.');
         }
         $this->repository->delete($contextId);
     }
@@ -86,23 +80,6 @@ final class ContextService
     {
         $this->require($contextId);
         return $this->repository->ancestors($contextId);
-    }
-
-    /** @param array<string, mixed> $input @return array<string, mixed> */
-    public function assignDocument(string $documentId, array $input): array
-    {
-        $this->assertOnlyKeys($input, ['contextId']);
-        $document = $this->documents->get($documentId);
-        if ($document['status'] !== 'active') {
-            throw new ApiException(409, 'document_read_only', 'Un Document archiviato o nel cestino è in sola lettura.');
-        }
-        $contextId = $input['contextId'] ?? null;
-        if ($contextId !== null) {
-            $this->assertId((string) $contextId);
-            $this->require((string) $contextId);
-        }
-        $this->repository->assignDocument($documentId, $contextId === null ? null : (string) $contextId);
-        return $this->documents->get($documentId);
     }
 
     /**
@@ -125,10 +102,15 @@ final class ContextService
         return $this->repository->documentIds($this->selectedIds($contextId, $mode));
     }
 
-    /** @return list<array<string, mixed>> */
+    /**
+     * Concept and Entity contained in the ranges of the Context. Being in the same Document is not
+     * enough: the appunti are chaotic, only the containment declares a fact.
+     *
+     * @return list<array<string, mixed>>
+     */
     public function knowledgeObjects(string $contextId, string $mode): array
     {
-        return $this->knowledge->objectsInDocuments($this->documentIds($contextId, $mode));
+        return $this->repository->knowledgeObjects($this->selectedIds($contextId, $mode));
     }
 
     /** @return array<string, mixed> */

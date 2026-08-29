@@ -228,6 +228,18 @@ Il filtro FieldValue riusa il compilatore tipizzato della ricerca strutturata, e
 
 Gate soddisfatto: conteggi coerenti fra matrice, drill-down e query strutturate, ogni cella dichiara il percorso che ha prodotto il match, e assi, modalità e filtri non applicabili vengono rifiutati.
 
+## FASE 14.1 — Context come organizzatore di frammenti (completata)
+
+Il Context smette di essere un campo del Document e diventa una ContextOccurrence: un range di testo contiguo che può attraversare più paragrafi, con identità e lifecycle uguali a quelli delle KnowledgeOccurrence. L'uomo prende appunti in punti diversi e riscrive la stessa cosa più volte: rendendo il Document non consapevole, è il frammento ad acquistare significato, e l'indice che l'utente costruisce — Concept, Entity e Context sui frammenti — è ciò che rende comparabili appunti caotici.
+
+Completato: la migration 011 introduce `context_occurrences` e l'appartenenza derivata `context_memberships`, e toglie `documents.context_id`. L'appartenenza di un Concept o di una Entity a un Context è derivata dal contenimento totale del frammento, calcolata al salvataggio dal `document_json` che resta l'unica autorità; un overlap parziale non dichiara nulla. La tabella derivata è interamente ricostruibile e non contiene dati autorevoli.
+
+Il range è contiguo: può attraversare textblock consecutivi entrando in ciascuno dal suo inizio e lasciando il precedente alla sua fine, mentre intervalli disgiunti sotto la stessa identità vengono rifiutati. Togliere il mark stacca la occurrence senza eliminarla, riscriverlo la riattiva. Filtri, ricerca combinata, confronto e matrici passano tutti dall'appartenenza derivata; il selettore «Contesto del documento» sparisce dall'interfaccia insieme al suo endpoint.
+
+Nella stessa fase Concept, Entity e Context diventano davvero CRUD: la cancellazione toglie le occurrence, i mark dal testo e ciò che l'oggetto possedeva, lasciando intatte le parole dell'utente, e viene rifiutata solo quando un FieldValue di un'altra Entity punta lì. Il salvataggio diventa automatico — a pausa nella digitazione e subito dopo ogni comando semantico — e «Associa esistente» cerca insieme Concept, Entity e Context mentre si digita.
+
+Gate soddisfatto: un Context marcato attraversa più paragrafi e sopravvive a salvataggio e reload, il contenimento parziale non produce appartenenza, la cancellazione dei tre organizzatori non tocca il testo, e le query derivate restano coerenti con matrici, confronto e ricerca.
+
 ## FASE 15 — Knowledge Map
 
 Valutare Cytoscape.js e Sigma.js, quindi usare una libreria esistente. Consentire viste Concept only, Entity only e Concept+Entity; i nodi KnowledgeObject sono distinti visivamente e gli archi sono KnowledgeRelation. SemanticBlock, TemplateField, FieldValue, Context, Tag e KnowledgeOccurrence non diventano nodi principali; Context e Tag restano filtri/grouping/coloring.

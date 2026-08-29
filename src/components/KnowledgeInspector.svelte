@@ -43,6 +43,7 @@
     onAddDocumentEvidence,
     onRemoveEvidence,
     onAddToCompare,
+    onDelete,
   }: {
     object: KnowledgeObjectDetail
     busy?: boolean
@@ -74,6 +75,8 @@
     onAddDocumentEvidence: (relationId: string) => void
     onRemoveEvidence: (relationId: string, family: EvidenceView['family'], evidenceId: string) => void
     onAddToCompare: () => void
+    /** Deletes the object for good: occurrences, marks in the text and what it owned. */
+    onDelete: () => void
   } = $props()
 
   function startEditing(): void {
@@ -94,6 +97,11 @@
   let draftDescription = $state('')
 
   const archived = $derived(object.status === 'archived')
+
+  /** The deletion rewrites the documents that carried the marks: it is asked once, explicitly. */
+  function confirmDelete(): void {
+    if (window.confirm(inspectorStrings.remove.confirm(object.name, object.occurrences.length))) onDelete()
+  }
   const lifecycleAction = $derived(archived ? inspectorStrings.restore : inspectorStrings.archive)
 </script>
 
@@ -287,5 +295,12 @@
       title={compareStrings.add.description}
       onclick={onAddToCompare}
     >{compareStrings.add.label}</button>
+    <button
+      type="button"
+      class="inspector-danger"
+      disabled={busy}
+      title={inspectorStrings.remove.description}
+      onclick={confirmDelete}
+    >{inspectorStrings.remove.label}</button>
   </div>
 </aside>

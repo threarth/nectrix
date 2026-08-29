@@ -504,3 +504,14 @@ Quando le relative fasi saranno implementate, devono esistere almeno questi test
 | export con Entity, SemanticBlock e FieldValue supportati/degradati | integrazione | EXP-01, 02, 05 |
 
 Ogni bug editoriale corretto deve produrre un nuovo test regressivo nella suite più vicina alla causa e, se necessario, un test end-to-end del comportamento osservabile.
+
+## Invarianti delle ContextOccurrence (FASE 14.1)
+
+- **INV-CTX-01** — Una ContextOccurrence ha identità propria e stabile: lo stesso `occurrenceId` non può appartenere a due Context né a due Document.
+- **INV-CTX-02** — Il range di una ContextOccurrence è contiguo. Può attraversare più textblock, ma solo consecutivi: entra in ciascuno dal suo inizio e lascia il precedente alla sua fine. Intervalli disgiunti sotto la stessa identità vengono rifiutati con `context_occurrence_split`.
+- **INV-CTX-03** — Il mark `contextOccurrence` richiede attributi completi e validi (`occurrenceId`, `contextId`): un mark manipolato non diventa mai un range.
+- **INV-CTX-04** — Un Concept o una Entity appartengono a un Context solo se il loro frammento è contenuto per intero nel range. Un overlap parziale non dichiara alcuna appartenenza.
+- **INV-CTX-05** — L'appartenenza è derivata e ricostruibile dal `document_json`, che resta l'unica autorità: `context_memberships` non contiene dati autorevoli e viene riscritta interamente a ogni salvataggio del Document.
+- **INV-CTX-06** — Togliere il mark porta la ContextOccurrence a `detached` senza eliminarla; riscriverlo la riporta `active`, senza crearne una seconda. Una occurrence `deleted` non torna mai attiva.
+- **INV-CTX-07** — Un Document non possiede un Context e non ne è consapevole: il legame vive sul frammento, e «i documenti di un Context» è una query derivata.
+- **INV-CTX-08** — La cancellazione di un Context, di un Concept o di una Entity toglie le occurrence e i mark dal testo, ma non cambia una sola parola scritta dall'utente.

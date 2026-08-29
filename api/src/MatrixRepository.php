@@ -9,9 +9,10 @@ namespace Nectrix;
 use PDO;
 
 /**
- * Counts and drill-down of the Context matrices. Every axis starts from the same backbone —
- * Document -> KnowledgeOccurrence — because the Context reaches a KnowledgeObject only through the
- * editorial content: Entity, Template and FieldValue extend that same path, they never bypass it.
+ * Counts and drill-down of the Context matrices. Every axis starts from the same backbone — the
+ * active KnowledgeOccurrence and the Context that contains it — because a Context is a range drawn
+ * around a fragment, not a property of the Document: EntityType, Template and FieldValue extend
+ * that same path, they never bypass it. A fragment inside no range stays in its own column.
  * The SQL is assembled from fixed fragments chosen by the axis; every value is bound.
  */
 final class MatrixRepository
@@ -47,9 +48,18 @@ final class MatrixRepository
         ],
     ];
 
-    private const BACKBONE = 'FROM knowledge_occurrences k JOIN documents d ON d.id = k.document_id ';
+    /**
+     * The Context of a fragment is the range that contains it: the left join keeps the fragments
+     * that no range covers, which belong to the column without Context.
+     */
+    private const BACKBONE = 'FROM knowledge_occurrences k JOIN documents d ON d.id = k.document_id ' .
+        'LEFT JOIN context_memberships m ON m.knowledge_occurrence_id = k.id ' .
+        "LEFT JOIN context_occurrences co ON co.id = m.context_occurrence_id AND co.status = 'active' ";
 
     private const ACTIVE = "WHERE k.status = 'active' AND d.status = 'active' ";
+
+    /** The column a fragment falls in: the Context of its containing range, or none. */
+    private const COLUMN = 'CASE WHEN co.id IS NULL THEN NULL ELSE m.context_id END';
 
     public function __construct(private readonly PDO $pdo) {}
 
@@ -70,10 +80,10 @@ final class MatrixRepository
     {
         $definition = self::AXES[$axis];
         $statement = $this->pdo->prepare(
-            'SELECT ' . $definition['select'] . ', d.context_id AS context_id, ' .
+            'SELECT ' . $definition['select'] . ', ' . self::COLUMN . ' AS context_id, ' .
             'COUNT(DISTINCT k.id) AS matches ' . self::BACKBONE . $definition['joins'] . ' ' .
             self::ACTIVE . $definition['where'] . ' ' . $this->filterClause($axis, $filter) .
-            ' GROUP BY ' . $definition['group'] . ', d.context_id'
+            ' GROUP BY ' . $definition['group'] . ', ' . self::COLUMN
         );
         $statement->execute($parameters);
         return $statement->fetchAll();
@@ -96,7 +106,7 @@ final class MatrixRepository
         [$contextClause, $contextParameters] = $this->contextClause($contextIds);
         $statement = $this->pdo->prepare(
             'SELECT DISTINCT k.id AS occurrence_id, k.status, k.knowledge_object_id, k.object_type, ' .
-            'd.id AS document_id, d.title, d.context_id ' . self::BACKBONE . $definition['joins'] . ' ' .
+            'd.id AS document_id, d.title, ' . self::COLUMN . ' AS context_id ' . self::BACKBONE . $definition['joins'] . ' ' .
             self::ACTIVE . $definition['where'] . ' ' . $this->filterClause($axis, $filter) .
             ' AND ' . $rowColumn . ' = :row_id ' . $contextClause . ' ORDER BY d.updated_at DESC'
         );
@@ -149,7 +159,7 @@ final class MatrixRepository
     private function contextClause(?array $contextIds): array
     {
         if ($contextIds === null) {
-            return ['AND d.context_id IS NULL', []];
+            return ['AND co.id IS NULL', []];
         }
         $parameters = [];
         $placeholders = [];
@@ -157,6 +167,6 @@ final class MatrixRepository
             $placeholders[] = ':context' . $position;
             $parameters['context' . $position] = $contextId;
         }
-        return ['AND d.context_id IN (' . implode(',', $placeholders) . ')', $parameters];
+        return ['AND co.id IS NOT NULL AND m.context_id IN (' . implode(',', $placeholders) . ')', $parameters];
     }
 }

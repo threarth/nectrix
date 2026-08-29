@@ -6,7 +6,7 @@ test('crea un Concept da selezione e lo conserva dopo save/reload', async ({ pag
   await page.goto('/')
   await newDocument(page)
   await createConceptFrom(page, 'Backlog', 'Backlog')
-  await page.getByRole('button', { name: 'Salva' }).click()
+  await save(page)
   await page.reload()
   await expect(page.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
 })
@@ -15,10 +15,44 @@ test('crea una Entity con EntityType da selezione e la conserva dopo save/reload
   await page.goto('/')
   await newDocument(page)
   await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab USA', 'Company')
-  await page.getByRole('button', { name: 'Salva' }).click()
+  await save(page)
   await page.reload()
   await expect(page.locator('.nectrix-knowledge-occurrence')).toHaveText('Rocket Lab')
 })
+
+/**
+ * Waits for the document to be written. The save is automatic: pressing the button would race with
+ * it — the button disables itself the moment the write starts.
+ */
+async function save(page: Page): Promise<void> {
+  await expect(page.locator('.save-status.dirty')).toHaveCount(0, { timeout: 15000 })
+}
+
+/**
+ * Marks the whole text of the open document with a Context, creating it if needed. This is how the
+ * Context enters the system now: drawn on a fragment, never assigned to the Document.
+ */
+async function markContext(page: Page, name: string, parent?: string): Promise<void> {
+  await page.locator('.tiptap').click()
+  await page.locator('.tiptap').press('Control+A')
+  await toolbarButton(page, 'Segna Context').click()
+  const dialog = page.getByRole('dialog', { name: 'Segna un Context' })
+  if (parent !== undefined) await dialog.getByRole('radio', { name: parent }).check()
+  await dialog.getByLabel('Nuovo Context').fill(name)
+  await dialog.getByRole('button', { name: 'Crea', exact: true }).click()
+  await expect(dialog.getByRole('radio', { name: new RegExp(name) })).toBeChecked()
+  await dialog.getByRole('button', { name: 'Segna', exact: true }).click()
+  await save(page)
+}
+
+/** Removes every Context range from the open document, leaving the words in place. */
+async function unmarkContexts(page: Page): Promise<void> {
+  await page.locator('.tiptap').click()
+  await page.locator('.tiptap').press('Control+A')
+  await page.keyboard.press('Delete')
+  await page.keyboard.type('Testo senza context')
+  await save(page)
+}
 
 /** Drags the closing handle of the occurrence to the right, extending its range. */
 async function dragEndHandle(page: Page): Promise<void> {
@@ -54,8 +88,7 @@ async function conceptWithTail(page: Page): Promise<void> {
   await expect(editor).toHaveText('Backlog utile')
   await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
 
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 }
 
 /** Creates a Document and waits until it is the one open, so what follows lands on it. */
@@ -118,8 +151,7 @@ test('INV-OCC-10: il copy/paste crea una seconda occurrence con ID nuovo e stess
   await page.keyboard.press('Control+V')
 
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(2)
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await page.reload()
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(2)
 
@@ -136,8 +168,7 @@ test('INV-OCC-11: il cut/paste nello stesso documento conserva l’occurrenceId'
   await newDocument(page)
   await createConceptFrom(page, 'Roadmap', 'Roadmap')
 
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   const [before] = await occurrenceIds(page)
 
   await page.locator('.tiptap').press('Control+A')
@@ -146,8 +177,7 @@ test('INV-OCC-11: il cut/paste nello stesso documento conserva l’occurrenceId'
   await page.keyboard.press('Control+V')
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
 
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await page.reload()
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
 
@@ -162,8 +192,7 @@ test('INV-OCC-09: undo della creazione non lascia una creazione fantasma al salv
   await page.locator('.tiptap').press('Control+Z')
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await expect(page.getByRole('alert')).toHaveCount(0)
   await page.reload()
   await expect(page.locator('.tiptap')).toContainText('Provvisorio')
@@ -176,20 +205,17 @@ test('INV-OCC-08 e INV-OCC-09: l’occurrence salvata torna attiva dopo cancella
   await newDocument(page)
   await createConceptFrom(page, 'Riconciliazione', 'Riconciliazione')
 
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   const [before] = await occurrenceIds(page)
 
   await page.locator('.tiptap').press('Control+A')
   await page.keyboard.press('Delete')
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await page.locator('.tiptap').press('Control+Z')
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await expect(page.getByRole('alert')).toHaveCount(0)
 
   await page.reload()
@@ -204,13 +230,11 @@ test('INV-OCC-09: un Concept creato, cancellato e ripristinato con undo viene cr
 
   await page.locator('.tiptap').press('Control+A')
   await page.keyboard.press('Delete')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await page.locator('.tiptap').press('Control+Z')
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await expect(page.getByRole('alert')).toHaveCount(0)
 
   await page.reload()
@@ -228,8 +252,7 @@ test('FASE 6: il popover di un Concept apre il Concept Inspector con le sue occu
   await page.goto('/')
   await newDocument(page)
   await createConceptFrom(page, 'Backlog', 'Backlog')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await openInspectorFromOccurrence(page, 'Apri Concept')
 
@@ -244,8 +267,7 @@ test('FASE 6: archive e restore di un Concept cambiano solo lo stato', async ({ 
   await page.goto('/')
   await newDocument(page)
   await createConceptFrom(page, 'Archiviabile', 'Archiviabile')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await openInspectorFromOccurrence(page, 'Apri Concept')
 
   const inspector = page.locator('.inspector')
@@ -262,8 +284,7 @@ test('FASE 6: il popover di una Entity apre l’Entity Inspector con il suo Enti
   await page.goto('/')
   await newDocument(page)
   await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab USA', 'Azienda')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await openInspectorFromOccurrence(page, 'Apri Entity')
 
@@ -285,8 +306,7 @@ test('FASE 6.1: archiviare un Document lo rende in sola lettura e lo toglie dagl
   await createConceptFrom(page, 'Archiviato', 'Archiviato')
   const title = 'Documento archiviato'
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill(title)
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await expect(page.locator('.sidebar nav')).toContainText(title)
 
   await page.getByRole('button', { name: 'Archivia', exact: true }).click()
@@ -311,8 +331,7 @@ test('FASE 6.1: il cestino è una vista di recupero e non elimina nulla', async 
   await createConceptFrom(page, 'Cestinato', 'Cestinato')
   const title = 'Documento nel cestino'
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill(title)
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await page.getByRole('button', { name: 'Cestina', exact: true }).click()
   await expect(page.getByText('Sola lettura')).toBeVisible()
@@ -332,8 +351,7 @@ test('la dialog di associazione cerca e collega un Concept esistente a un altro 
   await page.goto('/')
   await newDocument(page)
   await createConceptFrom(page, 'Metodo scientifico', 'Metodo scientifico')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await newDocument(page)
   const editor = page.locator('.tiptap')
@@ -342,15 +360,14 @@ test('la dialog di associazione cerca e collega un Concept esistente a un altro 
   await editor.press('Control+A')
   await toolbarButton(page, 'Associa esistente').click()
 
-  const dialog = page.getByRole('dialog', { name: 'Associa un Concept o una Entity esistenti' })
+  const dialog = page.getByRole('dialog', { name: 'Associa a qualcosa che esiste' })
+  // La ricerca parte da sola mentre si digita: nessun pulsante da premere.
   await dialog.getByLabel('Cerca').fill('Metodo')
-  await dialog.getByRole('button', { name: 'Cerca', exact: true }).click()
   await expect(dialog.getByText('Metodo scientifico')).toBeVisible()
   await dialog.getByRole('button', { name: 'Associa', exact: true }).click()
 
   await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Qui parlo del metodo')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
@@ -362,8 +379,7 @@ test('FASE 7: gli alias di un Concept si aggiungono e si rimuovono senza toccare
   await page.goto('/')
   await newDocument(page)
   await createConceptFrom(page, 'Metodo', 'Metodo scientifico')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
@@ -383,8 +399,7 @@ test('FASE 7: un identificatore duplicato su un’altra Entity produce un candid
   await page.goto('/')
   await newDocument(page)
   await createEntityFrom(page, 'Prima', 'Prima società', 'Azienda')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Entity' }).click()
 
@@ -397,8 +412,7 @@ test('FASE 7: un identificatore duplicato su un’altra Entity produce un candid
 
   await newDocument(page)
   await createEntityFrom(page, 'Seconda', 'Seconda società', 'Azienda')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Entity' }).click()
 
@@ -423,8 +437,7 @@ test('le maniglie correggono il confine dell’occurrence mantenendo lo stesso I
   await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog utile')
   expect(await occurrenceIds(page)).toEqual([before])
 
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await page.reload()
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Backlog utile')
   expect(await occurrenceIds(page)).toEqual([before])
@@ -444,8 +457,7 @@ test('il pannello mostra il confine corretto subito dopo il trascinamento, prima
   const occurrence = page.locator('.inspector-occurrences .occurrence-text').first()
   await expect(occurrence).toHaveText('Backlog utile')
 
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await expect(occurrence).toHaveText('Backlog utile')
 })
 
@@ -470,8 +482,7 @@ test('la barra dei comandi compare sulla selezione e crea il Concept senza passa
   await dialog.getByRole('button', { name: 'Crea Concept' }).click()
 
   await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveCount(1)
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await page.reload()
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
 })
@@ -580,8 +591,7 @@ test('Concept ed Entity si distinguono a colpo d’occhio', async ({ page }) => 
   await newDocument(page)
   await createConceptFrom(page, 'Idea', 'Idea')
   const concept = await occurrenceColours(page)
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await newDocument(page)
   await createEntityFrom(page, 'Cosa', 'Cosa specifica', 'Oggetto')
@@ -596,8 +606,7 @@ test('CRUD: rinominare un Concept dall’inspector non tocca occurrence e alias'
   await page.goto('/')
   await newDocument(page)
   await createConceptFrom(page, 'Bozza', 'Nome provvisorio')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
@@ -618,76 +627,60 @@ test('CRUD: rinominare un Concept dall’inspector non tocca occurrence e alias'
   await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Bozza')
 })
 
-test('FASE 8: i Context filtrano i documenti e ne derivano Concept ed Entity', async ({ page }) => {
+test('FASE 8: il Context marcato sul testo filtra i documenti e ne deriva Concept ed Entity', async ({ page }) => {
   await page.goto('/')
   const panel = page.getByLabel('Contesti')
 
-  await panel.getByRole('button', { name: 'Nuovo' }).click()
-  let dialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
-  await dialog.getByLabel('Nome del contesto').fill('Università')
-  await dialog.getByRole('button', { name: 'Nuovo' }).click()
-  await expect(panel.getByRole('button', { name: 'Università' })).toBeVisible()
-
-  await panel.getByRole('button', { name: 'Università' }).click()
-  await panel.getByRole('button', { name: 'Nuovo' }).click()
-  dialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
-  await expect(dialog).toContainText('Nasce dentro «Università»')
-  await dialog.getByLabel('Nome del contesto').fill('Psicologia')
-  await dialog.getByRole('button', { name: 'Nuovo' }).click()
-  await expect(panel.getByRole('button', { name: 'Psicologia' })).toBeVisible()
-
-  // Un documento con un Concept, assegnato al sotto-contesto.
   await newDocument(page)
   await createConceptFrom(page, 'Inconscio', 'Inconscio collettivo')
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Appunti di psicologia')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
-  await page.getByLabel('Contesto del documento').selectOption({ label: 'Università / Psicologia' })
+  await save(page)
+  await markContext(page, 'Università')
 
-  // Il ramo vede il documento, il solo padre no.
+  await newDocument(page)
+  await page.locator('.tiptap').click()
+  await page.keyboard.type('Testo dentro il sotto-contesto')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Appunti del ramo')
+  await save(page)
+  await markContext(page, 'Psicologia', 'Università')
+
+  // Il ramo vede entrambi i documenti, il solo Context padre vede il suo.
   await panel.getByRole('button', { name: 'Università' }).click()
   await expect(page.locator('.sidebar nav')).toContainText('Appunti di psicologia')
+  await expect(page.locator('.sidebar nav')).toContainText('Appunti del ramo')
   await expect(page.getByLabel('Concept ed Entity qui')).toContainText('Inconscio collettivo')
 
   await panel.getByRole('button', { name: 'Solo questo' }).click()
-  await expect(page.locator('.sidebar nav')).not.toContainText('Appunti di psicologia')
-  await expect(page.getByLabel('Concept ed Entity qui')).toContainText('Nessun Concept o Entity')
+  await expect(page.locator('.sidebar nav')).not.toContainText('Appunti del ramo')
+  await expect(page.locator('.sidebar nav')).toContainText('Appunti di psicologia')
 
   await panel.getByRole('button', { name: 'Psicologia' }).click()
-  await expect(page.locator('.sidebar nav')).toContainText('Appunti di psicologia')
-  await expect(page.getByLabel('Concept ed Entity qui')).toContainText('Inconscio collettivo')
+  await expect(page.locator('.sidebar nav')).toContainText('Appunti del ramo')
+  // Il Concept vive nell'altro documento: la co-presenza non lo porta dentro questo Context.
+  await expect(page.getByLabel('Concept ed Entity qui')).toContainText('Nessun Concept o Entity')
 })
 
-test('FASE 8: un Context con documenti non si elimina e non può diventare figlio di sé stesso', async ({ page }) => {
+test('FASE 14.1: eliminare un Context toglie le marcature e lascia intatte le parole', async ({ page }) => {
   await page.goto('/')
   const panel = page.getByLabel('Contesti')
 
-  await panel.getByRole('button', { name: 'Nuovo' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
-  await dialog.getByLabel('Nome del contesto').fill('Con documenti')
-  await dialog.getByRole('button', { name: 'Nuovo' }).click()
-  await panel.getByRole('button', { name: 'Con documenti' }).click()
-
   await newDocument(page)
-  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento legato')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
-  await page.getByLabel('Contesto del documento').selectOption({ label: 'Con documenti' })
+  await page.locator('.tiptap').click()
+  await page.keyboard.type('Parole che restano dopo la cancellazione')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento marcato')
+  await save(page)
+  await markContext(page, 'Context eliminabile')
 
-  await panel.getByRole('button', { name: 'Con documenti' }).click()
+  await panel.getByRole('button', { name: /Context eliminabile/ }).click()
+  // Il comando dichiara che cosa toglie prima di toglierlo.
+  await expect(panel).toContainText('Toglie 1 frammento marcato dal testo, senza cancellare parole.')
 
-  // Il rifiuto viene spiegato accanto al comando, prima di tentarlo.
-  await expect(panel.getByRole('button', { name: 'Elimina', exact: true })).toBeDisabled()
-  await expect(panel).toContainText('Non eliminabile: ha un documento. Spostalo o riassegnalo prima.')
-  await expect(panel.getByRole('button', { name: 'Con documenti' })).toBeVisible()
-
-  // Tolto il documento dal contesto, l'eliminazione diventa possibile.
-  await page.getByRole('button', { name: 'Documento legato' }).click()
-  await page.getByLabel('Contesto del documento').selectOption({ label: 'Nessun contesto' })
-  await panel.getByRole('button', { name: 'Con documenti' }).click()
-  await expect(panel.getByRole('button', { name: 'Elimina', exact: true })).toBeEnabled()
+  page.once('dialog', (confirmation) => void confirmation.accept())
   await panel.getByRole('button', { name: 'Elimina', exact: true }).click()
-  await expect(panel.getByRole('button', { name: 'Con documenti' })).toHaveCount(0)
+
+  await expect(panel.getByRole('button', { name: /Context eliminabile/ })).toHaveCount(0)
+  await expect(page.locator('.tiptap')).toContainText('Parole che restano dopo la cancellazione')
+  await expect(page.locator('.nectrix-context-occurrence')).toHaveCount(0)
 })
 
 test('FASE 9: i Tag filtrano i documenti e restano separati dai Concept', async ({ page }) => {
@@ -703,15 +696,13 @@ test('FASE 9: i Tag filtrano i documenti e restano separati dai Concept', async 
   await newDocument(page)
   await createConceptFrom(page, 'Sincronicità', 'Sincronicità')
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento con tag')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await page.getByLabel('Aggiungi tag').selectOption({ label: 'Da rileggere' })
   await expect(page.locator('.document-tag')).toContainText('Da rileggere')
 
   await newDocument(page)
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento senza tag')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await tagPanel.getByRole('button', { name: /Da rileggere/ }).click()
   await expect(page.locator('.sidebar nav')).toContainText('Documento con tag')
@@ -733,8 +724,7 @@ test('FASE 9: un Tag assegnato non si elimina finché resta sui documenti', asyn
 
   await newDocument(page)
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento del tag')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await page.getByLabel('Aggiungi tag').selectOption({ label: 'Assegnato' })
   await expect(page.locator('.document-tag')).toContainText('Assegnato')
 
@@ -754,8 +744,7 @@ test('FASE 10: la ricerca distingue testo, alias e identità', async ({ page }) 
   await newDocument(page)
   await createConceptFrom(page, 'Individuazione', 'Individuazione')
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Il processo psichico')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   // Un alias che non compare nel testo del documento.
   await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
@@ -793,8 +782,7 @@ test('FASE 10: dalla ricerca si aprono documento, Concept e contesto', async ({ 
   await newDocument(page)
   await createConceptFrom(page, 'Ombra', 'Ombra')
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento della ricerca')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   const panel = page.getByLabel('Ricerca', { exact: true })
   await panel.getByRole('searchbox').fill('Ricerca')
@@ -837,8 +825,7 @@ test('FASE 10.1: un Template si applica a una Entity e i valori restano tipizzat
   // Applica il Template a una Entity e scrive i valori.
   await newDocument(page)
   await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab USA', 'Azienda')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Entity' }).click()
 
@@ -866,8 +853,7 @@ test('FASE 10.1.1: un riferimento mostra la destinazione senza copiarla nel docu
   await page.goto('/')
   await newDocument(page)
   await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab riferimento', 'Azienda riferita')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await newDocument(page)
   const editor = page.locator('.tiptap')
@@ -886,8 +872,7 @@ test('FASE 10.1.1: un riferimento mostra la destinazione senza copiarla nel docu
   await expect(reference).toHaveAttribute('data-label', 'Rocket Lab riferimento')
 
   // Il contenuto salvato porta solo gli ID: il nome non compare nel documento.
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
   await page.reload()
   await expect(page.locator('.tiptap .nectrix-reference')).toHaveAttribute('data-label', 'Rocket Lab riferimento')
   await expect(page.locator('.tiptap')).toHaveText('Vedi anche ')
@@ -903,8 +888,7 @@ test('FASE 10.1.1: copiare un riferimento genera una nuova collocazione, stessa 
   await page.goto('/')
   await newDocument(page)
   await createEntityFrom(page, 'Electron', 'Electron vettore', 'Vettore')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await newDocument(page)
   const editor = page.locator('.tiptap')
@@ -952,7 +936,7 @@ test('FASE 10.2: la ricerca strutturata confronta i numeri come numeri', async (
   for (const [entity, value] of [['Grande numerica', '1800'], ['Piccola numerica', '90']] as const) {
     await newDocument(page)
     await createEntityFrom(page, entity, entity, 'Azienda numerica')
-    await page.getByRole('button', { name: 'Salva' }).click()
+    await save(page)
     await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
     await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
     await page.getByRole('button', { name: 'Apri Entity' }).click()
@@ -983,8 +967,7 @@ test('FASE 11: una relazione si dichiara, ha una direzione e non nasce da sola',
   await newDocument(page)
   await createConceptFrom(page, 'Individuazione', 'Individuazione junghiana')
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento delle relazioni')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   // Una seconda Entity nello stesso documento: co-occorrenza, non relazione.
   await page.locator('.tiptap').click()
@@ -999,8 +982,7 @@ test('FASE 11: una relazione si dichiara, ha una direzione e non nasce da sola',
   await entityDialog.getByLabel('Nome della Entity').fill('Carl Gustav Jung')
   await entityDialog.getByLabel('Nome del nuovo EntityType').fill('Studioso')
   await entityDialog.getByRole('button', { name: 'Crea Entity' }).click()
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   // Il Concept non ha relazioni malgrado la co-occorrenza.
   await page.locator('.tiptap .nectrix-knowledge-occurrence').first().click()
@@ -1033,14 +1015,12 @@ test('FASE 12: una relazione dichiara su quali dati si basa', async ({ page }) =
   await newDocument(page)
   await createConceptFrom(page, 'Sincronicità', 'Sincronicità evidenza')
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Fonte della relazione')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await newDocument(page)
   await createConceptFrom(page, 'Causalità', 'Causalità evidenza')
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento collegato')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await save(page)
 
   await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
@@ -1073,7 +1053,7 @@ test('FASE 13: due Concept si confrontano affiancati sulla conoscenza registrata
   for (const [text, name] of [['Introversione', 'Introversione'], ['Estroversione', 'Estroversione']] as const) {
     await newDocument(page)
     await createConceptFrom(page, text, name)
-    await page.getByRole('button', { name: 'Salva' }).click()
+    await save(page)
     await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
     await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
     await page.getByRole('button', { name: 'Apri Concept' }).click()
@@ -1107,43 +1087,31 @@ test('FASE 13: due Concept si confrontano affiancati sulla conoscenza registrata
 
 test('FASE 14: la matrice conta per Context, dichiara il percorso e apre il drill-down', async ({ page }) => {
   await page.goto('/')
-  const panel = page.getByLabel('Contesti')
-
-  await panel.getByRole('button', { name: 'Nuovo' }).click()
-  let contextDialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
-  await contextDialog.getByLabel('Nome del contesto').fill('Matrice radice')
-  await contextDialog.getByRole('button', { name: 'Nuovo' }).click()
-  await expect(panel.getByRole('button', { name: 'Matrice radice' })).toBeVisible()
-
-  await panel.getByRole('button', { name: 'Matrice radice' }).click()
-  await panel.getByRole('button', { name: 'Nuovo' }).click()
-  contextDialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
-  await contextDialog.getByLabel('Nome del contesto').fill('Matrice foglia')
-  await contextDialog.getByRole('button', { name: 'Nuovo' }).click()
-  await expect(panel.getByRole('button', { name: 'Matrice foglia' })).toBeVisible()
 
   await newDocument(page)
   await createConceptFrom(page, 'Ombra', 'Ombra della matrice')
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento della matrice')
-  await page.getByRole('button', { name: 'Salva' }).click()
-  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
-  await page.getByLabel('Contesto del documento').selectOption({ label: 'Matrice radice / Matrice foglia' })
+  await save(page)
+  await markContext(page, 'Matrice radice')
+
+  await newDocument(page)
+  await page.locator('.tiptap').click()
+  await page.keyboard.type('Testo del ramo della matrice')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento del ramo')
+  await save(page)
+  await markContext(page, 'Matrice foglia', 'Matrice radice')
 
   await page.getByRole('button', { name: 'Viste matrice' }).click()
   const matrix = page.getByRole('dialog', { name: 'Matrice per Context' })
   await expect(matrix).toContainText('Document → KnowledgeOccurrence')
 
-  // Con i discendenti la radice somma la foglia; con il solo Context la radice resta vuota.
+  // Con i discendenti la radice somma la foglia; con il solo Context la radice conta il suo.
   const riga = matrix.locator('tbody tr').filter({ hasText: 'Ombra della matrice' })
-  await expect(riga.getByRole('button', { name: 'Ombra della matrice in Matrice radice: 1' })).toBeVisible()
-  await matrix.getByRole('button', { name: 'Solo il Context' }).click()
-  await expect(riga.getByRole('button', { name: 'Ombra della matrice in Matrice radice: 1' })).toHaveCount(0)
-
-  const cella = riga.getByRole('button', { name: 'Ombra della matrice in Matrice radice / Matrice foglia: 1' })
+  const cella = riga.getByRole('button', { name: 'Ombra della matrice in Matrice radice: 1' })
   await expect(cella).toBeVisible()
   await cella.click()
 
-  const drill = matrix.getByLabel('Ombra della matrice — Matrice radice / Matrice foglia')
+  const drill = matrix.getByLabel('Ombra della matrice — Matrice radice')
   await expect(drill).toContainText('Documento della matrice')
   await drill.getByRole('button', { name: 'Documento della matrice' }).click()
   await expect(page.getByRole('textbox', { name: 'Titolo documento' })).toHaveValue('Documento della matrice')

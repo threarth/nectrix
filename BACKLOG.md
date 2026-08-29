@@ -34,7 +34,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 Mappa navigabile dei KnowledgeObject: nodi Concept ed Entity distinti visivamente, archi KnowledgeRelation, viste Concept only, Entity only e Concept+Entity. Context e Tag restano filtri, grouping e coloring, non nodi.
 
-**La fase non puo' iniziare prima di chiudere ADR-P15-01** (renderer e libreria della mappa: Cytoscape.js o Sigma.js), che va portata all'utente con opzioni gratuite e licenza verificata.
+ADR-P15-01 e' chiusa: la mappa usa Cytoscape.js (MIT), come registrato in ADR-015.
 
 Prima del gate devono essere verificati con test regressivi:
 
@@ -43,9 +43,15 @@ Prima del gate devono essere verificati con test regressivi:
 
 Gate: inspector, provenance e filtri navigabili; occurrence e dati strutturati consultabili senza essere trasformati in nodi principali.
 
+### Documenti di prova su psicanalisi
+
+Verso la fine delle fasi, costruire alcuni documenti reali come banco di prova dell'indice: topiche di Freud, Io ed Es, il Sé in Jung, il Sé in Freud, il Sé in Lacan. Devono usare tutti e tre gli organizzatori — Concept, Entity e Context sui frammenti — e servire a verificare mappe, matrici e confronti su appunti scritti come li scriverebbe una persona, sparsi e ripetuti.
+
+Vincolo permanente: i documenti creati nel database di sviluppo non vengono mai eliminati.
+
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. ADR-P15-01 — renderer e libreria della Knowledge Map — è dovuta prima della FASE 15 e va chiusa con l'utente prima di scrivere codice della mappa.
+Il registro unico è `DECISIONS.md`. ADR-P15-01 è stata chiusa da ADR-015 (Cytoscape.js); la prima decisione ancora aperta è ADR-P16-01, dovuta prima della FASE 16.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

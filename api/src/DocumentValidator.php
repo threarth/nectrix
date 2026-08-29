@@ -9,7 +9,7 @@ namespace Nectrix;
 final class DocumentValidator
 {
     private const MAX_DEPTH = 32;
-    private const MARKS = ['bold', 'italic', 'underline', 'highlight', 'knowledgeOccurrence'];
+    private const MARKS = ['bold', 'italic', 'underline', 'highlight', 'knowledgeOccurrence', 'contextOccurrence'];
     private const LEGACY_HIGHLIGHT_COLORS = ['yellow', 'green', 'blue', 'pink'];
     private const BLOCKS = ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList'];
 
@@ -126,6 +126,8 @@ final class DocumentValidator
                 $this->validateHighlight($mark, $markPath);
             } elseif ($type === 'knowledgeOccurrence') {
                 $this->validateKnowledgeOccurrence($mark, $markPath);
+            } elseif ($type === 'contextOccurrence') {
+                $this->validateContextOccurrence($mark, $markPath);
             } elseif (array_key_exists('attrs', $mark)) {
                 $this->invalid($markPath . '.attrs', 'Il mark non supporta attributi.');
             }
@@ -146,6 +148,26 @@ final class DocumentValidator
         $this->assertKeys($attrs, ['color'], ['color'], $path . '.attrs');
         if (!is_string($attrs['color']) || (!preg_match('/^#[0-9a-fA-F]{6}$/', $attrs['color']) && !in_array($attrs['color'], self::LEGACY_HIGHLIGHT_COLORS, true))) {
             $this->invalid($path . '.attrs.color', 'Colore highlight non supportato.');
+        }
+    }
+
+    /**
+     * The Context marks a fragment exactly like the knowledge does, with its own identity: the
+     * Document does not own it, and a range without a complete identity is refused.
+     *
+     * @param array<string, mixed> $mark
+     */
+    private function validateContextOccurrence(array $mark, string $path): void
+    {
+        if (!array_key_exists('attrs', $mark)) {
+            $this->invalid($path . '.attrs', 'contextOccurrence richiede attributi.');
+        }
+        $attrs = $this->assertObject($mark['attrs'], $path . '.attrs');
+        $this->assertKeys($attrs, ['occurrenceId', 'contextId'], ['occurrenceId', 'contextId'], $path . '.attrs');
+        foreach (['occurrenceId', 'contextId'] as $key) {
+            if (!is_string($attrs[$key]) || !UuidV7::isValid($attrs[$key])) {
+                $this->invalid($path . '.attrs.' . $key, 'ID di ContextOccurrence non valido.');
+            }
         }
     }
 

@@ -29,6 +29,30 @@ final class KnowledgeRepository
         return $statement->fetchAll();
     }
 
+    /**
+     * The three organisers together — Concept, Entity and Context — because when the user is
+     * marking a fragment they are choosing where it belongs, and that choice is not split in three
+     * separate searches. A Context carries its path, so two homonyms of different branches are told
+     * apart at a glance.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function searchIndex(string $query): array
+    {
+        $statement = $this->pdo->prepare(
+            "SELECT c.id, 'concept' AS object_type, c.canonical_name AS name, NULL AS entity_type_name, NULL AS parent_id " .
+            'FROM concepts c WHERE c.canonical_name LIKE :query ' .
+            'OR EXISTS (SELECT 1 FROM concept_aliases a WHERE a.concept_id = c.id AND a.alias LIKE :query) ' .
+            "UNION ALL SELECT e.id, 'entity', e.name, t.name, NULL " .
+            'FROM entities e JOIN entity_types t ON t.id = e.entity_type_id WHERE e.name LIKE :query ' .
+            "UNION ALL SELECT x.id, 'context', x.name, NULL, x.parent_id " .
+            'FROM contexts x WHERE x.name LIKE :query ' .
+            'ORDER BY name COLLATE NOCASE LIMIT 40'
+        );
+        $statement->execute(['query' => '%' . $query . '%']);
+        return $statement->fetchAll();
+    }
+
     /** @return list<array<string, mixed>> */
     public function entityTypes(): array
     {

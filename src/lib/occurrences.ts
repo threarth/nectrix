@@ -347,3 +347,48 @@ export function deriveOccurrenceCreates(
 
   return creates
 }
+
+export const CONTEXT_MARK_NAME = 'contextOccurrence'
+
+export interface ContextOccurrenceAttributes {
+  occurrenceId: string
+  contextId: string
+}
+
+/** True when the value carries the two complete attributes a Context range requires. */
+export function isContextAttributes(value: unknown): value is ContextOccurrenceAttributes {
+  if (typeof value !== 'object' || value === null) return false
+  const attributes = value as Record<string, unknown>
+  return isUuidV7(attributes.occurrenceId) && isUuidV7(attributes.contextId)
+}
+
+/**
+ * Context ranges present in the draft, keyed by occurrenceId. A range may span several paragraphs,
+ * so the same identity legitimately appears on text nodes of different blocks.
+ */
+export function collectContextOccurrences(root: JSONContent): Map<string, ContextOccurrenceAttributes> {
+  const found = new Map<string, ContextOccurrenceAttributes>()
+  const visit = (node: JSONContent): void => {
+    for (const mark of node.marks ?? []) {
+      if (mark.type !== CONTEXT_MARK_NAME || !isContextAttributes(mark.attrs)) continue
+      const { occurrenceId, contextId } = mark.attrs as ContextOccurrenceAttributes
+      found.set(occurrenceId, { occurrenceId, contextId })
+    }
+    for (const child of node.content ?? []) visit(child)
+  }
+  visit(root)
+  return found
+}
+
+/** Ranges the server does not know yet: exactly what the save has to declare. */
+export function deriveContextCreates(
+  root: JSONContent,
+  persistedOccurrenceIds: ReadonlySet<string>,
+): ContextOccurrenceAttributes[] {
+  const creates: ContextOccurrenceAttributes[] = []
+  for (const attributes of collectContextOccurrences(root).values()) {
+    if (persistedOccurrenceIds.has(attributes.occurrenceId)) continue
+    creates.push(attributes)
+  }
+  return creates
+}

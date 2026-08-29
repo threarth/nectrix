@@ -90,6 +90,12 @@ export const palettePanelStrings = {
 
 export const inspectorStrings = {
   panelLabel: 'Dettaglio del KnowledgeObject',
+  remove: {
+    label: 'Elimina',
+    description: 'Elimina Concept o Entity, le sue occurrence e i mark nel testo: le parole restano',
+    confirm: (name: string, occurrences: number): string =>
+      `Elimino «${name}»?${occurrences === 0 ? '' : ` Toglie ${occurrences === 1 ? 'una marcatura' : `${occurrences} marcature`} dal testo; le parole restano.`}`,
+  },
   kind: (objectType: 'concept' | 'entity'): string => (objectType === 'concept' ? 'Concept' : 'Entity'),
   close: { label: '×', ariaLabel: 'Chiudi il pannello', description: 'Chiude il pannello e torna al solo documento' },
   loading: 'Caricamento…',
@@ -273,22 +279,24 @@ export const contextStrings = {
   move: { label: 'Sposta', description: 'Sposta il contesto selezionato, con tutto il suo ramo, sotto un altro' },
   remove: {
     label: 'Elimina',
-    description: 'Possibile solo se il contesto non ha sotto-contesti né documenti',
+    description: 'Elimina il contesto e toglie le sue marcature dal testo, senza cambiare una parola',
     /** Explains the refusal next to the command, before attempting it. */
-    blocked: (children: number, documents: number): string => {
-      const parts: string[] = []
-      if (children > 0) parts.push(children === 1 ? 'un sotto-contesto' : `${children} sotto-contesti`)
-      if (documents > 0) parts.push(documents === 1 ? 'un documento' : `${documents} documenti`)
-      const single = parts.length === 1 && children + documents === 1
-      return `Non eliminabile: ha ${parts.join(' e ')}. ${single ? 'Spostalo o riassegnalo' : 'Spostali o riassegnali'} prima.`
-    },
+    blocked: (children: number): string =>
+      `Non eliminabile: ha ${children === 1 ? 'un sotto-contesto' : `${children} sotto-contesti`}. ` +
+      `${children === 1 ? 'Spostalo o eliminalo' : 'Spostali o eliminali'} prima.`,
+    /** What the deletion will take away, said before it happens. */
+    impact: (ranges: number): string =>
+      ranges === 0
+        ? 'Nessun frammento marcato: elimina solo il contesto.'
+        : `Toglie ${ranges === 1 ? '1 frammento marcato' : `${ranges} frammenti marcati`} dal testo, senza cancellare parole.`,
+    confirm: (name: string, ranges: number): string =>
+      `Elimino «${name}»?${ranges === 0 ? '' : ` Toglie ${ranges === 1 ? 'una marcatura' : `${ranges} marcature`} dal testo; le parole restano.`}`,
   },
   moveToRoot: 'Alla radice',
   documentCount: (documents: number): string =>
     documents === 1 ? '1 documento' : `${documents} documenti`,
 
-  documentLabel: 'Contesto del documento',
-  documentDescription: 'Un documento riceve un contesto solo così, mai come effetto del salvataggio',
+  rangeCount: (ranges: number): string => (ranges === 1 ? '1 frammento' : `${ranges} frammenti`),
 
   derived: {
     label: 'Concept ed Entity qui',
@@ -557,4 +565,45 @@ export const matrixStrings = {
     semantic_block: 'Document → KnowledgeOccurrence → Entity → SemanticBlock',
     field_value: 'Document → KnowledgeOccurrence → Entity → SemanticBlock → FieldValue',
   } as Record<string, string>,
+} as const
+
+export const attachStrings = {
+  title: 'Associa a qualcosa che esiste',
+  hint: 'Cerca fra Concept, Entity e Context: scrivi e i risultati si aggiornano.',
+  confirm: 'Associa',
+  queryLabel: 'Cerca',
+  queryPlaceholder: 'Nome di Concept, Entity o Context',
+  resultsLabel: 'Risultati della ricerca',
+  searching: 'Cerco…',
+  empty: 'Nessun risultato: prova con meno lettere, oppure crea un Concept, una Entity o un Context.',
+  failure: 'Ricerca non riuscita.',
+  kind: (objectType: 'concept' | 'entity' | 'context'): string =>
+    objectType === 'concept' ? 'Concept' : objectType === 'entity' ? 'Entity' : 'Context',
+  note: 'Un Concept o una Entity marcano che cosa è il frammento; un Context dove appartiene.',
+} as const
+
+export const contextDialogStrings = {
+  title: 'Segna un Context',
+  hint: 'Il Context organizza il frammento, non il documento: puoi tracciarlo anche attraverso più paragrafi.',
+  confirm: 'Segna',
+  listLabel: 'Context disponibili',
+  empty: 'Nessun Context: creane uno qui sotto e il frammento lo inaugura.',
+  fragment: (text: string): string => `Frammento: «${text.length > 120 ? `${text.slice(0, 120)}…` : text}»`,
+  rangeCount: (count: number): string => (count === 1 ? '1 frammento' : `${count} frammenti`),
+  newLabel: 'Nuovo Context',
+  newPlaceholder: 'Nome del Context',
+  create: 'Crea',
+  creating: 'Creo…',
+  createFailure: 'Context non creato.',
+  newRootNote: 'Il nuovo Context nasce alla radice: scegline uno sopra per creargli un figlio.',
+  newChildNote: 'Il nuovo Context nasce dentro quello selezionato.',
+} as const
+
+export const contextCommandStrings = {
+  mark: {
+    label: 'Segna Context',
+    description: 'Traccia un Context attorno al testo selezionato, anche attraverso più paragrafi',
+  },
+  open: { label: 'Apri Context', description: 'Mostra il Context che contiene questo frammento' },
+  remove: { label: 'Togli Context', description: 'Toglie questo frammento dal Context, senza toccare il testo' },
 } as const

@@ -21,28 +21,44 @@ final class DocumentRepository
      *
      * @return list<array<string, mixed>>
      */
-    public function list(string $status, ?array $contextIds = null, ?array $documentIds = null): array
+    public function list(string $status, ?array $documentIds = null): array
     {
-        if ($contextIds === [] || $documentIds === []) {
+        if ($documentIds === []) {
             return [];
         }
         $conditions = ['status = ?'];
         $parameters = [$status];
-        if ($contextIds !== null) {
-            $conditions[] = 'context_id IN (' . implode(',', array_fill(0, count($contextIds), '?')) . ')';
-            $parameters = [...$parameters, ...$contextIds];
-        }
         if ($documentIds !== null) {
             $conditions[] = 'id IN (' . implode(',', array_fill(0, count($documentIds), '?')) . ')';
             $parameters = [...$parameters, ...$documentIds];
         }
 
         $statement = $this->pdo->prepare(
-            'SELECT id, title, revision, status, context_id, created_at, updated_at FROM documents WHERE ' .
+            'SELECT id, title, revision, status, created_at, updated_at FROM documents WHERE ' .
             implode(' AND ', $conditions) . ' ORDER BY updated_at DESC, id'
         );
         $statement->execute($parameters);
         return array_map($this->mapSummary(...), $statement->fetchAll());
+    }
+
+    /**
+     * Maintenance write used when something the text referred to is deleted: the words stay, the
+     * index over them does not. The revision advances so an editor holding the old content finds
+     * the conflict instead of writing the removed mark back. The caller owns the transaction.
+     *
+     * @param array<string, mixed> $documentJson
+     */
+    public function replaceContent(string $id, array $documentJson, string $plainText): void
+    {
+        $this->pdo->prepare(
+            'UPDATE documents SET document_json = :document_json, plain_text = :plain_text, ' .
+            'revision = revision + 1, updated_at = :updated_at WHERE id = :id'
+        )->execute([
+            'document_json' => $this->encode($documentJson),
+            'plain_text' => $plainText,
+            'updated_at' => Clock::now(),
+            'id' => $id,
+        ]);
     }
 
     /** Archive, trash and restore change only the lifecycle state, never the content. */
@@ -157,7 +173,6 @@ final class DocumentRepository
             'title' => $row['title'],
             'revision' => (int) $row['revision'],
             'status' => $row['status'],
-            'contextId' => $row['context_id'],
             'createdAt' => $row['created_at'],
             'updatedAt' => $row['updated_at'],
         ];

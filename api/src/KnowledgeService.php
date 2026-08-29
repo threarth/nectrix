@@ -29,6 +29,16 @@ final class KnowledgeService
         return $this->repository->search(substr(trim($query), 0, self::MAX_QUERY_LENGTH));
     }
 
+    /**
+     * Concept, Entity and Context in one answer: marking a fragment is one decision, not three.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function searchIndex(string $query): array
+    {
+        return $this->repository->searchIndex(substr(trim($query), 0, self::MAX_QUERY_LENGTH));
+    }
+
     /** @return list<array<string, mixed>> */
     public function entityTypes(): array { return $this->repository->entityTypes(); }
 

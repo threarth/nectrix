@@ -24,6 +24,8 @@ final class DocumentService
         private readonly KnowledgeRepository $knowledgeRepository,
         private readonly ReferenceExtractor $referenceExtractor,
         private readonly ReferenceRepository $referenceRepository,
+        private readonly ContextOccurrenceExtractor $contextExtractor,
+        private readonly ContextOccurrenceRepository $contextOccurrences,
     ) {
     }
 
@@ -32,12 +34,12 @@ final class DocumentService
      *
      * @return list<array<string, mixed>>
      */
-    public function list(string $scope = 'active', ?array $contextIds = null, ?array $documentIds = null): array
+    public function list(string $scope = 'active', ?array $documentIds = null): array
     {
         if (!in_array($scope, self::LIFECYCLE_SCOPES, true)) {
             throw new ApiException(422, 'invalid_request', 'Scope del lifecycle non supportato.');
         }
-        return $this->repository->list($scope, $contextIds, $documentIds);
+        return $this->repository->list($scope, $documentIds);
     }
 
     /** @return array<string, mixed> */
@@ -100,7 +102,7 @@ final class DocumentService
     public function update(string $id, array $input): array
     {
         $this->validateId($id);
-        $this->assertOnlyKeys($input, ['baseRevision', 'title', 'documentJson', 'occurrenceCreates']);
+        $this->assertOnlyKeys($input, ['baseRevision', 'title', 'documentJson', 'occurrenceCreates', 'contextOccurrenceCreates']);
         foreach (['baseRevision', 'title', 'documentJson'] as $required) {
             if (!array_key_exists($required, $input)) {
                 throw new ApiException(422, 'invalid_request', "Campo obbligatorio mancante: {$required}.");
@@ -111,9 +113,10 @@ final class DocumentService
         }
 
         $document = $this->document($input['documentJson']);
-        $creates = $input['occurrenceCreates'] ?? [];
-        if (!is_array($creates) || !array_is_list($creates)) throw new ApiException(422, 'invalid_request', 'occurrenceCreates deve essere una lista.');
+        $creates = $this->creates($input, 'occurrenceCreates');
+        $contextCreates = $this->creates($input, 'contextOccurrenceCreates');
         $marks = $this->occurrenceExtractor->extract($document);
+        $contexts = $this->contextExtractor->extract($document);
         $references = $this->referenceExtractor->extract($document);
         return $this->repository->update(
             $id,
@@ -121,11 +124,26 @@ final class DocumentService
             $this->title($input['title']),
             $document,
             $this->plainTextExtractor->extract($document),
-            function (string $documentId) use ($marks, $creates, $references): void {
+            function (string $documentId) use ($marks, $creates, $references, $contexts, $contextCreates): void {
                 $this->referenceRepository->assertDestinationsExist($references);
                 $this->knowledgeRepository->reconcileOccurrences($documentId, $marks, $creates);
+                // Il contenimento si calcola dopo la riconciliazione: usa le occurrence attive.
+                $this->contextOccurrences->reconcile($documentId, $contexts['marks'], $contextCreates, $contexts['memberships']);
             },
         );
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return list<array<string, mixed>>
+     */
+    private function creates(array $input, string $key): array
+    {
+        $creates = $input[$key] ?? [];
+        if (!is_array($creates) || !array_is_list($creates)) {
+            throw new ApiException(422, 'invalid_request', "{$key} deve essere una lista.");
+        }
+        return $creates;
     }
 
     /** @return array<string, mixed> */

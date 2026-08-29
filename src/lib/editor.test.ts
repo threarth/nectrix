@@ -94,7 +94,9 @@ describe('schema editoriale fino alla FASE 2', () => {
         'orderedList', 'paragraph', 'semanticBlockReference', 'text',
       ].sort(),
     )
-    expect(Object.keys(editor.schema.marks).sort()).toEqual(['bold', 'highlight', 'italic', 'knowledgeOccurrence', 'underline'])
+    expect(Object.keys(editor.schema.marks).sort()).toEqual(
+      ['bold', 'contextOccurrence', 'highlight', 'italic', 'knowledgeOccurrence', 'underline'],
+    )
   })
 
   test('preserva semanticamente heading, liste, blockquote e formattazione inline al reload', () => {

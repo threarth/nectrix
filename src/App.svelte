@@ -9,9 +9,9 @@
     createDocument,
     getDocument,
     getKnowledgeObject,
-    assignDocumentContext,
     assignTag,
     createContext,
+    deleteKnowledgeObject,
     createTag,
     deleteTag,
     derivedKnowledgeObjects,
@@ -83,7 +83,9 @@
   import { contextPathLabel, orderContexts, type ContextNode } from './lib/contexts'
   import { compareStrings, contextStrings, documentStrings, matrixStrings, tagStrings } from './lib/strings'
   import {
+    collectContextOccurrences,
     collectOccurrences,
+    deriveContextCreates,
     deriveOccurrenceCreates,
     collectOccurrenceTexts,
     type PendingKnowledgeObject,
@@ -115,12 +117,23 @@
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
+  /** Pause after the last keystroke before the draft is written by itself. */
+  const AUTOSAVE_DELAY_MS = 1200
+  /** Wait before retrying when a save is already in flight. */
+  const AUTOSAVE_RETRY_MS = 400
+
+  /** Grows when a deletion rewrote the open Document: the editor has to take the new content. */
+  let editorReloadToken = $state(0)
+  let autosaveTimer: ReturnType<typeof setTimeout> | undefined
+  /** Grows at every edit: tells whether the draft moved on while a save was in flight. */
+  let draftVersion = 0
   let dirty = $state(false)
   let loading = $state(true)
   let saving = $state(false)
   let error = $state('')
   /** Occurrence already persisted in the loaded revision: they need no creation at save time. */
   let persistedOccurrenceIds = new Set<string>()
+  let persistedContextOccurrenceIds = new Set<string>()
 
   /** KnowledgeObject created in this session and not yet persisted, by knowledgeObjectId. */
   let pendingObjects = new Map<string, PendingKnowledgeObject>()
@@ -338,6 +351,47 @@
     await refreshFilters()
   }
 
+  /**
+   * Creates a Context while marking a fragment: the index grows while reading, which is the only
+   * moment when the user knows what the note is about.
+   */
+  /**
+   * Deletes the Concept or the Entity of the inspector. The server rewrites the documents that
+   * carried its marks, so the open one is reloaded: its revision has moved on.
+   */
+  async function removeKnowledgeObject(): Promise<void> {
+    const object = inspector
+    if (!object || inspectorBusy) return
+    inspectorBusy = true
+    error = ''
+    try {
+      await deleteKnowledgeObject(object.id)
+      inspector = null
+      compareQueue = compareQueue.filter((entry) => entry.id !== object.id)
+      await reloadAfterDeletion()
+    } catch (cause) {
+      showError(cause)
+    } finally {
+      inspectorBusy = false
+    }
+  }
+
+  /** Reloads what a deletion may have rewritten: the open Document, the lists and the filters. */
+  async function reloadAfterDeletion(): Promise<void> {
+    if (selected) {
+      applyDocument(await getDocument(selected.id))
+      editorReloadToken += 1
+    }
+    contexts = await listContexts()
+    await refreshFilters()
+  }
+
+  async function createContextForRange(name: string, parentId: string | null): Promise<ContextNode> {
+    const created = await createContext(name, parentId)
+    contexts = await listContexts()
+    return created
+  }
+
   async function withContexts(operation: () => Promise<void>): Promise<void> {
     error = ''
     try {
@@ -346,25 +400,6 @@
       await refreshFilters()
     } catch (cause) {
       showError(cause)
-    }
-  }
-
-  /** A Document receives a Context only here, never as a side effect of saving. */
-  async function assignContext(contextId: string | null): Promise<void> {
-    const document = selected
-    if (!document || saving) return
-    saving = true
-    error = ''
-    try {
-      applyDocument(await assignDocumentContext(document.id, contextId))
-      // I contesti portano il numero di Document: senza ricaricarli il conteggio resta indietro
-      // e il comando di eliminazione spiegherebbe un impedimento che non c'e piu.
-      contexts = await listContexts()
-      await refreshFilters()
-    } catch (cause) {
-      showError(cause)
-    } finally {
-      saving = false
     }
   }
 
@@ -415,15 +450,25 @@
 
   async function persist(): Promise<void> {
     if (!selected || !draftJson || saving) return
+    const version = draftVersion
     saving = true
     error = ''
     try {
       const creates = deriveOccurrenceCreates(draftJson, persistedOccurrenceIds, pendingObjects)
-      const saved = await saveDocument(selected, draftTitle, draftJson, creates)
+      const contextCreates = deriveContextCreates(draftJson, persistedContextOccurrenceIds)
+      // I conteggi dei Context vivono sui frammenti: se il salvataggio ne aggiunge o ne toglie,
+      // la barra laterale va riletta, altrimenti spiegherebbe una situazione che non c'e piu.
+      const rangesChanged = contextCreates.length > 0
+        || collectContextOccurrences(draftJson).size !== persistedContextOccurrenceIds.size
+      const saved = await saveDocument(selected, draftTitle, draftJson, creates, contextCreates)
       for (const create of creates) {
         if (create.newObject) pendingObjects.delete(create.knowledgeObjectId)
       }
-      applyDocument(saved)
+      // Con il salvataggio automatico si scrive mentre la richiesta viaggia: la risposta non deve
+      // riportare indietro il testo digitato nel frattempo, solo prendere atto della revisione.
+      if (draftVersion === version) applyDocument(saved)
+      else adoptRevision(saved)
+      if (rangesChanged) contexts = await listContexts()
       documents = [saved, ...documents.filter((document) => document.id !== saved.id)]
       await refreshInspector()
     } catch (cause) {
@@ -433,15 +478,31 @@
     }
   }
 
+  /**
+   * Takes the saved revision without touching the draft: what is in the editor is newer, so it
+   * stays, and another automatic save will carry it.
+   */
+  function adoptRevision(document: DocumentRecord): void {
+    selected = document
+    persistedOccurrenceIds = new Set(collectOccurrences(document.documentJson).keys())
+    persistedContextOccurrenceIds = new Set(collectContextOccurrences(document.documentJson).keys())
+    dirty = true
+    scheduleAutosave()
+  }
+
   function applyDocument(document: DocumentRecord): void {
     // A KnowledgeObject created but not yet persisted survives a save of the same Document: undo
     // can bring its mark back and the next save still has to declare its creation.
     const sameDocument = selected?.id === document.id
+    // Un salvataggio automatico in attesa riguarda la revisione appena sostituita: non deve partire.
+    if (autosaveTimer !== undefined) clearTimeout(autosaveTimer)
+    autosaveTimer = undefined
     selected = document
     draftTitle = document.title
     draftJson = document.documentJson
     dirty = false
     persistedOccurrenceIds = new Set(collectOccurrences(document.documentJson).keys())
+    persistedContextOccurrenceIds = new Set(collectContextOccurrences(document.documentJson).keys())
     if (!sameDocument) void loadDocumentTags(document.id)
     if (!sameDocument) pendingObjects = new Map()
     void tick().then(resizeTitleInput)
@@ -459,17 +520,44 @@
   function changeTitle(value: string): void {
     draftTitle = value
     dirty = true
+    draftVersion += 1
+    scheduleAutosave()
     void tick().then(resizeTitleInput)
   }
 
   function changeContent(content: JSONContent): void {
     draftJson = content
     dirty = true
+    draftVersion += 1
+    scheduleAutosave()
   }
 
+  /**
+   * A new Concept, Entity or Context is saved at once: the index is what the user is building, and
+   * losing it to a closed tab would cost more than a write. The plain typing waits for a pause.
+   */
   function addPendingObject(knowledgeObjectId: string, object: PendingKnowledgeObject): void {
     pendingObjects.set(knowledgeObjectId, object)
     dirty = true
+    draftVersion += 1
+    scheduleAutosave(0)
+  }
+
+  /**
+   * Saves on its own after a pause in the typing. A save already running is not interrupted: the
+   * next tick reschedules, so nothing is lost and no two writes race on the same revision.
+   */
+  function scheduleAutosave(delay: number = AUTOSAVE_DELAY_MS): void {
+    if (autosaveTimer !== undefined) clearTimeout(autosaveTimer)
+    autosaveTimer = setTimeout(() => {
+      autosaveTimer = undefined
+      if (!dirty || readOnly) return
+      if (saving) {
+        scheduleAutosave(AUTOSAVE_RETRY_MS)
+        return
+      }
+      void persist()
+    }, delay)
   }
 
   /**
@@ -786,6 +874,11 @@
       onDelete={(contextId) => void withContexts(async () => {
         await deleteContext(contextId)
         if (selectedContextId === contextId) selectedContextId = null
+        // La cancellazione riscrive i Document che portavano le marcature: quello aperto va riletto.
+        if (selected) {
+          applyDocument(await getDocument(selected.id))
+          editorReloadToken += 1
+        }
       })}
     />
 
@@ -898,19 +991,6 @@
           placeholder="Titolo del documento"
         ></textarea>
         <div class="save-area">
-          <label class="document-context" title={contextStrings.documentDescription}>
-            {contextStrings.documentLabel}
-            <select
-              value={selected.contextId ?? ''}
-              disabled={saving || readOnly}
-              onchange={(event) => void assignContext(event.currentTarget.value === '' ? null : event.currentTarget.value)}
-            >
-              <option value="">{contextStrings.none}</option>
-              {#each orderContexts(contexts) as row (row.id)}
-                <option value={row.id}>{contextPathLabel(row)}</option>
-              {/each}
-            </select>
-          </label>
           {#if readOnly}
             <span class="read-only-badge" title={documentStrings.readOnlyHint[selected.status]}>
               {documentStrings.readOnly}
@@ -949,9 +1029,14 @@
           documentId={selected.id}
           initialContent={draftJson}
           editable={!readOnly}
+          {contexts}
+          reloadToken={editorReloadToken}
           onChange={changeContent}
           onObjectCreate={addPendingObject}
           onOpenInspector={(knowledgeObjectId) => void openInspector(knowledgeObjectId)}
+          onContextCreate={createContextForRange}
+          onOpenContext={(contextId) => void selectContext(contextId)}
+          onIndexChange={() => scheduleAutosave(0)}
         />
       {/key}
     {:else if !loading}
@@ -1032,6 +1117,7 @@
       busy={inspectorBusy}
       {duplicateCandidates}
       onClose={() => (inspector = null)}
+      onDelete={() => void removeKnowledgeObject()}
       onAddAlias={(alias) => void addAlias(alias)}
       onRemoveAlias={(aliasId) => void removeAlias(aliasId)}
       onAddIdentifier={(input) => void addIdentifier(input)}

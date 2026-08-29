@@ -104,6 +104,52 @@ function occurrenceAttributeSpec(name: keyof typeof OCCURRENCE_DATA_ATTRIBUTES) 
   }
 }
 
+const CONTEXT_DATA_ATTRIBUTES = {
+  occurrenceId: 'data-context-occurrence-id',
+  contextId: 'data-context-id',
+} as const
+
+function contextAttributeSpec(name: keyof typeof CONTEXT_DATA_ATTRIBUTES) {
+  const attribute = CONTEXT_DATA_ATTRIBUTES[name]
+  return {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.getAttribute(attribute),
+    renderHTML: (attributes: Record<string, unknown>) => ({ [attribute]: attributes[name] }),
+  }
+}
+
+/**
+ * A Context drawn around a fragment. Unlike a Concept or an Entity it may cross paragraphs: a
+ * thought rarely stops where a paragraph does, and the Context is what gives the fragment its
+ * meaning. The Document knows nothing about it — the mark lives on the text.
+ */
+const ContextOccurrence = Mark.create({
+  name: 'contextOccurrence',
+  inclusive: false,
+
+  addAttributes() {
+    return {
+      occurrenceId: contextAttributeSpec('occurrenceId'),
+      contextId: contextAttributeSpec('contextId'),
+    }
+  },
+
+  parseHTML() {
+    return [{
+      tag: `span[${CONTEXT_DATA_ATTRIBUTES.occurrenceId}]`,
+      getAttrs: (element: HTMLElement) => {
+        const occurrenceId = element.getAttribute(CONTEXT_DATA_ATTRIBUTES.occurrenceId)
+        const contextId = element.getAttribute(CONTEXT_DATA_ATTRIBUTES.contextId)
+        return isUuidV7(occurrenceId) && isUuidV7(contextId) ? { occurrenceId, contextId } : false
+      },
+    }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['span', { ...HTMLAttributes, class: 'nectrix-context-occurrence' }, 0]
+  },
+})
+
 const KnowledgeOccurrence = Mark.create({
   name: 'knowledgeOccurrence',
   inclusive: false,
@@ -267,6 +313,7 @@ export const editorExtensions = [
   }),
   Highlight,
   KnowledgeOccurrence,
+  ContextOccurrence,
   EntityReference,
   SemanticBlockReference,
   SelectionCaret,

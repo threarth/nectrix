@@ -5,6 +5,10 @@
 declare(strict_types=1);
 
 use Nectrix\ApiException;
+use Nectrix\ContextOccurrenceExtractor;
+use Nectrix\DeletionService;
+use Nectrix\DocumentPruner;
+use Nectrix\ContextOccurrenceRepository;
 use Nectrix\ContextRepository;
 use Nectrix\FieldFilterCompiler;
 use Nectrix\MatrixRepository;
@@ -191,6 +195,8 @@ $service = new DocumentService(
     new KnowledgeRepository($pdo),
     new ReferenceExtractor(),
     new ReferenceRepository($pdo),
+    new ContextOccurrenceExtractor(),
+    new ContextOccurrenceRepository($pdo),
 );
 $suite = new TestSuite();
 
@@ -203,8 +209,9 @@ $suite->test('le migrazioni estendono lo schema Document senza rimuovere le colo
     $phaseOne = ['id', 'title', 'document_json', 'plain_text', 'revision', 'created_at', 'updated_at'];
 
     assertSameValue($phaseOne, array_slice($columns, 0, count($phaseOne)));
-    assertSameValue(['status', 'context_id'], array_slice($columns, count($phaseOne)));
-    assertSameValue(10, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    // FASE 14.1: il Document non possiede piu un Context, resta solo il proprio lifecycle.
+    assertSameValue(['status'], array_slice($columns, count($phaseOne)));
+    assertSameValue(11, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
 });
 
 $domainFixture = [];
@@ -537,7 +544,7 @@ $suite->test('la migration Phase 1.1 aggiorna un database FASE 1 senza perdere D
 
     assertSameValue(1, (int) $upgradePdo->query('SELECT COUNT(*) FROM documents')->fetchColumn());
     assertSameValue('Documento preesistente', $upgradePdo->query('SELECT title FROM documents')->fetchColumn());
-    assertSameValue(10, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(11, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
     assertSameValue('field_values', $upgradePdo->query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'field_values'")->fetchColumn());
 });
 
@@ -748,14 +755,37 @@ function emptyDocument(): array
 }
 
 /** Saves one revision of a Document, optionally declaring occurrence creations. */
-function saveRevision(DocumentService $service, string $documentId, int $baseRevision, array $json, array $creates = [], string $title = 'Riconciliazione'): array
+function saveRevision(DocumentService $service, string $documentId, int $baseRevision, array $json, array $creates = [], string $title = 'Riconciliazione', array $contextCreates = []): array
 {
     return $service->update($documentId, [
         'baseRevision' => $baseRevision,
         'title' => $title,
         'documentJson' => $json,
         'occurrenceCreates' => $creates,
+        'contextOccurrenceCreates' => $contextCreates,
     ]);
+}
+
+/** Adds the contextOccurrence mark to a text node, on top of the marks it already carries. */
+function withinContext(array $node, string $contextOccurrenceId, string $contextId): array
+{
+    $node['marks'] = [...($node['marks'] ?? []), [
+        'type' => 'contextOccurrence',
+        'attrs' => ['occurrenceId' => $contextOccurrenceId, 'contextId' => $contextId],
+    ]];
+    return $node;
+}
+
+/** Plain text node marked with a Context only. */
+function contextText(string $text, string $contextOccurrenceId, string $contextId): array
+{
+    return withinContext(['type' => 'text', 'text' => $text], $contextOccurrenceId, $contextId);
+}
+
+/** Declares a ContextOccurrence together with the range that carries it. */
+function contextCreate(string $contextOccurrenceId, string $contextId): array
+{
+    return ['occurrenceId' => $contextOccurrenceId, 'contextId' => $contextId];
 }
 
 /** Declares a new Concept together with its first occurrence. */
@@ -786,6 +816,79 @@ function countRows(PDO $pdo, string $sql, array $parameters): int
     $statement = $pdo->prepare($sql);
     $statement->execute($parameters);
     return (int) $statement->fetchColumn();
+}
+
+/**
+ * Marks the whole text of a saved Document with one Context range, the way the editor does when the
+ * user draws a Context around a fragment. The Document stays unaware: the mark lives on the text.
+ */
+function markWholeDocument(DocumentService $service, string $documentId, string $contextId): string
+{
+    $document = $service->get($documentId);
+    $occurrenceId = UuidV7::generate();
+    // Un Context si disegna sul testo: un documento vuoto non ha nulla da marcare.
+    $json = json_encode($document['documentJson']) !== false && str_contains((string) json_encode($document['documentJson']), '"text"')
+        ? $document['documentJson']
+        : documentOfParagraphs([['type' => 'text', 'text' => 'Appunto']]);
+    saveRevision(
+        $service,
+        $documentId,
+        $document['revision'],
+        withContextMark($json, $occurrenceId, $contextId),
+        [],
+        $document['title'],
+        [contextCreate($occurrenceId, $contextId)],
+    );
+    return $occurrenceId;
+}
+
+/** Removes every Context range from a Document, leaving the words untouched. */
+function unmarkDocument(DocumentService $service, string $documentId): void
+{
+    $document = $service->get($documentId);
+    saveRevision(
+        $service,
+        $documentId,
+        $document['revision'],
+        withoutContextMarks($document['documentJson']),
+        [],
+        $document['title'],
+    );
+}
+
+/** @param array<string, mixed> $node @return array<string, mixed> */
+function withContextMark(array $node, string $occurrenceId, string $contextId): array
+{
+    if (($node['type'] ?? null) === 'text') {
+        return withinContext($node, $occurrenceId, $contextId);
+    }
+    if (isset($node['content']) && is_array($node['content'])) {
+        $node['content'] = array_map(
+            static fn (array $child): array => withContextMark($child, $occurrenceId, $contextId),
+            $node['content'],
+        );
+    }
+    return $node;
+}
+
+/** @param array<string, mixed> $node @return array<string, mixed> */
+function withoutContextMarks(array $node): array
+{
+    if (isset($node['marks']) && is_array($node['marks'])) {
+        $kept = array_values(array_filter(
+            $node['marks'],
+            static fn (array $mark): bool => ($mark['type'] ?? null) !== 'contextOccurrence',
+        ));
+        if ($kept === []) {
+            unset($node['marks']);
+        } else {
+            $node['marks'] = $kept;
+        }
+    }
+    if (isset($node['content']) && is_array($node['content'])) {
+        $node['content'] = array_map(withoutContextMarks(...), $node['content']);
+    }
+    return $node;
 }
 
 $suite->test('INV-OCC-08: il mark rimosso porta l’occurrence a detached e il Concept a orphan', static function () use ($pdo, $service): void {
@@ -1389,7 +1492,7 @@ $suite->test('un nome vuoto o un campo non previsto vengono rifiutati', static f
 /** Context service sharing the test database. */
 function contextService(PDO $pdo): ContextService
 {
-    return new ContextService(new ContextRepository($pdo), new DocumentRepository($pdo), new KnowledgeRepository($pdo));
+    return new ContextService(new ContextRepository($pdo));
 }
 
 $suite->test('i Context formano una gerarchia con breadcrumb derivato', static function () use ($pdo): void {
@@ -1445,31 +1548,34 @@ $suite->test('il move sposta un ramo intero e rifiuta i cicli', static function 
     assertSameValue(['Altra radice', 'Ramo'], array_column($contexts->breadcrumb($branch['id']), 'name'));
 });
 
-$suite->test('la cancellazione di un Context con figli o Document richiede riassegnazione', static function () use ($pdo, $service): void {
+$suite->test('FASE 14.1: eliminare un Context toglie le sue marcature dal testo senza toccare le parole', static function () use ($pdo, $service): void {
     $contexts = contextService($pdo);
-    $root = $contexts->create(['name' => 'Radice prudente']);
-    $child = $contexts->create(['name' => 'Figlio', 'parentId' => $root['id']]);
-    $document = $service->create(['title' => 'Assegnato']);
-    $contexts->assignDocument($document['id'], ['contextId' => $child['id']]);
+    $deletions = deletionService($pdo);
+    $root = $contexts->create(['name' => 'Radice eliminabile']);
+    $child = $contexts->create(['name' => 'Figlio marcato', 'parentId' => $root['id']]);
+    $document = $service->create(['title' => 'Appunti marcati']);
+    markWholeDocument($service, $document['id'], $child['id']);
+    $before = $service->get($document['id'])['plainText'];
 
     try {
-        $contexts->delete($root['id']);
+        $deletions->deleteContext($root['id']);
         throw new RuntimeException('Context con figli eliminato.');
     } catch (ApiException $error) {
         assertSameValue('context_has_children', $error->errorCode);
     }
 
-    try {
-        $contexts->delete($child['id']);
-        throw new RuntimeException('Context con Document eliminato.');
-    } catch (ApiException $error) {
-        assertSameValue('context_has_documents', $error->errorCode);
-    }
+    $removed = $deletions->deleteContext($child['id']);
 
-    $contexts->assignDocument($document['id'], ['contextId' => null]);
-    $contexts->delete($child['id']);
-    $contexts->delete($root['id']);
-    assertSameValue(null, $service->get($document['id'])['contextId']);
+    assertSameValue(1, $removed['occurrences']);
+    assertSameValue(1, $removed['documents']);
+    // Le parole restano: sparisce l'indice, non il testo dell'utente.
+    assertSameValue($before, $service->get($document['id'])['plainText']);
+    assertSameValue([], $contexts->documentIds($root['id'], 'subtree'));
+    assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM context_occurrences WHERE document_id = ?', [$document['id']]));
+    assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM context_memberships WHERE document_id = ?', [$document['id']]));
+
+    $deletions->deleteContext($root['id']);
+    assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM contexts WHERE id IN (?, ?)', [$root['id'], $child['id']]));
 });
 
 $suite->test('il filtro exact e subtree seleziona i Document del ramo', static function () use ($pdo, $service): void {
@@ -1478,11 +1584,11 @@ $suite->test('il filtro exact e subtree seleziona i Document del ramo', static f
     $child = $contexts->create(['name' => 'Lezione', 'parentId' => $root['id']]);
     $rootDocument = $service->create(['title' => 'Documento del corso']);
     $childDocument = $service->create(['title' => 'Documento della lezione']);
-    $contexts->assignDocument($rootDocument['id'], ['contextId' => $root['id']]);
-    $contexts->assignDocument($childDocument['id'], ['contextId' => $child['id']]);
+    markWholeDocument($service, $rootDocument['id'], $root['id']);
+    markWholeDocument($service, $childDocument['id'], $child['id']);
 
-    $exact = array_column($service->list('active', $contexts->selectedIds($root['id'], 'exact')), 'id');
-    $subtree = array_column($service->list('active', $contexts->selectedIds($root['id'], 'subtree')), 'id');
+    $exact = array_column($service->list('active', $contexts->documentIds($root['id'], 'exact')), 'id');
+    $subtree = array_column($service->list('active', $contexts->documentIds($root['id'], 'subtree')), 'id');
 
     assertSameValue([$rootDocument['id']], $exact);
     assertTrue(in_array($childDocument['id'], $subtree, true), 'Il subtree deve includere i Document dei discendenti.');
@@ -1506,8 +1612,8 @@ $suite->test('lo stesso KnowledgeObject compare in più Context senza duplicazio
     saveRevision($service, $second['id'], 0, documentOfParagraphs([occurrenceText('Idea', $secondOccurrence, $conceptId)]), [
         ['occurrenceId' => $secondOccurrence, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept', 'newObject' => false],
     ]);
-    $contexts->assignDocument($first['id'], ['contextId' => $root['id']]);
-    $contexts->assignDocument($second['id'], ['contextId' => $child['id']]);
+    markWholeDocument($service, $first['id'], $root['id']);
+    markWholeDocument($service, $second['id'], $child['id']);
 
     $subtree = $contexts->knowledgeObjects($root['id'], 'subtree');
     $exact = $contexts->knowledgeObjects($root['id'], 'exact');
@@ -1524,15 +1630,21 @@ $suite->test('un Document non riceve un Context per effetto collaterale del salv
     $context = $contexts->create(['name' => 'Non assegnato automaticamente']);
     $document = $service->create(['title' => 'Senza Context']);
 
-    saveRevision($service, $document['id'], 0, emptyDocument());
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([['type' => 'text', 'text' => 'Appunto libero']]));
 
-    assertSameValue(null, $service->get($document['id'])['contextId']);
-    $contexts->assignDocument($document['id'], ['contextId' => $context['id']]);
-    assertSameValue($context['id'], $service->get($document['id'])['contextId']);
+    assertSameValue([], $contexts->documentIds($context['id'], 'exact'));
+    markWholeDocument($service, $document['id'], $context['id']);
+    assertSameValue([$document['id']], $contexts->documentIds($context['id'], 'exact'));
 
-    saveRevision($service, $document['id'], 1, emptyDocument());
-    assertSameValue($context['id'], $service->get($document['id'])['contextId']);
+    // Il testo riscritto senza il mark perde il Context: nessuna appartenenza sopravvive da sola.
+    saveRevision($service, $document['id'], 2, documentOfParagraphs([['type' => 'text', 'text' => 'Riscritto']]));
+    assertSameValue([], $contexts->documentIds($context['id'], 'exact'));
 });
+
+function deletionService(PDO $pdo): DeletionService
+{
+    return new DeletionService($pdo, new DocumentRepository($pdo), new DocumentPruner(), new PlainTextExtractor());
+}
 
 function tagService(PDO $pdo): TagService
 {
@@ -1598,7 +1710,7 @@ $suite->test('il filtro combinato richiede tutti i Tag chiesti e rispetta il Con
         foreach ($applied as $tag) {
             $tags->assign($document['id'], ['tagId' => $tag['id']]);
         }
-        $contexts->assignDocument($document['id'], ['contextId' => $where['id']]);
+        markWholeDocument($service, $document['id'], $where['id']);
     }
 
     $byTags = array_column($query->documents('active', null, 'subtree', "{$primo['id']},{$secondo['id']}"), 'id');
@@ -1641,7 +1753,7 @@ $suite->test('KnowledgeObject × Context × Tag deriva Concept ed Entity senza d
         ['occurrenceId' => $entityOccurrence, 'knowledgeObjectId' => $entityId, 'objectType' => 'entity', 'newObject' => true, 'name' => 'Carl Jung', 'entityTypeId' => $entityType['id']],
     ]);
     foreach ([$first, $second] as $document) {
-        $contexts->assignDocument($document['id'], ['contextId' => $context['id']]);
+        markWholeDocument($service, $document['id'], $context['id']);
         $tags->assign($document['id'], ['tagId' => $tag['id']]);
     }
 
@@ -2253,7 +2365,7 @@ $suite->test('la combinazione con Context e Tag passa dalle occurrence, non dai 
     $context = $contexts->create(['name' => 'Contesto strutturato']);
     $tag = $tags->create(['name' => 'Tag strutturato']);
     $documents = (new StructuredQueryRepository($pdo))->documentsOfEntities([$dentro]);
-    $contexts->assignDocument($documents[0]['id'], ['contextId' => $context['id']]);
+    markWholeDocument($service, $documents[0]['id'], $context['id']);
     $tags->assign($documents[0]['id'], ['tagId' => $tag['id']]);
 
     $filters = [['fieldId' => fieldNamed($template, 'Settore')['id'], 'operator' => 'eq', 'value' => 'Combinato']];
@@ -2361,7 +2473,7 @@ $suite->test('una relazione non nasce da co-occurrence, Context o Tag', static f
     ]);
     $context = $contexts->create(['name' => 'Contesto co-occorrente']);
     $tag = $tags->create(['name' => 'Tag co-occorrente']);
-    $contexts->assignDocument($document['id'], ['contextId' => $context['id']]);
+    markWholeDocument($service, $document['id'], $context['id']);
     $tags->assign($document['id'], ['tagId' => $tag['id']]);
 
     assertSameValue([], $relations->of($conceptId));
@@ -2574,7 +2686,7 @@ $suite->test('il confronto fra Concept mostra solo conoscenza persistita', stati
     $relations->create($primo, ['targetId' => $secondo, 'relationType' => 'si oppone a']);
     $context = $contexts->create(['name' => 'Contesto confronto']);
     $documents = (new CompareRepository($pdo))->occurrencesOf($primo);
-    $contexts->assignDocument($documents[0]['document_id'], ['contextId' => $context['id']]);
+    markWholeDocument($service, $documents[0]['document_id'], $context['id']);
 
     $comparison = $compare->compare(['objectIds' => [$primo, $secondo]]);
 
@@ -2687,8 +2799,8 @@ $suite->test('FASE 14: la matrice Concept x Context conta le occurrence e dichia
     saveRevision($service, $secondo['id'], 0, documentOfParagraphs([occurrenceText('Soglia', $secondaOccorrenza, $conceptId)]), [
         ['occurrenceId' => $secondaOccorrenza, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept', 'newObject' => false],
     ]);
-    $contexts->assignDocument($primo['id'], ['contextId' => $radice['id']]);
-    $contexts->assignDocument($secondo['id'], ['contextId' => $foglia['id']]);
+    markWholeDocument($service, $primo['id'], $radice['id']);
+    markWholeDocument($service, $secondo['id'], $foglia['id']);
     $matrix = matrixService($pdo);
 
     $esatta = $matrix->matrix(['axis' => 'concept', 'mode' => 'exact']);
@@ -2731,7 +2843,7 @@ $suite->test('FASE 14: EntityType e Template raggiungono il Context solo attrave
     $documentId = $matrix->cell([
         'axis' => 'entity', 'mode' => 'exact', 'rowId' => $entityId, 'contextId' => null,
     ])['occurrences'][0]['documentId'];
-    $contexts->assignDocument($documentId, ['contextId' => $contesto['id']]);
+    markWholeDocument($service, $documentId, $contesto['id']);
 
     $perTemplate = $matrix->matrix(['axis' => 'template', 'mode' => 'exact']);
     $perTipo = $matrix->matrix(['axis' => 'entity_type', 'mode' => 'exact']);
@@ -2781,6 +2893,138 @@ $suite->test('FASE 14: la matrice rifiuta un asse sconosciuto e un filtro non ap
         assertSameValue('invalid_context_mode', $error->errorCode);
     }
 });
+
+$suite->test('FASE 14.1: un Context copre piu paragrafi con una sola identita, ma non intervalli disgiunti', static function () use ($pdo, $service): void {
+    $contexts = contextService($pdo);
+    $contesto = $contexts->create(['name' => 'Ragionamento lungo']);
+    $document = $service->create(['title' => 'Due paragrafi']);
+    $range = UuidV7::generate();
+
+    saveRevision($service, $document['id'], 0, documentOfParagraphs(
+        [contextText('Prima parte del pensiero', $range, $contesto['id'])],
+        [contextText('che prosegue qui', $range, $contesto['id'])],
+    ), [], 'Due paragrafi', [contextCreate($range, $contesto['id'])]);
+
+    assertSameValue([$document['id']], $contexts->documentIds($contesto['id'], 'exact'));
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM context_occurrences WHERE document_id = ?', [$document['id']]));
+
+    $spezzato = $service->create(['title' => 'Intervalli disgiunti']);
+    $altro = UuidV7::generate();
+    try {
+        saveRevision($service, $spezzato['id'], 0, documentOfParagraphs(
+            [contextText('Marcato', $altro, $contesto['id'])],
+            [['type' => 'text', 'text' => 'Non marcato']],
+            [contextText('Marcato di nuovo', $altro, $contesto['id'])],
+        ), [], 'Intervalli disgiunti', [contextCreate($altro, $contesto['id'])]);
+        throw new RuntimeException('Range disgiunto accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('context_occurrence_split', $error->errorCode);
+    }
+});
+
+$suite->test('FASE 14.1: appartiene al Context solo il frammento contenuto per intero', static function () use ($pdo, $service): void {
+    $contexts = contextService($pdo);
+    $contesto = $contexts->create(['name' => 'Contenimento']);
+    $document = $service->create(['title' => 'Contenuto e sconfinato']);
+    $range = UuidV7::generate();
+    $dentro = UuidV7::generate();
+    $fuori = UuidV7::generate();
+    $conceptDentro = UuidV7::generate();
+    $conceptFuori = UuidV7::generate();
+
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([
+        withinContext(occurrenceText('Individuazione', $dentro, $conceptDentro), $range, $contesto['id']),
+        contextText(' e poi ', $range, $contesto['id']),
+        withinContext(occurrenceText('Sincro', $fuori, $conceptFuori), $range, $contesto['id']),
+        occurrenceText('nicita', $fuori, $conceptFuori),
+    ]), [
+        conceptCreate($dentro, $conceptDentro, 'Individuazione contenuta'),
+        conceptCreate($fuori, $conceptFuori, 'Sincronicita sconfinata'),
+    ], 'Contenuto e sconfinato', [contextCreate($range, $contesto['id'])]);
+
+    $objects = array_column($contexts->knowledgeObjects($contesto['id'], 'exact'), 'name');
+
+    // Il secondo Concept esce dal range: un overlap parziale non dichiara nulla.
+    assertSameValue(['Individuazione contenuta'], $objects);
+});
+
+$suite->test('FASE 14.1: togliere il mark stacca la ContextOccurrence e riscriverlo la riattiva', static function () use ($pdo, $service): void {
+    $contexts = contextService($pdo);
+    $contesto = $contexts->create(['name' => 'Staccabile']);
+    $document = $service->create(['title' => 'Range staccato']);
+    $range = UuidV7::generate();
+    $testo = documentOfParagraphs([contextText('Frammento', $range, $contesto['id'])]);
+
+    saveRevision($service, $document['id'], 0, $testo, [], 'Range staccato', [contextCreate($range, $contesto['id'])]);
+    saveRevision($service, $document['id'], 1, documentOfParagraphs([['type' => 'text', 'text' => 'Frammento']]), [], 'Range staccato');
+
+    assertSameValue('detached', contextOccurrenceStatus($pdo, $range));
+    assertSameValue([], $contexts->documentIds($contesto['id'], 'exact'));
+
+    // Undo e nuovo salvataggio: lo stesso range torna attivo, non ne nasce un altro.
+    saveRevision($service, $document['id'], 2, $testo, [], 'Range staccato', [contextCreate($range, $contesto['id'])]);
+
+    assertSameValue('active', contextOccurrenceStatus($pdo, $range));
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM context_occurrences WHERE document_id = ?', [$document['id']]));
+});
+
+$suite->test('FASE 14.1: eliminare un Concept toglie mark e occurrence lasciando intatte le parole', static function () use ($pdo, $service): void {
+    $deletions = deletionService($pdo);
+    $document = $service->create(['title' => 'Concept eliminabile']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([
+        occurrenceText('Proiezione', $occurrenceId, $conceptId),
+        ['type' => 'text', 'text' => ' resta scritta'],
+    ]), [conceptCreate($occurrenceId, $conceptId, 'Proiezione')], 'Concept eliminabile');
+    $before = $service->get($document['id'])['plainText'];
+
+    $removed = $deletions->deleteKnowledgeObject($conceptId);
+
+    assertSameValue(1, $removed['occurrences']);
+    assertSameValue(1, $removed['documents']);
+    assertSameValue($before, $service->get($document['id'])['plainText']);
+    assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM knowledge_occurrences WHERE id = ?', [$occurrenceId]));
+    assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM knowledge_objects WHERE id = ?', [$conceptId]));
+    // Il documento resta salvabile: nel testo non e rimasto un mark orfano.
+    $current = $service->get($document['id']);
+    saveRevision($service, $document['id'], $current['revision'], $current['documentJson'], [], 'Concept eliminabile');
+});
+
+$suite->test('FASE 14.1: una Entity usata da un FieldValue altrui non si elimina in silenzio', static function () use ($pdo, $service): void {
+    $deletions = deletionService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+
+    $bersaglio = entityWithOccurrence($service, $knowledge, 'Entity riferita', 'Tipo riferito');
+    $titolare = entityWithOccurrence($service, $knowledge, 'Entity titolare', 'Tipo titolare');
+    $template = $templates->create(['name' => 'Scheda con riferimento']);
+    $template = $templates->addField($template['id'], ['name' => 'Collegata', 'fieldType' => 'entity_reference']);
+    $blockId = $blocks->addBlock($titolare, ['templateId' => $template['id']])[0]['id'];
+    $blocks->setValues($blockId, [
+        'fieldId' => fieldNamed($template, 'Collegata')['id'],
+        'values' => [$bersaglio],
+    ]);
+
+    try {
+        $deletions->deleteKnowledgeObject($bersaglio);
+        throw new RuntimeException('Entity riferita eliminata in silenzio.');
+    } catch (ApiException $error) {
+        assertSameValue('knowledge_object_referenced', $error->errorCode);
+        assertSameValue(1, $error->details['fieldValues']);
+    }
+
+    // Il rifiuto non lascia macerie: l'Entity e ancora intera.
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM entities WHERE id = ?', [$bersaglio]));
+});
+
+function contextOccurrenceStatus(PDO $pdo, string $occurrenceId): string
+{
+    $statement = $pdo->prepare('SELECT status FROM context_occurrences WHERE id = :id');
+    $statement->execute(['id' => $occurrenceId]);
+    return (string) $statement->fetchColumn();
+}
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {
     assertSameValue([], $pdo->query('PRAGMA foreign_key_check')->fetchAll());

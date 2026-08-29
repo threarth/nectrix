@@ -4,8 +4,10 @@ export interface ContextNode {
   id: string
   parent_id: string | null
   name: string
-  /** Document assigned directly to this Context, not counting the descendants. */
+  /** Document holding at least one range of this Context, not counting the descendants. */
   documents?: number
+  /** Text ranges currently marked with this Context. */
+  occurrences?: number
 }
 
 export interface ContextRow extends ContextNode {
@@ -53,11 +55,19 @@ export function possibleParents(rows: readonly ContextRow[], contextId: string):
   return rows.filter((row) => !excluded.has(row.id))
 }
 
-/** Why a Context cannot be deleted yet, or null when nothing blocks it. */
-export function deletionBlockers(rows: readonly ContextRow[], contextId: string): { children: number; documents: number } | null {
+/**
+ * Why a Context cannot be deleted yet, or null when nothing blocks it. Only the sub-context block
+ * it: the ranges are removed from the text by the deletion itself, so marked fragments are a
+ * consequence to declare, not an impediment.
+ */
+export function deletionBlockers(rows: readonly ContextRow[], contextId: string): { children: number } | null {
   const row = rows.find((candidate) => candidate.id === contextId)
   if (row === undefined) return null
   const children = rows.filter((candidate) => candidate.parent_id === contextId).length
-  const documents = row.documents ?? 0
-  return children === 0 && documents === 0 ? null : { children, documents }
+  return children === 0 ? null : { children }
+}
+
+/** What deleting the Context would take away from the text, so the command can say it first. */
+export function deletionImpact(rows: readonly ContextRow[], contextId: string): number {
+  return rows.find((candidate) => candidate.id === contextId)?.occurrences ?? 0
 }

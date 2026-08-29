@@ -4,15 +4,17 @@ import type { JSONContent } from '@tiptap/core'
 import { describe, expect, test } from 'vitest'
 import {
   canKeepCutOccurrenceIds,
+  collectContextOccurrences,
+  collectOccurrenceTexts,
   collectOccurrences,
+  deriveContextCreates,
   deriveOccurrenceCreates,
   occurrenceFingerprint,
-  collectOccurrenceTexts,
   parseCutClipboardPayload,
   planOccurrenceIdRewrite,
-  validateOccurrences,
   type CutToken,
   type PendingKnowledgeObject,
+  validateOccurrences,
 } from './occurrences'
 
 /** Deterministic canonical UUIDv7 values, distinguished by the last four hex digits. */
@@ -250,5 +252,57 @@ describe('testo corrente di una occurrence', () => {
   test('non elenca una occurrence il cui mark non è più nel contenuto', () => {
     const texts = collectOccurrenceTexts(doc(paragraph({ type: 'text', text: 'niente' })))
     expect(texts.has(OCCURRENCE_A)).toBe(false)
+  })
+})
+
+describe('FASE 14.1: il Context marca frammenti, non documenti', () => {
+  const contextId = '01900000-0000-7000-8000-000000000001'
+  const rangeId = '01900000-0000-7000-8000-000000000002'
+
+  /** A range that crosses two paragraphs keeps one identity: the thought does not end with the paragraph. */
+  const acrossParagraphs = {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [{
+          type: 'text',
+          text: 'Prima parte',
+          marks: [{ type: 'contextOccurrence', attrs: { occurrenceId: rangeId, contextId } }],
+        }],
+      },
+      {
+        type: 'paragraph',
+        content: [{
+          type: 'text',
+          text: 'seconda parte',
+          marks: [{ type: 'contextOccurrence', attrs: { occurrenceId: rangeId, contextId } }],
+        }],
+      },
+    ],
+  }
+
+  test('lo stesso range attraverso due paragrafi resta una sola occurrence', () => {
+    const found = collectContextOccurrences(acrossParagraphs)
+
+    expect([...found.keys()]).toEqual([rangeId])
+    expect(found.get(rangeId)).toEqual({ occurrenceId: rangeId, contextId })
+  })
+
+  test('un mark con attributi incompleti non diventa un range', () => {
+    const broken = {
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Rotto', marks: [{ type: 'contextOccurrence', attrs: { contextId } }] }],
+      }],
+    }
+
+    expect(collectContextOccurrences(broken).size).toBe(0)
+  })
+
+  test('solo i range che il server non conosce vengono dichiarati al salvataggio', () => {
+    expect(deriveContextCreates(acrossParagraphs, new Set())).toEqual([{ occurrenceId: rangeId, contextId }])
+    expect(deriveContextCreates(acrossParagraphs, new Set([rangeId]))).toEqual([])
   })
 })

@@ -2,7 +2,7 @@
   // SPDX-License-Identifier: AGPL-3.0-or-later
 
   import { Editor, type JSONContent } from '@tiptap/core'
-  import { onDestroy, onMount } from 'svelte'
+  import { onDestroy, onMount, untrack } from 'svelte'
   import {
     defaultHighlightColors,
     editorExtensions,
@@ -35,15 +35,20 @@
     listEntityTypes,
     resolveKnowledgeObjects,
     resolveReferences,
+    searchIndex,
     searchKnowledge,
     type EntityType,
+    type IndexSearchResult,
     type KnowledgeSearchResult,
   } from '../lib/api'
   import AttachDialog from './AttachDialog.svelte'
   import ReferenceDialog from './ReferenceDialog.svelte'
   import ConceptDialog from './ConceptDialog.svelte'
+  import ContextDialog from './ContextDialog.svelte'
   import EntityDialog from './EntityDialog.svelte'
+  import type { ContextNode } from '../lib/contexts'
   import {
+    contextCommandStrings,
     editorStrings,
     highlightPopoverStrings,
     occurrencePopoverStrings,
@@ -56,17 +61,30 @@
     documentId,
     initialContent,
     editable = true,
+    contexts = [],
+    reloadToken = 0,
     onChange,
     onObjectCreate,
     onOpenInspector,
+    onContextCreate,
+    onOpenContext,
+    onIndexChange,
   }: {
     documentId: string
     initialContent: JSONContent
     /** An archived or trashed Document is shown without the editing commands. */
     editable?: boolean
+    /** Context available to mark a fragment with, and to grow while reading. */
+    contexts?: ContextNode[]
+    /** Changes when the server rewrote the Document: the editor has to take the new content. */
+    reloadToken?: number
     onChange: (content: JSONContent) => void
     onObjectCreate: (knowledgeObjectId: string, object: PendingKnowledgeObject) => void
     onOpenInspector: (knowledgeObjectId: string) => void
+    onContextCreate?: (name: string, parentId: string | null) => Promise<ContextNode>
+    onOpenContext?: (contextId: string) => void
+    /** A semantic command touched the index: worth writing at once, not at the next pause. */
+    onIndexChange?: () => void
   } = $props()
 
   let element: HTMLDivElement
@@ -127,7 +145,7 @@
   const POPOVER_ROOM = 56
 
   /** Range the open dialog will mark, remembered because the dialog takes the focus. */
-  let pendingCommand = $state<{ kind: 'concept' | 'entity' | 'attach'; text: string; from: number; to: number } | null>(null)
+  let pendingCommand = $state<{ kind: 'concept' | 'entity' | 'attach' | 'context'; text: string; from: number; to: number } | null>(null)
   let entityTypes = $state<EntityType[]>([])
   let dialogBusy = $state(false)
   let dialogError = $state('')
@@ -215,8 +233,21 @@
     void loadReferenceLabels(editor)
   }
 
+  let appliedReloadToken = untrack(() => reloadToken)
+
+  /**
+   * Takes the content again when a deletion rewrote the Document on the server. Without this the
+   * editor would keep showing marks that no longer exist, and the next save would write them back.
+   */
+  $effect(() => {
+    const token = reloadToken
+    if (token === appliedReloadToken) return
+    appliedReloadToken = token
+    untrack(() => editorState.editor?.commands.setContent(initialContent, { emitUpdate: false }))
+  })
+
   /** Opens the dialog of a semantic command on the current selection. */
-  function openCommand(kind: 'concept' | 'entity' | 'attach'): void {
+  function openCommand(kind: 'concept' | 'entity' | 'attach' | 'context'): void {
     const editor = editorState.editor
     if (!editor || editor.state.selection.empty) return
     const { from, to } = editor.state.selection
@@ -248,6 +279,7 @@
       .setMark('knowledgeOccurrence', { occurrenceId: uuidV7(), knowledgeObjectId, objectType })
       .run()
     knownObjectTypes.set(knowledgeObjectId, objectType)
+    onIndexChange?.()
   }
 
   function confirmConcept(name: string): void {
@@ -256,6 +288,22 @@
     const knowledgeObjectId = uuidV7()
     markRange(command, knowledgeObjectId, 'concept')
     onObjectCreate(knowledgeObjectId, { objectType: 'concept', name })
+    closeCommand()
+  }
+
+  /**
+   * Draws the Context around the remembered range. Unlike a Concept the mark may cross paragraphs,
+   * and it coexists with the marks already there: the Context says where the fragment belongs, not
+   * what it is.
+   */
+  function confirmContext(contextId: string): void {
+    const command = pendingCommand
+    const editor = editorState.editor
+    if (!command || !editor) return
+    editor.chain().focus().setTextSelection({ from: command.from, to: command.to })
+      .setMark('contextOccurrence', { occurrenceId: uuidV7(), contextId })
+      .run()
+    onIndexChange?.()
     closeCommand()
   }
 
@@ -281,9 +329,18 @@
     }
   }
 
-  function confirmAttach(result: KnowledgeSearchResult): void {
+  /**
+   * Associates the fragment with something that already exists. Concept and Entity say what the
+   * fragment is, a Context says where it belongs: the same command serves both, because for the
+   * user it is one decision taken while reading.
+   */
+  function confirmAttach(result: IndexSearchResult): void {
     const command = pendingCommand
     if (!command) return
+    if (result.object_type === 'context') {
+      confirmContext(result.id)
+      return
+    }
     markRange(command, result.id, result.object_type)
     closeCommand()
   }
@@ -462,6 +519,11 @@
         onclick={() => openCommand('attach')}
       />
       <ToolbarButton
+        command={contextCommandStrings.mark}
+        disabled={editorState.editor.state.selection.empty}
+        onclick={() => openCommand('context')}
+      />
+      <ToolbarButton
         command={referenceStrings.command}
         onclick={() => (referencing = true)}
       />
@@ -560,10 +622,19 @@
       onCancel={closeCommand}
       onConfirm={(name, entityTypeName) => void confirmEntity(name, entityTypeName)}
     />
+  {:else if pendingCommand?.kind === 'context' && onContextCreate}
+    <ContextDialog
+      {contexts}
+      text={pendingCommand.text}
+      onCancel={closeCommand}
+      onConfirm={confirmContext}
+      onCreate={onContextCreate}
+    />
   {:else if pendingCommand?.kind === 'attach'}
     <AttachDialog
       initialQuery={pendingCommand.text}
-      onSearch={searchKnowledge}
+      {contexts}
+      onSearch={searchIndex}
       onCancel={closeCommand}
       onConfirm={confirmAttach}
     />
@@ -578,13 +649,13 @@
     >
       {#if editorPopover.selectionActive}
         <div class="popover-group" role="group" aria-label={editorStrings.selectionGroupLabel}>
-          {#each [editorStrings.createConcept, editorStrings.createEntity, editorStrings.attachExisting] as command, index}
+          {#each [editorStrings.createConcept, editorStrings.createEntity, contextCommandStrings.mark, editorStrings.attachExisting] as command, index}
             <button
               type="button"
               class="popover-command"
               title={command.description}
               onpointerdown={keepSelection}
-              onclick={() => openCommand((['concept', 'entity', 'attach'] as const)[index])}
+              onclick={() => openCommand((['concept', 'entity', 'context', 'attach'] as const)[index])}
             >{command.label}</button>
           {/each}
         </div>

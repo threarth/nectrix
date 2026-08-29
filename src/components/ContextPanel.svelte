@@ -5,6 +5,7 @@
   import {
     contextPathLabel,
     deletionBlockers,
+    deletionImpact,
     orderContexts,
     possibleParents,
     type ContextNode,
@@ -40,8 +41,14 @@
   const selected = $derived(rows.find((row) => row.id === selectedId) ?? null)
   const parents = $derived(selectedId === null ? [] : possibleParents(rows, selectedId))
   const blocked = $derived(selectedId === null ? null : deletionBlockers(rows, selectedId))
+  const impact = $derived(selectedId === null ? 0 : deletionImpact(rows, selectedId))
 
   let naming = $state<'create' | 'rename' | null>(null)
+
+  /** A deletion rewrites the documents that carried the ranges: it is asked once, explicitly. */
+  function confirmDelete(context: ContextNode): void {
+    if (window.confirm(contextStrings.remove.confirm(context.name, impact))) onDelete(context.id)
+  }
 </script>
 
 <section class="context-panel" aria-label={contextStrings.panelLabel}>
@@ -65,11 +72,11 @@
         class:active={selectedId === row.id}
         style={`padding-left: ${12 + row.depth * 14}px`}
         title={contextPathLabel(row)}
-        aria-label={(row.documents ?? 0) > 0
-          ? `${row.name}, ${contextStrings.documentCount(row.documents ?? 0)}`
+        aria-label={(row.occurrences ?? 0) > 0
+          ? `${row.name}, ${contextStrings.rangeCount(row.occurrences ?? 0)}`
           : row.name}
         onclick={() => onSelect(row.id)}
-      >{row.name}{#if (row.documents ?? 0) > 0}<small>{row.documents}</small>{/if}</button>
+      >{row.name}{#if (row.occurrences ?? 0) > 0}<small>{row.occurrences}</small>{/if}</button>
     {/each}
   {/if}
 
@@ -98,14 +105,16 @@
       type="button"
       disabled={busy || selected === null || blocked !== null}
       title={blocked === null
-        ? contextStrings.remove.description
-        : contextStrings.remove.blocked(blocked.children, blocked.documents)}
-      onclick={() => selected !== null && onDelete(selected.id)}
+        ? contextStrings.remove.impact(impact)
+        : contextStrings.remove.blocked(blocked.children)}
+      onclick={() => selected !== null && confirmDelete(selected)}
     >{contextStrings.remove.label}</button>
   </div>
 
   {#if blocked !== null}
-    <p class="tag-note">{contextStrings.remove.blocked(blocked.children, blocked.documents)}</p>
+    <p class="tag-note">{contextStrings.remove.blocked(blocked.children)}</p>
+  {:else if selected !== null}
+    <p class="tag-note">{contextStrings.remove.impact(impact)}</p>
   {/if}
 
   {#if selected !== null}

@@ -165,6 +165,7 @@ export async function saveDocument(
   title: string,
   documentJson: JSONContent,
   occurrenceCreates: OccurrenceCreate[] = [],
+  contextOccurrenceCreates: { occurrenceId: string; contextId: string }[] = [],
 ): Promise<DocumentRecord> {
   const payload = await request<{ document: DocumentRecord }>(`/api/documents/${encodeURIComponent(document.id)}`, {
     method: 'PUT',
@@ -173,6 +174,7 @@ export async function saveDocument(
       title,
       documentJson,
       occurrenceCreates,
+      contextOccurrenceCreates,
     }),
   })
   return payload.document
@@ -659,17 +661,15 @@ export async function moveContext(id: string, parentId: string | null): Promise<
 }
 
 /** Refused while the Context still holds sub-context or Document. */
-export async function deleteContext(id: string): Promise<void> {
-  await request<{ deleted: boolean }>(`/api/contexts/${encodeURIComponent(id)}`, { method: 'DELETE' })
+/** Deletes a Context and the ranges that carried it, leaving the text of the Document untouched. */
+export async function deleteContext(id: string): Promise<DeletionOutcome> {
+  const payload = await request<{ deleted: DeletionOutcome }>(
+    `/api/contexts/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  )
+  return payload.deleted
 }
 
-export async function assignDocumentContext(documentId: string, contextId: string | null): Promise<DocumentRecord> {
-  const payload = await request<{ document: DocumentRecord }>(
-    `/api/documents/${encodeURIComponent(documentId)}/context`,
-    { method: 'POST', body: JSON.stringify({ contextId }) },
-  )
-  return payload.document
-}
 
 export type MatrixAxis = 'concept' | 'entity' | 'entity_type' | 'template'
 
@@ -741,4 +741,43 @@ export async function fetchMatrixCell(
   query: MatrixQuery & { rowId: string; contextId: string | null },
 ): Promise<MatrixDrill> {
   return request<MatrixDrill>('/api/matrix/cell', { method: 'POST', body: JSON.stringify(query) })
+}
+
+export interface DeletionOutcome {
+  id: string
+  objectType?: 'concept' | 'entity'
+  /** Ranges the deletion took away, and Document it had to rewrite. */
+  occurrences: number
+  documents: number
+}
+
+/**
+ * Deletes a Concept or an Entity for good: its occurrences, what it owned and every mark it left
+ * in the text. The words of the user stay where they were written.
+ */
+export async function deleteKnowledgeObject(objectId: string): Promise<DeletionOutcome> {
+  const payload = await request<{ deleted: DeletionOutcome }>(
+    `/api/knowledge-objects/${encodeURIComponent(objectId)}`,
+    { method: 'DELETE' },
+  )
+  return payload.deleted
+}
+
+export interface IndexSearchResult {
+  id: string
+  object_type: 'concept' | 'entity' | 'context'
+  name: string
+  entity_type_name: string | null
+  parent_id: string | null
+}
+
+/**
+ * Concept, Entity and Context in one answer. Marking a fragment is one decision — where it
+ * belongs — so the search that serves it is one search.
+ */
+export async function searchIndex(query: string): Promise<IndexSearchResult[]> {
+  const payload = await request<{ results: IndexSearchResult[] }>(
+    `/api/index/search?q=${encodeURIComponent(query)}`,
+  )
+  return payload.results
 }

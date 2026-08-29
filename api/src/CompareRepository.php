@@ -14,17 +14,19 @@ final class CompareRepository
     public function __construct(private readonly PDO $pdo) {}
 
     /**
-     * Context reached from the object through its active occurrence and the Document they live in.
+     * Context reached from the object through the containment of its fragments. The Document where
+     * they live declares nothing: only a range marked around the fragment does.
      *
      * @return list<array<string, mixed>>
      */
     public function contextsOf(string $objectId): array
     {
         $statement = $this->pdo->prepare(
-            'SELECT DISTINCT c.id, c.name FROM knowledge_occurrences k ' .
-            'JOIN documents d ON d.id = k.document_id ' .
-            'JOIN contexts c ON c.id = d.context_id ' .
-            "WHERE k.knowledge_object_id = :id AND k.status = 'active' " .
+            'SELECT DISTINCT c.id, c.name FROM context_memberships m ' .
+            'JOIN context_occurrences o ON o.id = m.context_occurrence_id ' .
+            'JOIN knowledge_occurrences k ON k.id = m.knowledge_occurrence_id ' .
+            'JOIN contexts c ON c.id = m.context_id ' .
+            "WHERE m.knowledge_object_id = :id AND o.status = 'active' AND k.status = 'active' " .
             'ORDER BY c.name COLLATE NOCASE'
         );
         $statement->execute(['id' => $objectId]);

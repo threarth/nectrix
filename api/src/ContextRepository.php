@@ -7,6 +7,7 @@ declare(strict_types=1);
 namespace Nectrix;
 
 use PDO;
+use PDOException;
 
 /**
  * Hierarchy of Context. Depth is unlimited and the path is always derived from parent_id: no
@@ -17,16 +18,18 @@ final class ContextRepository
     public function __construct(private readonly PDO $pdo) {}
 
     /**
-     * The whole hierarchy with the number of Document assigned to each node. The count is what
-     * makes the UI able to explain why a deletion is refused before attempting it.
+     * The whole hierarchy with the number of text ranges marked with each node. The Document does
+     * not own a Context: what is counted is the fragments, so the UI can explain why a deletion is
+     * refused before attempting it.
      *
      * @return list<array<string, mixed>>
      */
     public function list(): array
     {
         return $this->pdo->query(
-            'SELECT c.id, c.parent_id, c.name, COUNT(d.id) AS documents ' .
-            'FROM contexts c LEFT JOIN documents d ON d.context_id = c.id ' .
+            'SELECT c.id, c.parent_id, c.name, COUNT(o.id) AS occurrences, ' .
+            'COUNT(DISTINCT o.document_id) AS documents FROM contexts c ' .
+            "LEFT JOIN context_occurrences o ON o.context_id = c.id AND o.status = 'active' " .
             'GROUP BY c.id, c.parent_id, c.name ORDER BY c.name COLLATE NOCASE'
         )->fetchAll();
     }
@@ -45,17 +48,41 @@ final class ContextRepository
     {
         $id = UuidV7::generate();
         $timestamp = Clock::now();
-        $this->pdo->prepare(
-            'INSERT INTO contexts (id, parent_id, name, created_at, updated_at) ' .
-            'VALUES (:id, :parent_id, :name, :created, :updated)'
-        )->execute(['id' => $id, 'parent_id' => $parentId, 'name' => $name, 'created' => $timestamp, 'updated' => $timestamp]);
+        $this->uniqueName($name, function () use ($id, $parentId, $name, $timestamp): void {
+            $this->pdo->prepare(
+                'INSERT INTO contexts (id, parent_id, name, created_at, updated_at) ' .
+                'VALUES (:id, :parent_id, :name, :created, :updated)'
+            )->execute(['id' => $id, 'parent_id' => $parentId, 'name' => $name, 'created' => $timestamp, 'updated' => $timestamp]);
+        });
         return ['id' => $id, 'parent_id' => $parentId, 'name' => $name];
     }
 
     public function rename(string $contextId, string $name): void
     {
-        $this->pdo->prepare('UPDATE contexts SET name = :name, updated_at = :updated WHERE id = :id')
-            ->execute(['name' => $name, 'updated' => Clock::now(), 'id' => $contextId]);
+        $this->uniqueName($name, function () use ($contextId, $name): void {
+            $this->pdo->prepare('UPDATE contexts SET name = :name, updated_at = :updated WHERE id = :id')
+                ->execute(['name' => $name, 'updated' => Clock::now(), 'id' => $contextId]);
+        });
+    }
+
+    /**
+     * Two sibling Context cannot share a name: the index would stop telling them apart. The
+     * refusal says which name is taken, instead of surfacing a constraint as an internal error.
+     *
+     * @param callable(): void $write
+     */
+    private function uniqueName(string $name, callable $write): void
+    {
+        try {
+            $write();
+        } catch (PDOException $error) {
+            if (!str_contains($error->getMessage(), 'contexts_sibling_name_idx')) {
+                throw $error;
+            }
+            throw new ApiException(409, 'context_name_taken', "Esiste già un Context «{$name}» allo stesso livello.", [
+                'name' => $name,
+            ]);
+        }
     }
 
     public function move(string $contextId, ?string $parentId): void
@@ -104,22 +131,19 @@ final class ContextRepository
         return $statement->fetch() !== false;
     }
 
-    public function documentCount(string $contextId): int
+    /** Ranges still marked with the Context: what a deletion would take away. */
+    public function occurrenceCount(string $contextId): int
     {
-        $statement = $this->pdo->prepare('SELECT COUNT(*) FROM documents WHERE context_id = :id');
+        $statement = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM context_occurrences WHERE context_id = :id AND status <> 'deleted'"
+        );
         $statement->execute(['id' => $contextId]);
         return (int) $statement->fetchColumn();
     }
 
-    public function assignDocument(string $documentId, ?string $contextId): void
-    {
-        $this->pdo->prepare('UPDATE documents SET context_id = :context_id WHERE id = :id')
-            ->execute(['context_id' => $contextId, 'id' => $documentId]);
-    }
-
     /**
-     * Document assigned to any of the given Context. The KnowledgeObject derivation starts from
-     * here: Context reaches them only through Document and KnowledgeOccurrence.
+     * Document holding at least one active range of the given Context. The Document is not assigned
+     * to a Context: it is simply where some marked fragment happens to live.
      *
      * @param list<string> $contextIds
      * @return list<string>
@@ -130,8 +154,37 @@ final class ContextRepository
             return [];
         }
         $placeholders = implode(',', array_fill(0, count($contextIds), '?'));
-        $statement = $this->pdo->prepare("SELECT id FROM documents WHERE context_id IN ({$placeholders})");
+        $statement = $this->pdo->prepare(
+            'SELECT DISTINCT document_id AS id FROM context_occurrences ' .
+            "WHERE status = 'active' AND context_id IN ({$placeholders})"
+        );
         $statement->execute($contextIds);
         return array_column($statement->fetchAll(), 'id');
+    }
+
+    /**
+     * Concept and Entity whose fragment is contained in one of the given Context. This is the
+     * derived membership, not the co-presence in the same Document.
+     *
+     * @param list<string> $contextIds
+     * @return list<array<string, mixed>>
+     */
+    public function knowledgeObjects(array $contextIds): array
+    {
+        if ($contextIds === []) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($contextIds), '?'));
+        $statement = $this->pdo->prepare(
+            'SELECT DISTINCT m.knowledge_object_id AS id, m.object_type, ' .
+            'COALESCE(c.canonical_name, e.name) AS name FROM context_memberships m ' .
+            'JOIN context_occurrences o ON o.id = m.context_occurrence_id ' .
+            'LEFT JOIN concepts c ON c.id = m.knowledge_object_id ' .
+            'LEFT JOIN entities e ON e.id = m.knowledge_object_id ' .
+            "WHERE o.status = 'active' AND m.context_id IN ({$placeholders}) " .
+            'ORDER BY name COLLATE NOCASE'
+        );
+        $statement->execute($contextIds);
+        return $statement->fetchAll();
     }
 }

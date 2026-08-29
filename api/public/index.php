@@ -5,6 +5,10 @@
 declare(strict_types=1);
 
 use Nectrix\ApiException;
+use Nectrix\ContextOccurrenceExtractor;
+use Nectrix\DeletionService;
+use Nectrix\DocumentPruner;
+use Nectrix\ContextOccurrenceRepository;
 use Nectrix\ContextRepository;
 use Nectrix\ContextService;
 use Nectrix\Database;
@@ -85,11 +89,14 @@ try {
         $knowledgeRepository,
         new ReferenceExtractor(),
         new ReferenceRepository($pdo),
+        new ContextOccurrenceExtractor(),
+        new ContextOccurrenceRepository($pdo),
     );
     $knowledge = new KnowledgeService($knowledgeRepository, new OccurrenceTextExtractor());
     $documentRepository = new DocumentRepository($pdo);
     $contextRepository = new ContextRepository($pdo);
-    $contexts = new ContextService($contextRepository, $documentRepository, $knowledgeRepository);
+    $contexts = new ContextService($contextRepository);
+    $deletions = new DeletionService($pdo, $documentRepository, new DocumentPruner(), new PlainTextExtractor());
     $tags = new TagService(new TagRepository($pdo), $documentRepository);
     $query = new QueryService($contexts, $tags, $service, $knowledgeRepository);
     $search = new SearchService(new SearchRepository($pdo), $contextRepository);
@@ -238,8 +245,7 @@ try {
             respond(200, ['context' => $contexts->rename($contextId, requestBody())]);
         }
         if ($method === 'DELETE') {
-            $contexts->delete($contextId);
-            respond(200, ['deleted' => true]);
+            respond(200, ['deleted' => $deletions->deleteContext($contextId)]);
         }
     }
     if ($method === 'POST' && preg_match('#^/api/contexts/([^/]+)/move$#', (string) $path, $matches) === 1) {
@@ -252,9 +258,6 @@ try {
         respond(200, [
             'objects' => $contexts->knowledgeObjects(rawurldecode($matches[1]), (string) ($_GET['mode'] ?? 'subtree')),
         ]);
-    }
-    if ($method === 'POST' && preg_match('#^/api/documents/([^/]+)/context$#', (string) $path, $matches) === 1) {
-        respond(200, ['document' => $contexts->assignDocument(rawurldecode($matches[1]), requestBody())]);
     }
     if ($method === 'POST' && preg_match('#^/api/documents/([^/]+)/(archive|trash|restore)$#', (string) $path, $matches) === 1) {
         $documentId = rawurldecode($matches[1]);
@@ -275,6 +278,9 @@ try {
         $search->rebuildIndex();
         respond(200, ['rebuilt' => true]);
     }
+    if ($method === 'GET' && $path === '/api/index/search') {
+        respond(200, ['results' => $knowledge->searchIndex((string) ($_GET['q'] ?? ''))]);
+    }
     if ($method === 'GET' && $path === '/api/knowledge/search') {
         respond(200, ['results' => $knowledge->search((string) ($_GET['q'] ?? ''))]);
     }
@@ -292,6 +298,9 @@ try {
     }
     if ($method === 'GET' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
         respond(200, ['object' => $knowledge->object(rawurldecode($matches[1]))]);
+    }
+    if ($method === 'DELETE' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, ['deleted' => $deletions->deleteKnowledgeObject(rawurldecode($matches[1]))]);
     }
     if ($method === 'PUT' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
         respond(200, ['object' => $knowledge->updateObject(rawurldecode($matches[1]), requestBody())]);

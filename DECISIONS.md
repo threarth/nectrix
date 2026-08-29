@@ -36,7 +36,7 @@ I Template restano globali e applicabili a qualsiasi Entity. La FASE 10.1 può i
 
 ### ADR-005 — Context e Tag restano Document-owned
 
-**Stato:** `adopted`
+**Stato:** `superseded` da ADR-016 per la parte Context; resta vincolante per i Tag.
 
 Nella roadmap corrente Context e Tag sono assegnati esclusivamente ai Document. Concept, Entity, EntityType, SemanticBlock e FieldValue li raggiungono tramite query derivate da Document e KnowledgeOccurrence. Non verranno introdotte associazioni dirette Context/Tag→KnowledgeObject o dati strutturati senza un nuovo caso d'uso che definisca ownership, cardinalità, conflitti e lifecycle.
 
@@ -94,11 +94,26 @@ Rinominare un TemplateField conserva l'identità. Il CRUD ordinario blocca cambi
 
 Concept, Entity ed EntityType referenziati non vengono eliminati fisicamente dal CRUD ordinario. Concept ed Entity possono essere archiviati e ripristinati esplicitamente; un EntityType usato può essere archiviato per impedirne nuove assegnazioni, ma resta valido per le Entity esistenti. Sostituzione o merge sono comandi separati, confermati e transazionali.
 
+### ADR-015 — Renderer della Knowledge Map
+
+**Stato:** `adopted` (chiude ADR-P15-01)
+
+La Knowledge Map della FASE 15 usa **Cytoscape.js** (MIT, 3.34.x, nessuna dipendenza runtime), non un renderer scritto in casa. La libreria porta layout, selezione, stile ed eventi; il codice di Nectrix resta quello che traduce KnowledgeObject e KnowledgeRelation in nodi e archi. Sigma.js — pari licenza e manutenzione — è stata scartata perché il suo vantaggio è il WebGL su decine di migliaia di nodi, una scala che Nectrix non prevede, al prezzo di graphology, di un pacchetto di layout separato e di più codice di integrazione.
+
+Il vincolo di dominio resta quello della roadmap: nodi principali soltanto KnowledgeObject, archi soltanto KnowledgeRelation dichiarate; SemanticBlock, TemplateField, FieldValue, Context, Tag e KnowledgeOccurrence non diventano nodi, e Context e Tag restano filtri, grouping e coloring. Un cambio di libreria richiederebbe una nuova decisione.
+
+### ADR-016 — Il Context organizza frammenti, non Document
+
+**Stato:** `adopted` (sostituisce ADR-005 per il Context)
+
+Il Context si applica a un range di testo, come Concept ed Entity: i tre sono gli organizzatori del caos e vivono tutti sul frammento. Il Document non possiede un Context e non ne è consapevole, perché è un contenitore disordinato — appunti sparsi, la stessa cosa riscritta più volte — e un contenitore consapevole trasmetterebbe il proprio disordine all'indice.
+
+Un range di Context può attraversare più paragrafi, restando contiguo. L'appartenenza di Concept ed Entity a un Context è derivata dal contenimento totale del frammento e materializzata in una tabella ricostruibile: la co-presenza nello stesso Document non dichiara nulla. I Tag restano Document-owned come stabilisce ADR-005: classificano il contenitore, non il frammento.
+
 ## Decisioni programmate
 
 | ID | Decisione da chiudere | Vincoli già stabiliti | Scadenza |
 |---|---|---|---|
-| ADR-P15-01 | renderer e libreria della Knowledge Map | gratuita, licenza verificata, nodi principali solo KnowledgeObject | prima della FASE 15 |
 | ADR-P16-01 | retention/purge di SourceAnchor non referenziati | nessuna rimozione nel normale salvataggio; backup e preview | prima della FASE 16 |
 | ADR-P17-01 | contratto upload, limiti byte/pixel e retention Asset | verifica contenuto reale, storage non pubblico, niente base64 | prima della FASE 17 |
 | ADR-P18-01 | formato e remapping degli anchor testuali dei Comment | niente offset assoluti autorevoli; test matrice editoriale | prima della FASE 18 |

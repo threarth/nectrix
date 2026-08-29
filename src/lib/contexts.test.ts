@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest'
 import {
   contextPathLabel,
   deletionBlockers,
+  deletionImpact,
   orderContexts,
   possibleParents,
   type ContextNode,
@@ -47,20 +48,22 @@ describe('impedimenti alla cancellazione di un Context', () => {
   test('un contesto con sotto-contesti non si elimina', () => {
     const rows = orderContexts(tree)
 
-    expect(deletionBlockers(rows, 'uni')).toEqual({ children: 1, documents: 0 })
-    expect(deletionBlockers(rows, 'psi')).toEqual({ children: 1, documents: 0 })
+    expect(deletionBlockers(rows, 'uni')).toEqual({ children: 1 })
+    expect(deletionBlockers(rows, 'psi')).toEqual({ children: 1 })
   })
 
-  test('un contesto con documenti non si elimina', () => {
-    const rows = orderContexts([{ id: 'solo', parent_id: null, name: 'Solo', documents: 3 }])
+  test('i frammenti marcati non impediscono la cancellazione, la spiegano', () => {
+    const rows = orderContexts([{ id: 'solo', parent_id: null, name: 'Solo', occurrences: 3 }])
 
-    expect(deletionBlockers(rows, 'solo')).toEqual({ children: 0, documents: 3 })
+    expect(deletionBlockers(rows, 'solo')).toBeNull()
+    expect(deletionImpact(rows, 'solo')).toBe(3)
   })
 
-  test('una foglia senza documenti si elimina', () => {
+  test('una foglia si elimina e dichiara che non toglie nulla dal testo', () => {
     const rows = orderContexts(tree)
 
     expect(deletionBlockers(rows, 'jung')).toBeNull()
     expect(deletionBlockers(rows, 'lavoro')).toBeNull()
+    expect(deletionImpact(rows, 'jung')).toBe(0)
   })
 })
