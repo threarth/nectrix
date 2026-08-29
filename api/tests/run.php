@@ -20,6 +20,8 @@ use Nectrix\OccurrenceTextExtractor;
 use Nectrix\Migrator;
 use Nectrix\PlainTextExtractor;
 use Nectrix\QueryService;
+use Nectrix\SearchRepository;
+use Nectrix\SearchService;
 use Nectrix\TagRepository;
 use Nectrix\TagService;
 use Nectrix\UuidV7;
@@ -176,7 +178,7 @@ $suite->test('le migrazioni estendono lo schema Document senza rimuovere le colo
 
     assertSameValue($phaseOne, array_slice($columns, 0, count($phaseOne)));
     assertSameValue(['status', 'context_id'], array_slice($columns, count($phaseOne)));
-    assertSameValue(7, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(8, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
 });
 
 $domainFixture = [];
@@ -509,7 +511,7 @@ $suite->test('la migration Phase 1.1 aggiorna un database FASE 1 senza perdere D
 
     assertSameValue(1, (int) $upgradePdo->query('SELECT COUNT(*) FROM documents')->fetchColumn());
     assertSameValue('Documento preesistente', $upgradePdo->query('SELECT title FROM documents')->fetchColumn());
-    assertSameValue(7, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(8, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
     assertSameValue('field_values', $upgradePdo->query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'field_values'")->fetchColumn());
 });
 
@@ -720,11 +722,11 @@ function emptyDocument(): array
 }
 
 /** Saves one revision of a Document, optionally declaring occurrence creations. */
-function saveRevision(DocumentService $service, string $documentId, int $baseRevision, array $json, array $creates = []): array
+function saveRevision(DocumentService $service, string $documentId, int $baseRevision, array $json, array $creates = [], string $title = 'Riconciliazione'): array
 {
     return $service->update($documentId, [
         'baseRevision' => $baseRevision,
-        'title' => 'Riconciliazione',
+        'title' => $title,
         'documentJson' => $json,
         'occurrenceCreates' => $creates,
     ]);
@@ -1655,6 +1657,122 @@ $suite->test('un Document archiviato non accetta assegnazioni di Tag', static fu
         throw new RuntimeException('Tag assegnato a un Document archiviato.');
     } catch (ApiException $error) {
         assertSameValue('document_read_only', $error->errorCode);
+    }
+});
+
+function searchService(PDO $pdo): SearchService
+{
+    return new SearchService(new SearchRepository($pdo), new ContextRepository($pdo));
+}
+
+/** @return list<array<string, mixed>> */
+function resultsOf(array $payload, string $category, ?string $match = null): array
+{
+    return array_values(array_filter($payload['results'], static fn (array $row): bool =>
+        $row['category'] === $category && ($match === null || $row['match'] === $match)));
+}
+
+$suite->test('la ricerca full text trova titolo e testo derivato, con snippet', static function () use ($pdo, $service): void {
+    $search = searchService($pdo);
+    $document = $service->create(['title' => 'Archetipi junghiani']);
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([
+        ['type' => 'text', 'text' => 'La psiche collettiva secondo Jung'],
+    ]), [], 'Archetipi junghiani');
+
+    $byTitle = resultsOf($search->search('Archetipi'), 'document', 'full_text');
+    $byText = resultsOf($search->search('collettiva'), 'document', 'full_text');
+
+    assertTrue(in_array($document['id'], array_column($byTitle, 'id'), true), 'Il titolo deve essere indicizzato.');
+    assertTrue(in_array($document['id'], array_column($byText, 'id'), true), 'Il plain_text derivato deve essere indicizzato.');
+    assertTrue(str_contains((string) $byText[0]['detail'], 'collettiva'), 'Lo snippet deve mostrare il punto trovato.');
+});
+
+$suite->test('l’indice full text si ricostruisce dai dati autorevoli', static function () use ($pdo, $service): void {
+    $search = searchService($pdo);
+    $document = $service->create(['title' => 'Ricostruibile']);
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([['type' => 'text', 'text' => 'parolachiaveunica']]), [], 'Ricostruibile');
+
+    $pdo->exec('DELETE FROM documents_fts');
+    assertSameValue([], resultsOf($search->search('parolachiaveunica'), 'document'));
+
+    $search->rebuildIndex();
+
+    $rebuilt = resultsOf($search->search('parolachiaveunica'), 'document', 'full_text');
+    assertSameValue([$document['id']], array_column($rebuilt, 'id'));
+});
+
+$suite->test('Alias e Identifier raggiungono il proprio KnowledgeObject senza confondere i namespace', static function () use ($pdo, $service): void {
+    $search = searchService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $conceptId = conceptWithOccurrence($service, 'Individuazione');
+    $entityId = entityWithOccurrence($service, $knowledge, 'Istituto Jung', 'Istituto');
+    $knowledge->addAlias($conceptId, ['alias' => 'Processo di individuazione']);
+    $knowledge->addIdentifier($entityId, ['scheme' => 'lei', 'value' => 'JUNG123456789']);
+
+    $byAlias = resultsOf($search->search('Processo di'), 'concept', 'alias');
+    $byIdentifier = resultsOf($search->search('JUNG123'), 'entity', 'identifier');
+
+    assertSameValue([$conceptId], array_column($byAlias, 'id'));
+    assertSameValue('Individuazione', $byAlias[0]['label']);
+    assertSameValue('Processo di individuazione', $byAlias[0]['detail']);
+    assertSameValue([$entityId], array_column($byIdentifier, 'id'));
+    assertTrue(str_contains((string) $byIdentifier[0]['detail'], 'lei'), 'Lo scheme deve restare visibile.');
+
+    // Il testo dell'alias non produce un risultato di categoria entity e viceversa.
+    assertSameValue([], resultsOf($search->search('Processo di'), 'entity'));
+    assertSameValue([], resultsOf($search->search('JUNG123'), 'concept'));
+});
+
+$suite->test('ogni risultato dichiara categoria e modo del match', static function () use ($pdo, $service): void {
+    $search = searchService($pdo);
+    $contexts = contextService($pdo);
+    $tags = tagService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+
+    $radice = $contexts->create(['name' => 'Ricercabile radice']);
+    $contexts->create(['name' => 'Ricercabile figlio', 'parentId' => $radice['id']]);
+    $tags->create(['name' => 'Ricercabile tag']);
+    $knowledge->createEntityType(['name' => 'Ricercabile tipo']);
+    conceptWithOccurrence($service, 'Ricercabile concetto');
+
+    $payload = $search->search('Ricercabile');
+    $categories = array_unique(array_column($payload['results'], 'category'));
+
+    foreach (['concept', 'entity_type', 'context', 'tag'] as $expected) {
+        assertTrue(in_array($expected, $categories, true), "La categoria {$expected} deve comparire.");
+    }
+    $figlio = resultsOf($payload, 'context')[0];
+    assertTrue(str_contains((string) $figlio['detail'], 'Ricercabile radice'), 'Il Context deve dichiarare il proprio percorso.');
+    foreach ($payload['results'] as $row) {
+        assertTrue($row['match'] !== '', 'Ogni risultato dichiara come ha corrisposto.');
+    }
+});
+
+$suite->test('la ricerca per identità trova i Document dalle occurrence, non dal testo', static function () use ($pdo, $service): void {
+    $search = searchService($pdo);
+    $conceptId = UuidV7::generate();
+    $document = $service->create(['title' => 'Senza la parola cercata']);
+    $occurrenceId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([occurrenceText('altro testo', $occurrenceId, $conceptId)]), [
+        conceptCreate($occurrenceId, $conceptId, 'Nome che non compare nel testo'),
+    ]);
+
+    $byIdentity = $search->byObject($conceptId);
+
+    assertSameValue([$document['id']], array_column($byIdentity['results'], 'id'));
+    assertSameValue('identity', $byIdentity['results'][0]['match']);
+    assertSameValue($occurrenceId, $byIdentity['results'][0]['occurrenceId']);
+    assertSameValue([], resultsOf($search->search('Nome che non compare'), 'document', 'full_text'));
+});
+
+$suite->test('una ricerca troppo corta viene rifiutata', static function () use ($pdo): void {
+    $search = searchService($pdo);
+
+    try {
+        $search->search('a');
+        throw new RuntimeException('Ricerca troppo corta accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('query_too_short', $error->errorCode);
     }
 });
 

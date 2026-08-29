@@ -18,6 +18,8 @@
     listDocumentTags,
     listTags,
     renameTag,
+    search,
+    searchByObject,
     unassignTag,
     deleteContext,
     listContexts,
@@ -34,6 +36,7 @@
     removeConceptAlias,
     removeEntityIdentifier,
     type ContextMode,
+    type SearchResult,
     type Tag,
     type TagSummary,
     type DocumentRecord,
@@ -46,6 +49,7 @@
   } from './lib/api'
   import ContextPanel from './components/ContextPanel.svelte'
   import DerivedObjects from './components/DerivedObjects.svelte'
+  import SearchPanel from './components/SearchPanel.svelte'
   import DocumentTags from './components/DocumentTags.svelte'
   import TagPanel from './components/TagPanel.svelte'
   import KnowledgeInspector from './components/KnowledgeInspector.svelte'
@@ -67,6 +71,9 @@
   let tags = $state<TagSummary[]>([])
   let selectedTagIds = $state<string[]>([])
   let documentTags = $state<Tag[]>([])
+  let searchQuery = $state('')
+  let searchResults = $state<SearchResult[]>([])
+  let searching = $state(false)
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
@@ -159,6 +166,58 @@
     } catch (cause) {
       showError(cause)
     }
+  }
+
+  async function runSearch(query: string): Promise<void> {
+    searching = true
+    error = ''
+    try {
+      searchResults = await search(query)
+      searchQuery = query
+    } catch (cause) {
+      showError(cause)
+    } finally {
+      searching = false
+    }
+  }
+
+  /** Documents holding an occurrence of the object: identity, not the words written. */
+  async function showOccurrencesOf(objectId: string, label: string): Promise<void> {
+    searching = true
+    error = ''
+    try {
+      searchResults = await searchByObject(objectId)
+      searchQuery = label
+    } catch (cause) {
+      showError(cause)
+    } finally {
+      searching = false
+    }
+  }
+
+  function clearSearch(): void {
+    searchQuery = ''
+    searchResults = []
+  }
+
+  async function openSearchResult(result: SearchResult): Promise<void> {
+    if (result.category === 'document' && result.documentId !== undefined) {
+      await openDocument(result.documentId)
+      if (result.occurrenceId !== undefined) {
+        await tick()
+        scrollToOccurrence(result.occurrenceId)
+      }
+      return
+    }
+    if (result.objectId !== undefined) {
+      await openInspector(result.objectId)
+      return
+    }
+    if (result.contextId !== undefined) {
+      await selectContext(result.contextId)
+      return
+    }
+    if (result.tagId !== undefined) await toggleTag(result.tagId)
   }
 
   async function toggleTag(tagId: string): Promise<void> {
@@ -552,6 +611,16 @@
     </div>
 
     <button class="new-document" type="button" disabled={saving} onclick={addDocument}>+ Nuovo documento</button>
+
+    <SearchPanel
+      results={searchResults}
+      query={searchQuery}
+      {searching}
+      onSearch={(query) => void runSearch(query)}
+      onClear={clearSearch}
+      onOpen={(result) => void openSearchResult(result)}
+      onShowOccurrences={(result) => void showOccurrencesOf(result.objectId ?? '', result.label)}
+    />
 
     <div class="scope-switch" role="group" aria-label={documentStrings.scopeLabel}>
       {#each documentStrings.scopes as option}

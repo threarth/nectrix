@@ -748,3 +748,63 @@ test('FASE 9: un Tag assegnato non si elimina finché resta sui documenti', asyn
   await tagPanel.getByRole('button', { name: 'Elimina', exact: true }).click()
   await expect(tagPanel.getByRole('button', { name: /Assegnato/ })).toHaveCount(0)
 })
+
+test('FASE 10: la ricerca distingue testo, alias e identità', async ({ page }) => {
+  await page.goto('/')
+  await newDocument(page)
+  await createConceptFrom(page, 'Individuazione', 'Individuazione')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Il processo psichico')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  // Un alias che non compare nel testo del documento.
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Concept' }).click()
+  await page.getByLabel('Aggiungi alias').fill('Individuazione junghiana')
+  await page.locator('.inspector').getByRole('button', { name: 'Aggiungi alias' }).click()
+  await expect(page.locator('.inspector-list li')).toContainText('Individuazione junghiana')
+
+  const panel = page.getByLabel('Ricerca', { exact: true })
+  await panel.getByRole('searchbox').fill('psichico')
+  await panel.getByRole('button', { name: 'Cerca', exact: true }).click()
+  await expect(panel.locator('.search-results li').first()).toContainText('Documento · testo')
+  await expect(panel.locator('.search-results li').first()).toContainText('Il processo psichico')
+
+  await panel.getByRole('searchbox').fill('junghiana')
+  await panel.getByRole('button', { name: 'Cerca', exact: true }).click()
+  const aliasResult = panel.locator('.search-results li').filter({ hasText: 'Concept · alias' })
+  await expect(aliasResult).toHaveCount(1)
+  await expect(aliasResult).toContainText('Individuazione')
+
+  // Identità: i documenti si trovano dalle occurrence, non dalle parole.
+  await aliasResult.getByRole('button', { name: 'Dove compare' }).click()
+  await expect(panel.locator('.search-results li').first()).toContainText('Documento · occurrence')
+  await expect(panel.locator('.search-results li').first()).toContainText('Il processo psichico')
+})
+
+test('FASE 10: dalla ricerca si aprono documento, Concept e contesto', async ({ page }) => {
+  await page.goto('/')
+  const contexts = page.getByLabel('Contesti')
+  await contexts.getByRole('button', { name: 'Nuovo' }).click()
+  const contextDialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
+  await contextDialog.getByLabel('Nome del contesto').fill('Ricerca contesto')
+  await contextDialog.getByRole('button', { name: 'Nuovo' }).click()
+
+  await newDocument(page)
+  await createConceptFrom(page, 'Ombra', 'Ombra')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento della ricerca')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  const panel = page.getByLabel('Ricerca', { exact: true })
+  await panel.getByRole('searchbox').fill('Ricerca')
+  await panel.getByRole('button', { name: 'Cerca', exact: true }).click()
+
+  await panel.locator('.search-results li').filter({ hasText: 'Contesto · nome' }).getByRole('button').first().click()
+  await expect(contexts.getByRole('button', { name: 'Ricerca contesto' })).toHaveClass(/active/)
+
+  await panel.getByRole('searchbox').fill('Ombra')
+  await panel.getByRole('button', { name: 'Cerca', exact: true }).click()
+  await panel.locator('.search-results li').filter({ hasText: 'Concept · nome' }).getByRole('button').first().click()
+  await expect(page.locator('.inspector-name')).toHaveText('Ombra')
+})

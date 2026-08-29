@@ -18,6 +18,8 @@ use Nectrix\KnowledgeService;
 use Nectrix\OccurrenceTextExtractor;
 use Nectrix\PlainTextExtractor;
 use Nectrix\QueryService;
+use Nectrix\SearchRepository;
+use Nectrix\SearchService;
 use Nectrix\TagRepository;
 use Nectrix\TagService;
 
@@ -69,6 +71,7 @@ try {
     $contexts = new ContextService(new ContextRepository($pdo), $documentRepository, $knowledgeRepository);
     $tags = new TagService(new TagRepository($pdo), $documentRepository);
     $query = new QueryService($contexts, $tags, $service, $knowledgeRepository);
+    $search = new SearchService(new SearchRepository($pdo), new ContextRepository($pdo));
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -158,6 +161,16 @@ try {
             default => $service->restore($documentId),
         };
         respond(200, ['document' => $document]);
+    }
+    if ($method === 'GET' && $path === '/api/search') {
+        $objectId = isset($_GET['objectId']) ? (string) $_GET['objectId'] : '';
+        respond(200, $objectId === ''
+            ? $search->search((string) ($_GET['q'] ?? ''))
+            : $search->byObject($objectId));
+    }
+    if ($method === 'POST' && $path === '/api/search/rebuild') {
+        $search->rebuildIndex();
+        respond(200, ['rebuilt' => true]);
     }
     if ($method === 'GET' && $path === '/api/knowledge/search') {
         respond(200, ['results' => $knowledge->search((string) ($_GET['q'] ?? ''))]);

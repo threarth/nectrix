@@ -16,6 +16,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 7 — ConceptAlias ed EntityIdentifier: completata.
 - FASE 8 — Context: completata.
 - FASE 9 — Tag: completata.
+- FASE 10 — Full text e semantic search: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
 - API PHP minimale e database SQLite in `data/nectrix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
@@ -24,21 +25,22 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 10 — Full text e semantic search
+### FASE 10.1 — Template System
 
-Ricerca full text sul `plain_text` derivato e ricerca semantica su Concept ed Entity, combinabili con Context e Tag.
+CRUD di Template e TemplateField, SemanticBlock multipli per Entity e FieldValue tipizzati, con raccomandazioni ordinate EntityType↔Template.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- risultati che indicano quale dimensione ha prodotto il match;
-- nessuna copia autorevole del testo delle occurrence usata come sorgente;
-- combinazione con Context e Tag senza duplicare i risultati.
+- field e blocchi ordinati, payload e cardinalità validati atomicamente;
+- rinomina che preserva l'ID;
+- cambio di tipo o cardinalità bloccato quando esistono valori, con migrazione come comando separato;
+- nessuna creazione automatica di Concept e nessun overwrite implicito dei valori manuali.
 
-Gate: definito nella sezione FASE 10 di `ROADMAP.md`.
+Gate: definito nella sezione FASE 10.1 di `ROADMAP.md`.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 10.
+Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 10.1.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

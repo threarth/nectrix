@@ -144,11 +144,15 @@ Il filtro per Tag richiede tutti i Tag selezionati e si combina con quello per C
 
 Gate soddisfatto: query per Tag, per Context e combinate verificate su Concept ed Entity, con lo stesso oggetto presente in più Document restituito una sola volta; il caso dei nomi uguali in dimensioni diverse è coperto da un test in cui Tag, Context e Concept si chiamano allo stesso modo e restano cose separate.
 
-## FASE 10 — Full text e semantic search
+## FASE 10 — Full text e semantic search (completata)
 
 Introdurre FTS5 su titolo e `Document.plain_text` e risultati categorizzati per Text, Concept, ConceptAlias, Entity, EntityIdentifier, EntityType, KnowledgeOccurrence, Context e Tag. KnowledgeRelation, DocumentNote, commenti e rich-text FieldValue entrano soltanto dopo le fasi che li introducono. Distinguere sempre string matching da matching per identità Concept/Entity.
 
-Gate: Alias e Identifier raggiungono il rispettivo KnowledgeObject senza confondere i namespace; risultati dichiarano categoria e percorso; indici ricostruibili dai dati autorevoli.
+Completato: la migration 008 aggiunge un indice FTS5 external content su titolo e `plain_text`, tenuto allineato da trigger e ricostruibile per intero dai dati autorevoli, che restano in `documents`. La ricerca restituisce risultati categorizzati per Document, Concept, Entity, EntityType, Context e Tag, e ciascuno dichiara come ha corrisposto: `full_text`, `name`, `alias`, `identifier` oppure `identity`.
+
+La distinzione fra string matching e matching per identità è esplicita e verificabile: cercare un alias restituisce il Concept a cui appartiene, mostrando l'alias trovato; cercare un identificatore restituisce la Entity con il proprio scheme visibile; il comando «Dove compare» trova invece i Document attraverso le occurrence attive, anche quando le parole cercate non compaiono nel testo. I risultati Context dichiarano il proprio percorso derivato dalla gerarchia. KnowledgeRelation, DocumentNote, commenti e rich-text FieldValue entrano nelle rispettive fasi.
+
+Gate soddisfatto: Alias e Identifier raggiungono il proprio KnowledgeObject senza contaminare le categorie, verificato anche in negativo; ogni risultato dichiara categoria e modo del match, con il percorso per i Context; l'indice svuotato e ricostruito ritrova gli stessi documenti.
 
 ## FASE 10.1 — Template System
 

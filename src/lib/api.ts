@@ -274,6 +274,36 @@ export async function updateKnowledgeObject(
   return payload.object
 }
 
+export type SearchCategory = 'document' | 'concept' | 'entity' | 'entity_type' | 'context' | 'tag'
+export type SearchMatch = 'full_text' | 'name' | 'alias' | 'identifier' | 'identity'
+
+export interface SearchResult {
+  category: SearchCategory
+  /** How the result was reached: a string match, a declared name, or occurrence identity. */
+  match: SearchMatch
+  id: string
+  label: string
+  detail: string | null
+  status?: string
+  documentId?: string
+  occurrenceId?: string
+  objectId?: string
+  objectType?: 'concept' | 'entity'
+  contextId?: string
+  tagId?: string
+}
+
+export async function search(query: string): Promise<SearchResult[]> {
+  const payload = await request<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(query)}`)
+  return payload.results
+}
+
+/** Documents holding an active occurrence of the object: identity, not words. */
+export async function searchByObject(objectId: string): Promise<SearchResult[]> {
+  const payload = await request<{ results: SearchResult[] }>(`/api/search?objectId=${encodeURIComponent(objectId)}`)
+  return payload.results
+}
+
 export interface Tag { id: string; name: string }
 export interface TagSummary extends Tag { documents: number }
 

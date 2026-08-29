@@ -330,3 +330,36 @@ export const tagStrings = {
   removeFromDocument: 'Togli il tag dal documento',
   none: 'Nessun tag',
 } as const
+
+export const searchStrings = {
+  panelLabel: 'Ricerca',
+  placeholder: 'Cerca testo, Concept, Entity, contesti, tag',
+  submit: { label: 'Cerca', description: 'Cerca in tutte le dimensioni e mostra da dove arriva ogni risultato' },
+  clear: { label: 'Pulisci', description: 'Torna all’elenco dei documenti' },
+  searching: 'Ricerca…',
+  empty: 'Nessun risultato.',
+  resultsLabel: 'Risultati',
+
+  categories: {
+    document: 'Documento',
+    concept: 'Concept',
+    entity: 'Entity',
+    entity_type: 'EntityType',
+    context: 'Contesto',
+    tag: 'Tag',
+  } as Record<string, string>,
+
+  /** Says whether the match came from words or from a declared identity. */
+  matches: {
+    full_text: 'testo',
+    name: 'nome',
+    alias: 'alias',
+    identifier: 'identificatore',
+    identity: 'occurrence',
+  } as Record<string, string>,
+
+  occurrencesOf: {
+    label: 'Dove compare',
+    description: 'Documenti che contengono una occurrence attiva di questo oggetto, indipendentemente dalle parole scritte',
+  },
+} as const

@@ -101,6 +101,125 @@ button:disabled {
   font-weight: 650;
 }
 
+.search-panel {
+  margin-top: 16px;
+}
+
+.search-panel form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px;
+}
+
+.search-panel input {
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid #3d4137;
+  border-radius: 8px;
+  color: #f2efe6;
+  background: #1c1f19;
+  font-size: 13px;
+}
+
+.search-panel input::placeholder {
+  color: #7f8377;
+}
+
+.search-panel form button {
+  padding: 7px 10px;
+  border: 1px solid #3d4137;
+  border-radius: 8px;
+  color: #b9bcb0;
+  background: transparent;
+  font-size: 12px;
+}
+
+.search-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8f9286;
+}
+
+.search-head button {
+  border: 0;
+  padding: 0;
+  color: #a9c09f;
+  background: transparent;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.search-results ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.search-results li {
+  display: grid;
+  gap: 2px;
+}
+
+.search-results li > button:first-child {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #34382e;
+  border-radius: 8px;
+  text-align: left;
+  color: #d8d6cd;
+  background: #22261f;
+}
+
+.search-results li > button:first-child:hover {
+  border-color: #5a6050;
+}
+
+.search-kind {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #8f9286;
+}
+
+.search-label {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-results small {
+  color: #8f9286;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-occurrences {
+  justify-self: start;
+  margin-bottom: 2px;
+  border: 0;
+  padding: 2px 4px;
+  color: #a9c09f;
+  background: transparent;
+  font-size: 11px;
+}
+
 .scope-switch {
   display: flex;
   gap: 4px;
