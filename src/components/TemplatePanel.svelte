@@ -1,21 +1,31 @@
 <script lang="ts">
   // SPDX-License-Identifier: AGPL-3.0-or-later
 
-  import type { Template } from '../lib/api'
+  import type { StructuredEntity, Template } from '../lib/api'
   import { structuredStrings } from '../lib/strings'
   import FieldDialog from './FieldDialog.svelte'
   import NameDialog from './NameDialog.svelte'
+  import StructuredSearch from './StructuredSearch.svelte'
 
   let {
     templates,
     busy = false,
     onCreate,
     onAddField,
+    searchResults,
+    searching = false,
+    onSearch,
+    onOpenEntity,
   }: {
     templates: Template[]
     busy?: boolean
     onCreate: (name: string) => void
     onAddField: (templateId: string, input: { name: string; fieldType: string; required: boolean; options?: string[] }) => void
+    /** Structured search over the values of the selected Template. */
+    searchResults: StructuredEntity[] | null
+    searching?: boolean
+    onSearch: (fieldId: string, operator: string, value: unknown, withFilters: boolean) => void
+    onOpenEntity: (entityId: string) => void
   } = $props()
 
   let selectedId = $state<string | null>(null)
@@ -39,6 +49,16 @@
         onclick={() => (selectedId = selectedId === template.id ? null : template.id)}
       >{template.name}<small>{template.fields.length}</small></button>
     {/each}
+  {/if}
+
+  {#if selected !== null && selected.fields.length > 0}
+    <StructuredSearch
+      template={selected}
+      results={searchResults}
+      {searching}
+      {onSearch}
+      onOpen={onOpenEntity}
+    />
   {/if}
 
   {#if selected !== null}

@@ -31,6 +31,8 @@ use Nectrix\SemanticBlockRepository;
 use Nectrix\SemanticBlockService;
 use Nectrix\TemplateRepository;
 use Nectrix\TemplateService;
+use Nectrix\StructuredQueryRepository;
+use Nectrix\StructuredQueryService;
 use Nectrix\UuidV7;
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -2118,6 +2120,163 @@ $suite->test('i riferimenti si risolvono in etichette derivate, non persistite n
     assertSameValue('Tipo risolvibile', $resolved['entities'][0]['detail']);
     assertSameValue('Scheda risolvibile', $resolved['semanticBlocks'][0]['label']);
     assertSameValue('Entity risolvibile', $resolved['semanticBlocks'][0]['detail']);
+});
+
+function structuredService(PDO $pdo, DocumentService $service): StructuredQueryService
+{
+    return new StructuredQueryService(
+        new StructuredQueryRepository($pdo),
+        new TemplateRepository($pdo),
+        queryService($pdo, $service),
+    );
+}
+
+/**
+ * Entity with a filled block, ready for the structured queries.
+ *
+ * @return array{0: string, 1: array<string, mixed>}
+ */
+function entityWithValues(PDO $pdo, DocumentService $service, string $name, array $values): array
+{
+    static $template = null;
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+
+    if ($template === null) {
+        $template = $templates->create(['name' => 'Scheda ricercabile']);
+        $template = $templates->addField($template['id'], ['name' => 'Settore', 'fieldType' => 'text']);
+        $template = $templates->addField($template['id'], ['name' => 'Dipendenti', 'fieldType' => 'number']);
+        $template = $templates->addField($template['id'], ['name' => 'Fondazione', 'fieldType' => 'date']);
+        $template = $templates->addField($template['id'], ['name' => 'Quotata', 'fieldType' => 'boolean']);
+    }
+
+    $entityId = entityWithOccurrence($service, $knowledge, $name, 'Azienda ricercabile');
+    $blockId = $blocks->addBlock($entityId, ['templateId' => $template['id']])[0]['id'];
+    foreach ($values as $fieldName => $value) {
+        $blocks->setValues($blockId, ['fieldId' => fieldNamed($template, $fieldName)['id'], 'values' => [$value]]);
+    }
+    return [$entityId, $template];
+}
+
+$suite->test('i confronti strutturati usano la colonna tipizzata, non un cast a testo', static function () use ($pdo, $service): void {
+    [$grande, $template] = entityWithValues($pdo, $service, 'Azienda grande', [
+        'Settore' => 'Spazio', 'Dipendenti' => 1800, 'Fondazione' => '2006-06-01', 'Quotata' => true,
+    ]);
+    [$piccola] = entityWithValues($pdo, $service, 'Azienda piccola', [
+        'Settore' => 'Spazio', 'Dipendenti' => 90, 'Fondazione' => '2019-03-15', 'Quotata' => false,
+    ]);
+    $structured = structuredService($pdo, $service);
+
+    $numerico = $structured->search(['filters' => [
+        ['fieldId' => fieldNamed($template, 'Dipendenti')['id'], 'operator' => 'gt', 'value' => 1000],
+    ]]);
+    assertSameValue([$grande], array_column($numerico['entities'], 'id'));
+    assertSameValue('field_value', $numerico['entities'][0]['matches'][0]['path']);
+    assertSameValue('Dipendenti', $numerico['entities'][0]['matches'][0]['field']);
+
+    // Il confronto numerico non e lessicografico: 90 non e maggiore di 1000.
+    assertSameValue(1, $numerico['counts']['entities']);
+
+    $temporale = $structured->search(['filters' => [
+        ['fieldId' => fieldNamed($template, 'Fondazione')['id'], 'operator' => 'before', 'value' => '2010-01-01'],
+    ]]);
+    assertSameValue([$grande], array_column($temporale['entities'], 'id'));
+
+    $booleano = $structured->search(['filters' => [
+        ['fieldId' => fieldNamed($template, 'Quotata')['id'], 'operator' => 'is_false'],
+    ]]);
+    assertSameValue([$piccola], array_column($booleano['entities'], 'id'));
+});
+
+$suite->test('più filtri si intersecano e ogni risultato dichiara il percorso', static function () use ($pdo, $service): void {
+    [$attesa, $template] = entityWithValues($pdo, $service, 'Azienda attesa', [
+        'Settore' => 'Energia', 'Dipendenti' => 500,
+    ]);
+    entityWithValues($pdo, $service, 'Azienda esclusa', ['Settore' => 'Energia', 'Dipendenti' => 10]);
+    $structured = structuredService($pdo, $service);
+
+    $result = $structured->search(['filters' => [
+        ['fieldId' => fieldNamed($template, 'Settore')['id'], 'operator' => 'eq', 'value' => 'energia'],
+        ['fieldId' => fieldNamed($template, 'Dipendenti')['id'], 'operator' => 'gte', 'value' => 100],
+    ]]);
+
+    assertSameValue([$attesa], array_column($result['entities'], 'id'));
+    assertSameValue(2, count($result['entities'][0]['matches']));
+    assertSameValue(['field_value', 'field_value'], array_column($result['entities'][0]['matches'], 'path'));
+    assertSameValue(['eq', 'gte'], array_column($result['entities'][0]['matches'], 'operator'));
+});
+
+$suite->test('un operatore fuori tipo viene rifiutato invece di essere convertito', static function () use ($pdo, $service): void {
+    [, $template] = entityWithValues($pdo, $service, 'Azienda operatori', ['Dipendenti' => 5]);
+    $structured = structuredService($pdo, $service);
+
+    foreach ([
+        [fieldNamed($template, 'Dipendenti')['id'], 'contains', '5'],
+        [fieldNamed($template, 'Quotata')['id'], 'gt', 1],
+        [fieldNamed($template, 'Fondazione')['id'], 'contains', '2006'],
+    ] as [$fieldId, $operator, $value]) {
+        try {
+            $structured->search(['filters' => [['fieldId' => $fieldId, 'operator' => $operator, 'value' => $value]]]);
+            throw new RuntimeException("Operatore {$operator} accettato fuori tipo.");
+        } catch (ApiException $error) {
+            assertSameValue('invalid_operator', $error->errorCode);
+        }
+    }
+
+    try {
+        $structured->search(['filters' => [
+            ['fieldId' => fieldNamed($template, 'Dipendenti')['id'], 'operator' => 'gt', 'value' => 'molti'],
+        ]]);
+        throw new RuntimeException('Confronto numerico con testo accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_field_value', $error->errorCode);
+    }
+});
+
+$suite->test('la combinazione con Context e Tag passa dalle occurrence, non dai nomi', static function () use ($pdo, $service): void {
+    $contexts = contextService($pdo);
+    $tags = tagService($pdo);
+    [$dentro, $template] = entityWithValues($pdo, $service, 'Azienda nel contesto', ['Settore' => 'Combinato']);
+    [$fuori] = entityWithValues($pdo, $service, 'Azienda fuori contesto', ['Settore' => 'Combinato']);
+    $structured = structuredService($pdo, $service);
+
+    $context = $contexts->create(['name' => 'Contesto strutturato']);
+    $tag = $tags->create(['name' => 'Tag strutturato']);
+    $documents = (new StructuredQueryRepository($pdo))->documentsOfEntities([$dentro]);
+    $contexts->assignDocument($documents[0]['id'], ['contextId' => $context['id']]);
+    $tags->assign($documents[0]['id'], ['tagId' => $tag['id']]);
+
+    $filters = [['fieldId' => fieldNamed($template, 'Settore')['id'], 'operator' => 'eq', 'value' => 'Combinato']];
+    $senzaFiltri = $structured->search(['filters' => $filters]);
+    $conContesto = $structured->search(['filters' => $filters, 'contextId' => $context['id'], 'contextMode' => 'subtree']);
+    $conTag = $structured->search(['filters' => $filters, 'tagIds' => $tag['id']]);
+
+    assertSameValue(2, $senzaFiltri['counts']['entities']);
+    assertSameValue([$dentro], array_column($conContesto['entities'], 'id'));
+    assertSameValue([$dentro], array_column($conTag['entities'], 'id'));
+    assertSameValue('occurrence', $conContesto['entities'][0]['documents'][0]['path']);
+    assertTrue(!in_array($fuori, array_column($conTag['entities'], 'id'), true), 'Il filtro editoriale deve escludere le altre.');
+
+    // Ripetere la query restituisce gli stessi conteggi.
+    assertSameValue($conContesto['counts'], $structured->search(['filters' => $filters, 'contextId' => $context['id'], 'contextMode' => 'subtree'])['counts']);
+});
+
+$suite->test('i campi dei Template si cercano per nome, con il proprio Template', static function () use ($pdo, $service): void {
+    entityWithValues($pdo, $service, 'Azienda per campi', ['Settore' => 'Ricerca campi']);
+    $structured = structuredService($pdo, $service);
+
+    $fields = $structured->fields('Dipendenti');
+
+    $ownField = array_values(array_filter(
+        $fields,
+        static fn (array $row): bool => $row['template_name'] === 'Scheda ricercabile',
+    ));
+
+    assertTrue(count($fields) > 0, 'Il campo deve essere trovato per nome.');
+    assertSameValue(1, count($ownField));
+    assertSameValue('Dipendenti', $ownField[0]['name']);
+    assertSameValue('number', $ownField[0]['field_type']);
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

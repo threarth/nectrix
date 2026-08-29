@@ -406,6 +406,47 @@ export async function setBlockValues(
   return payload.blocks
 }
 
+export interface StructuredFilter {
+  fieldId: string
+  operator: string
+  value?: unknown
+}
+
+export interface StructuredMatch {
+  path: 'field_value'
+  template: string | null
+  field: string
+  fieldType: string
+  operator: string
+}
+
+export interface StructuredEntity {
+  id: string
+  name: string
+  entityTypeName: string | null
+  matches: StructuredMatch[]
+  documents: { path: 'occurrence'; id: string; title: string }[]
+}
+
+/** Typed comparisons on FieldValue, combinable with Context and Tag through the occurrence. */
+export async function structuredSearch(
+  filters: StructuredFilter[],
+  editorial: { contextId?: string | null; contextMode?: ContextMode; tagIds?: string[] } = {},
+): Promise<{ entities: StructuredEntity[]; counts: { entities: number; documents: number } }> {
+  return request<{ entities: StructuredEntity[]; counts: { entities: number; documents: number } }>(
+    '/api/search/structured',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        filters,
+        contextId: editorial.contextId ?? '',
+        contextMode: editorial.contextMode ?? 'subtree',
+        tagIds: (editorial.tagIds ?? []).join(','),
+      }),
+    },
+  )
+}
+
 export interface ResolvedReference { id: string; label: string; detail: string | null }
 
 /** Labels of the destinations of the editorial references, derived and never stored. */

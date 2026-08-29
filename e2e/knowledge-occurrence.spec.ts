@@ -932,3 +932,48 @@ test('FASE 10.1.1: copiare un riferimento genera una nuova collocazione, stessa 
   expect(ids).toContain(before)
   expect(new Set(destinations).size).toBe(1)
 })
+
+test('FASE 10.2: la ricerca strutturata confronta i numeri come numeri', async ({ page }) => {
+  await page.goto('/')
+  const templatePanel = page.getByLabel('Template', { exact: true })
+
+  await templatePanel.getByRole('button', { name: 'Nuovo Template' }).click()
+  const templateDialog = page.getByRole('dialog', { name: 'Nuovo Template' })
+  await templateDialog.getByLabel('Nome del Template').fill('Scheda numerica')
+  await templateDialog.getByRole('button', { name: 'Nuovo Template' }).click()
+  await templatePanel.getByRole('button', { name: /Scheda numerica/ }).click()
+  await templatePanel.getByRole('button', { name: 'Aggiungi campo' }).click()
+  const fieldDialog = page.getByRole('dialog', { name: 'Nuovo campo' })
+  await fieldDialog.getByLabel('Nome del campo').fill('Dipendenti')
+  await fieldDialog.getByLabel('Tipo').selectOption('number')
+  await fieldDialog.getByRole('button', { name: 'Aggiungi campo' }).click()
+
+  // Due Entity: una grande e una piccola, con valori che ingannerebbero un confronto testuale.
+  for (const [entity, value] of [['Grande numerica', '1800'], ['Piccola numerica', '90']] as const) {
+    await newDocument(page)
+    await createEntityFrom(page, entity, entity, 'Azienda numerica')
+    await page.getByRole('button', { name: 'Salva' }).click()
+    await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+    await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+    await page.getByRole('button', { name: 'Apri Entity' }).click()
+    const structured = page.getByLabel('Dati strutturati')
+    await structured.getByLabel('Applica un Template').selectOption({ label: 'Scheda numerica' })
+    await structured.getByLabel('Dipendenti').fill(value)
+    await structured.getByLabel('Dipendenti').blur()
+    await expect(structured.getByLabel('Dipendenti')).toHaveValue(value)
+    await page.locator('.inspector-close').click()
+  }
+
+  const search = page.getByLabel('Cerca nei dati')
+  await search.getByLabel('Campo').selectOption({ label: 'Dipendenti' })
+  await search.getByLabel('Confronto').selectOption('gt')
+  await search.getByLabel('Valore').fill('1000')
+  await search.getByRole('button', { name: 'Cerca' }).click()
+
+  await expect(page.getByLabel('Entity trovate').locator('li')).toHaveCount(1)
+  await expect(page.getByLabel('Entity trovate')).toContainText('Grande numerica')
+  await expect(page.getByLabel('Entity trovate')).toContainText('Dipendenti · maggiore di')
+
+  await page.getByLabel('Entity trovate').getByRole('button').first().click()
+  await expect(page.locator('.inspector-name')).toHaveText('Grande numerica')
+})

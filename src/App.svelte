@@ -27,6 +27,7 @@
     search,
     searchByObject,
     setBlockValues,
+    structuredSearch,
     unassignTag,
     deleteContext,
     listContexts,
@@ -45,6 +46,7 @@
     type ContextMode,
     type SearchResult,
     type SemanticBlock,
+    type StructuredEntity,
     type Template,
     type Tag,
     type TagSummary,
@@ -86,6 +88,8 @@
   let searching = $state(false)
   let blocks = $state<SemanticBlock[]>([])
   let templates = $state<Template[]>([])
+  let structuredResults = $state<StructuredEntity[] | null>(null)
+  let structuredSearching = $state(false)
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
@@ -188,6 +192,28 @@
         : await derivedKnowledgeObjects(selectedContextId, contextMode, selectedTagIds)
     } catch (cause) {
       showError(cause)
+    }
+  }
+
+  /** Typed comparison on the values, optionally narrowed by the active editorial filters. */
+  async function runStructuredSearch(
+    fieldId: string,
+    operator: string,
+    value: unknown,
+    withFilters: boolean,
+  ): Promise<void> {
+    structuredSearching = true
+    error = ''
+    try {
+      const filter = value === undefined ? { fieldId, operator } : { fieldId, operator, value }
+      const result = await structuredSearch([filter], withFilters
+        ? { contextId: selectedContextId, contextMode, tagIds: selectedTagIds }
+        : {})
+      structuredResults = result.entities
+    } catch (cause) {
+      showError(cause)
+    } finally {
+      structuredSearching = false
     }
   }
 
@@ -714,6 +740,10 @@
       onAddField={(templateId, input) => void withTemplates(async () => {
         await addTemplateField(templateId, input)
       })}
+      searchResults={structuredResults}
+      searching={structuredSearching}
+      onSearch={(fieldId, operator, value, withFilters) => void runStructuredSearch(fieldId, operator, value, withFilters)}
+      onOpenEntity={(entityId) => void openInspector(entityId)}
     />
 
     {#if selectedContextId !== null || selectedTagIds.length > 0}

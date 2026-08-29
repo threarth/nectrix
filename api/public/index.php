@@ -29,6 +29,8 @@ use Nectrix\SemanticBlockRepository;
 use Nectrix\SemanticBlockService;
 use Nectrix\TemplateRepository;
 use Nectrix\TemplateService;
+use Nectrix\StructuredQueryRepository;
+use Nectrix\StructuredQueryService;
 
 require dirname(__DIR__) . '/bootstrap.php';
 
@@ -86,6 +88,7 @@ try {
     $fieldValidator = new FieldValueValidator();
     $templates = new TemplateService($templateRepository, $blockRepository, $fieldValidator);
     $semanticBlocks = new SemanticBlockService($blockRepository, $templateRepository, $fieldValidator);
+    $structured = new StructuredQueryService(new StructuredQueryRepository($pdo), $templateRepository, $query);
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -108,6 +111,12 @@ try {
             (string) ($_GET['contextMode'] ?? 'subtree'),
             (string) ($_GET['tagIds'] ?? ''),
         )]);
+    }
+    if ($method === 'POST' && $path === '/api/search/structured') {
+        respond(200, $structured->search(requestBody()));
+    }
+    if ($method === 'GET' && $path === '/api/search/fields') {
+        respond(200, ['fields' => $structured->fields((string) ($_GET['q'] ?? ''))]);
     }
     if ($method === 'GET' && $path === '/api/references') {
         $split = static fn (string $value): array => array_values(array_filter(explode(',', $value), static fn (string $id): bool => $id !== ''));

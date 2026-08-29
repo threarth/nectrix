@@ -412,3 +412,46 @@ export const referenceStrings = {
   unresolved: 'riferimento non risolto',
   loading: '…',
 } as const
+
+export const structuredSearchStrings = {
+  label: 'Cerca nei dati',
+  description: 'Confronta i valori sul loro tipo: i numeri come numeri, le date come date',
+  fieldLabel: 'Campo',
+  operatorLabel: 'Confronto',
+  valueLabel: 'Valore',
+  submit: 'Cerca',
+  searching: 'Ricerca…',
+  empty: 'Nessuna Entity con questi valori.',
+  resultsLabel: 'Entity trovate',
+  withFilters: 'Applica anche i filtri di contesto e tag attivi',
+  matchedBy: (field: string, operator: string): string => `${field} · ${operator}`,
+
+  operators: {
+    eq: 'uguale a',
+    contains: 'contiene',
+    gt: 'maggiore di',
+    gte: 'almeno',
+    lt: 'minore di',
+    lte: 'al massimo',
+    before: 'prima del',
+    after: 'dopo il',
+    is_true: 'vero',
+    is_false: 'falso',
+  } as Record<string, string>,
+
+  /** Mirrors the operators the API admits for each family of field types. */
+  byType: {
+    text: ['eq', 'contains'],
+    url: ['eq', 'contains'],
+    enum: ['eq', 'contains'],
+    multi_enum: ['eq', 'contains'],
+    number: ['eq', 'gt', 'gte', 'lt', 'lte'],
+    percentage: ['eq', 'gt', 'gte', 'lt', 'lte'],
+    measurement: ['eq', 'gt', 'gte', 'lt', 'lte'],
+    currency: ['eq', 'gt', 'gte', 'lt', 'lte'],
+    boolean: ['is_true', 'is_false'],
+    date: ['eq', 'before', 'after'],
+    entity_reference: ['eq'],
+    concept_reference: ['eq'],
+  } as Record<string, string[]>,
+} as const

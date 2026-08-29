@@ -174,11 +174,15 @@ Il clipboard segue la stessa politica delle occurrence: il copy/paste rigenera i
 
 Gate soddisfatto: destinazioni validate al salvataggio; copy/paste, reload e persistenza coperti da test end-to-end che verificano gli attributi effettivi del nodo; nessun payload strutturato duplicato nel contenuto, verificato cercando il nome della destinazione nel JSON salvato; entrambi i riferimenti risolvibili dalla stessa API.
 
-## FASE 10.2 — Structured and Combined Search
+## FASE 10.2 — Structured and Combined Search (completata)
 
 Ricercare EntityType, Template, TemplateField e FieldValue sulle colonne tipizzate e combinare full text, Concept, Entity, Context e Tag tramite percorsi espliciti. Il collegamento tra Entity e Document avviene normalmente tramite KnowledgeOccurrence; numeri, boolean, date, misure, valute e reference non vengono confrontati con cast generici a testo.
 
-Gate: query strutturate e combinate producono risultati e conteggi ripetibili, dichiarano il percorso del match e non confondono string matching, identità semantica e payload tipizzati.
+Completato: i FieldValue si interrogano sulla colonna del proprio tipo, con operatori ammessi per famiglia: confronti numerici su `number_value`, temporali su `date_value`, booleani su `boolean_value`, riferimenti sugli ID. Un operatore fuori tipo viene rifiutato invece di essere convertito, e un confronto numerico con un testo fallisce anziché degradare a stringa. Più filtri si intersecano e ogni risultato dichiara il percorso che lo ha prodotto: `field_value` con Template, campo e operatore, oppure `occurrence` per i Document collegati.
+
+La combinazione con Context e Tag passa dal percorso dichiarato Entity→KnowledgeOccurrence attiva→Document: mai dall'uguaglianza dei nomi. I campi dei Template sono a loro volta cercabili per nome, con il proprio Template accanto. La sidebar espone la ricerca sul Template selezionato, con l'opzione di applicare anche i filtri editoriali attivi.
+
+Gate soddisfatto: query strutturate e combinate con risultati e conteggi ripetuti identici; percorso del match dichiarato in ogni risultato; string matching, identità semantica e payload tipizzati restano distinti, verificato anche in negativo con operatori fuori tipo.
 
 ## FASE 11 — KnowledgeRelation
 
