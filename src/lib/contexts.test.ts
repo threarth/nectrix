@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, test } from 'vitest'
-import { contextPathLabel, orderContexts, possibleParents, type ContextNode } from './contexts'
+import {
+  contextPathLabel,
+  deletionBlockers,
+  orderContexts,
+  possibleParents,
+  type ContextNode,
+} from './contexts'
 
 const tree: ContextNode[] = [
   { id: 'uni', parent_id: null, name: 'Università' },
@@ -34,5 +40,27 @@ describe('gerarchia dei Context', () => {
 
   test('un elenco vuoto non produce righe', () => {
     expect(orderContexts([])).toEqual([])
+  })
+})
+
+describe('impedimenti alla cancellazione di un Context', () => {
+  test('un contesto con sotto-contesti non si elimina', () => {
+    const rows = orderContexts(tree)
+
+    expect(deletionBlockers(rows, 'uni')).toEqual({ children: 1, documents: 0 })
+    expect(deletionBlockers(rows, 'psi')).toEqual({ children: 1, documents: 0 })
+  })
+
+  test('un contesto con documenti non si elimina', () => {
+    const rows = orderContexts([{ id: 'solo', parent_id: null, name: 'Solo', documents: 3 }])
+
+    expect(deletionBlockers(rows, 'solo')).toEqual({ children: 0, documents: 3 })
+  })
+
+  test('una foglia senza documenti si elimina', () => {
+    const rows = orderContexts(tree)
+
+    expect(deletionBlockers(rows, 'jung')).toBeNull()
+    expect(deletionBlockers(rows, 'lavoro')).toBeNull()
   })
 })

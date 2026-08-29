@@ -16,11 +16,18 @@ final class ContextRepository
 {
     public function __construct(private readonly PDO $pdo) {}
 
-    /** @return list<array<string, mixed>> */
+    /**
+     * The whole hierarchy with the number of Document assigned to each node. The count is what
+     * makes the UI able to explain why a deletion is refused before attempting it.
+     *
+     * @return list<array<string, mixed>>
+     */
     public function list(): array
     {
         return $this->pdo->query(
-            'SELECT id, parent_id, name FROM contexts ORDER BY name COLLATE NOCASE'
+            'SELECT c.id, c.parent_id, c.name, COUNT(d.id) AS documents ' .
+            'FROM contexts c LEFT JOIN documents d ON d.context_id = c.id ' .
+            'GROUP BY c.id, c.parent_id, c.name ORDER BY c.name COLLATE NOCASE'
         )->fetchAll();
     }
 

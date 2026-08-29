@@ -4,6 +4,8 @@ export interface ContextNode {
   id: string
   parent_id: string | null
   name: string
+  /** Document assigned directly to this Context, not counting the descendants. */
+  documents?: number
 }
 
 export interface ContextRow extends ContextNode {
@@ -49,4 +51,13 @@ export function possibleParents(rows: readonly ContextRow[], contextId: string):
     if (row.parent_id !== null && excluded.has(row.parent_id)) excluded.add(row.id)
   }
   return rows.filter((row) => !excluded.has(row.id))
+}
+
+/** Why a Context cannot be deleted yet, or null when nothing blocks it. */
+export function deletionBlockers(rows: readonly ContextRow[], contextId: string): { children: number; documents: number } | null {
+  const row = rows.find((candidate) => candidate.id === contextId)
+  if (row === undefined) return null
+  const children = rows.filter((candidate) => candidate.parent_id === contextId).length
+  const documents = row.documents ?? 0
+  return children === 0 && documents === 0 ? null : { children, documents }
 }

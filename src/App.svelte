@@ -227,6 +227,9 @@
     error = ''
     try {
       applyDocument(await assignDocumentContext(document.id, contextId))
+      // I contesti portano il numero di Document: senza ricaricarli il conteggio resta indietro
+      // e il comando di eliminazione spiegherebbe un impedimento che non c'e piu.
+      contexts = await listContexts()
       await refreshFilters()
     } catch (cause) {
       showError(cause)

@@ -271,8 +271,21 @@ export const contextStrings = {
     dialogTitle: 'Rinomina contesto',
   },
   move: { label: 'Sposta', description: 'Sposta il contesto selezionato, con tutto il suo ramo, sotto un altro' },
-  remove: { label: 'Elimina', description: 'Possibile solo se il contesto non ha sotto-contesti né documenti' },
+  remove: {
+    label: 'Elimina',
+    description: 'Possibile solo se il contesto non ha sotto-contesti né documenti',
+    /** Explains the refusal next to the command, before attempting it. */
+    blocked: (children: number, documents: number): string => {
+      const parts: string[] = []
+      if (children > 0) parts.push(children === 1 ? 'un sotto-contesto' : `${children} sotto-contesti`)
+      if (documents > 0) parts.push(documents === 1 ? 'un documento' : `${documents} documenti`)
+      const single = parts.length === 1 && children + documents === 1
+      return `Non eliminabile: ha ${parts.join(' e ')}. ${single ? 'Spostalo o riassegnalo' : 'Spostali o riassegnali'} prima.`
+    },
+  },
   moveToRoot: 'Alla radice',
+  documentCount: (documents: number): string =>
+    documents === 1 ? '1 documento' : `${documents} documenti`,
 
   documentLabel: 'Contesto del documento',
   documentDescription: 'Un documento riceve un contesto solo così, mai come effetto del salvataggio',
@@ -306,6 +319,10 @@ export const tagStrings = {
   remove: {
     label: 'Elimina',
     description: 'Possibile solo se il tag non è assegnato a nessun documento',
+    blocked: (documents: number): string =>
+      documents === 1
+        ? 'Non eliminabile: è su un documento. Toglilo prima da lì.'
+        : `Non eliminabile: è su ${documents} documenti. Toglilo prima da lì.`,
   },
 
   documentLabel: 'Tag del documento',

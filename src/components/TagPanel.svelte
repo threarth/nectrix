@@ -2,7 +2,7 @@
   // SPDX-License-Identifier: AGPL-3.0-or-later
 
   import type { TagSummary } from '../lib/api'
-  import { tagStrings } from '../lib/strings'
+  import { contextStrings, tagStrings } from '../lib/strings'
   import NameDialog from './NameDialog.svelte'
 
   let {
@@ -42,6 +42,7 @@
           class:active={selectedIds.includes(tag.id)}
           aria-pressed={selectedIds.includes(tag.id)}
           title={tagStrings.filterDescription}
+          aria-label={`${tag.name}, ${contextStrings.documentCount(tag.documents)}`}
           onclick={() => onToggle(tag.id)}
         >{tag.name} <small>{tag.documents}</small></button>
       {/each}
@@ -64,11 +65,17 @@
     >{tagStrings.rename.label}</button>
     <button
       type="button"
-      disabled={busy || only === null}
-      title={tagStrings.remove.description}
+      disabled={busy || only === null || (only?.documents ?? 0) > 0}
+      title={only !== null && only.documents > 0
+        ? tagStrings.remove.blocked(only.documents)
+        : tagStrings.remove.description}
       onclick={() => only !== null && onDelete(only.id)}
     >{tagStrings.remove.label}</button>
   </div>
+
+  {#if only !== null && only.documents > 0}
+    <p class="tag-note">{tagStrings.remove.blocked(only.documents)}</p>
+  {/if}
 </section>
 
 {#if naming === 'create'}

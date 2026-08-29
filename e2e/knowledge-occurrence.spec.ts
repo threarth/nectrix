@@ -675,10 +675,19 @@ test('FASE 8: un Context con documenti non si elimina e non può diventare figli
   await page.getByLabel('Contesto del documento').selectOption({ label: 'Con documenti' })
 
   await panel.getByRole('button', { name: 'Con documenti' }).click()
-  await panel.getByRole('button', { name: 'Elimina' }).click()
 
-  await expect(page.getByRole('alert')).toContainText('riassegnali prima di eliminarlo')
+  // Il rifiuto viene spiegato accanto al comando, prima di tentarlo.
+  await expect(panel.getByRole('button', { name: 'Elimina', exact: true })).toBeDisabled()
+  await expect(panel).toContainText('Non eliminabile: ha un documento. Spostalo o riassegnalo prima.')
   await expect(panel.getByRole('button', { name: 'Con documenti' })).toBeVisible()
+
+  // Tolto il documento dal contesto, l'eliminazione diventa possibile.
+  await page.getByRole('button', { name: 'Documento legato' }).click()
+  await page.getByLabel('Contesto del documento').selectOption({ label: 'Nessun contesto' })
+  await panel.getByRole('button', { name: 'Con documenti' }).click()
+  await expect(panel.getByRole('button', { name: 'Elimina', exact: true })).toBeEnabled()
+  await panel.getByRole('button', { name: 'Elimina', exact: true }).click()
+  await expect(panel.getByRole('button', { name: 'Con documenti' })).toHaveCount(0)
 })
 
 test('FASE 9: i Tag filtrano i documenti e restano separati dai Concept', async ({ page }) => {
@@ -730,9 +739,12 @@ test('FASE 9: un Tag assegnato non si elimina finché resta sui documenti', asyn
   await expect(page.locator('.document-tag')).toContainText('Assegnato')
 
   await tagPanel.getByRole('button', { name: /Assegnato/ }).click()
-  await tagPanel.getByRole('button', { name: 'Elimina' }).click()
-  await expect(page.getByRole('alert')).toContainText('rimuovilo prima di eliminarlo')
+  await expect(tagPanel.getByRole('button', { name: 'Elimina', exact: true })).toBeDisabled()
+  await expect(tagPanel).toContainText('Non eliminabile: è su un documento')
 
   await page.locator('.document-tag button').click()
   await expect(page.locator('.document-tag')).toHaveCount(0)
+  await expect(tagPanel.getByRole('button', { name: 'Elimina', exact: true })).toBeEnabled()
+  await tagPanel.getByRole('button', { name: 'Elimina', exact: true }).click()
+  await expect(tagPanel.getByRole('button', { name: /Assegnato/ })).toHaveCount(0)
 })

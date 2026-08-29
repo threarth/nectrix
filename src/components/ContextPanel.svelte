@@ -2,7 +2,13 @@
   // SPDX-License-Identifier: AGPL-3.0-or-later
 
   import type { ContextMode } from '../lib/api'
-  import { contextPathLabel, orderContexts, possibleParents, type ContextNode } from '../lib/contexts'
+  import {
+    contextPathLabel,
+    deletionBlockers,
+    orderContexts,
+    possibleParents,
+    type ContextNode,
+  } from '../lib/contexts'
   import { contextStrings } from '../lib/strings'
   import NameDialog from './NameDialog.svelte'
 
@@ -33,6 +39,7 @@
   const rows = $derived(orderContexts(contexts))
   const selected = $derived(rows.find((row) => row.id === selectedId) ?? null)
   const parents = $derived(selectedId === null ? [] : possibleParents(rows, selectedId))
+  const blocked = $derived(selectedId === null ? null : deletionBlockers(rows, selectedId))
 
   let naming = $state<'create' | 'rename' | null>(null)
 </script>
@@ -58,8 +65,11 @@
         class:active={selectedId === row.id}
         style={`padding-left: ${12 + row.depth * 14}px`}
         title={contextPathLabel(row)}
+        aria-label={(row.documents ?? 0) > 0
+          ? `${row.name}, ${contextStrings.documentCount(row.documents ?? 0)}`
+          : row.name}
         onclick={() => onSelect(row.id)}
-      >{row.name}</button>
+      >{row.name}{#if (row.documents ?? 0) > 0}<small>{row.documents}</small>{/if}</button>
     {/each}
   {/if}
 
@@ -86,11 +96,17 @@
     </button>
     <button
       type="button"
-      disabled={busy || selected === null}
-      title={contextStrings.remove.description}
+      disabled={busy || selected === null || blocked !== null}
+      title={blocked === null
+        ? contextStrings.remove.description
+        : contextStrings.remove.blocked(blocked.children, blocked.documents)}
       onclick={() => selected !== null && onDelete(selected.id)}
     >{contextStrings.remove.label}</button>
   </div>
+
+  {#if blocked !== null}
+    <p class="tag-note">{contextStrings.remove.blocked(blocked.children, blocked.documents)}</p>
+  {/if}
 
   {#if selected !== null}
     <label class="context-move" title={contextStrings.move.description}>
