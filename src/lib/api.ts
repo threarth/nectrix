@@ -449,6 +449,48 @@ export async function listRelationTypes(): Promise<string[]> {
   return payload.types
 }
 
+export interface EvidenceView {
+  id: string
+  family: 'document' | 'occurrence' | 'semantic_block' | 'field_value'
+  destination_id: string
+  label: string
+  detail: string | null
+  state: string
+  document_id: string | null
+  note: string | null
+}
+
+export async function listRelationEvidence(relationId: string): Promise<EvidenceView[]> {
+  const payload = await request<{ evidence: EvidenceView[] }>(
+    `/api/relations/${encodeURIComponent(relationId)}/evidence`,
+  )
+  return payload.evidence
+}
+
+/** Evidence points only at data that already exists and is verified before being written. */
+export async function addRelationEvidence(
+  relationId: string,
+  input: { family: EvidenceView['family']; destinationId: string; note?: string },
+): Promise<EvidenceView[]> {
+  const payload = await request<{ evidence: EvidenceView[] }>(
+    `/api/relations/${encodeURIComponent(relationId)}/evidence`,
+    { method: 'POST', body: JSON.stringify(input) },
+  )
+  return payload.evidence
+}
+
+export async function removeRelationEvidence(
+  relationId: string,
+  family: EvidenceView['family'],
+  evidenceId: string,
+): Promise<EvidenceView[]> {
+  const payload = await request<{ evidence: EvidenceView[] }>(
+    `/api/relations/${encodeURIComponent(relationId)}/evidence/${encodeURIComponent(family)}/${encodeURIComponent(evidenceId)}`,
+    { method: 'DELETE' },
+  )
+  return payload.evidence
+}
+
 export interface StructuredFilter {
   fieldId: string
   operator: string

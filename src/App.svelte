@@ -28,10 +28,13 @@
     search,
     searchByObject,
     setBlockValues,
+    addRelationEvidence,
     createRelation,
     deleteRelation,
     listRelations,
+    listRelationEvidence,
     listRelationTypes,
+    removeRelationEvidence,
     structuredSearch,
     unassignTag,
     deleteContext,
@@ -51,6 +54,7 @@
     type ContextMode,
     type SearchResult,
     type SemanticBlock,
+    type EvidenceView,
     type RelationView,
     type StructuredEntity,
     type Template,
@@ -100,6 +104,7 @@
   let relations = $state<RelationView[]>([])
   let relationTypes = $state<string[]>([])
   let addingRelation = $state(false)
+  let relationEvidence = $state<{ relationId: string; items: EvidenceView[] } | null>(null)
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
@@ -472,6 +477,7 @@
       duplicateCandidates = []
       blocks = inspector.objectType === 'entity' ? await listBlocks(knowledgeObjectId) : []
       relations = await listRelations(knowledgeObjectId)
+      relationEvidence = null
       if (templates.length === 0) templates = await listTemplates()
     } catch (cause) {
       showError(cause)
@@ -538,6 +544,23 @@
   async function changeRelations(operation: () => Promise<RelationView[]>): Promise<void> {
     await withInspectorBusy(async () => {
       relations = await operation()
+    })
+  }
+
+  /** Provenance: which already existing data supports the relation. */
+  async function showEvidence(relationId: string): Promise<void> {
+    if (relationEvidence?.relationId === relationId) {
+      relationEvidence = null
+      return
+    }
+    await withInspectorBusy(async () => {
+      relationEvidence = { relationId, items: await listRelationEvidence(relationId) }
+    })
+  }
+
+  async function changeEvidence(relationId: string, operation: () => Promise<EvidenceView[]>): Promise<void> {
+    await withInspectorBusy(async () => {
+      relationEvidence = { relationId, items: await operation() }
     })
   }
 
@@ -948,6 +971,13 @@
       onAddRelation={() => void openRelationDialog()}
       onRemoveRelation={(relationId) => void changeRelations(() => deleteRelation(inspector?.id ?? '', relationId))}
       onOpenRelated={(objectId) => void openInspector(objectId)}
+      evidence={relationEvidence}
+      canAddDocumentEvidence={selected !== null}
+      onShowEvidence={(relationId) => void showEvidence(relationId)}
+      onAddDocumentEvidence={(relationId) => void changeEvidence(relationId, () =>
+        addRelationEvidence(relationId, { family: 'document', destinationId: selected?.id ?? '' }))}
+      onRemoveEvidence={(relationId, family, evidenceId) => void changeEvidence(relationId, () =>
+        removeRelationEvidence(relationId, family, evidenceId))}
       onToggleArchived={() => void toggleInspectorArchived()}
       onToggleEntityTypeArchived={() => void toggleInspectorEntityTypeArchived()}
       onOpenOccurrence={(occurrence) => void openOccurrence(occurrence)}

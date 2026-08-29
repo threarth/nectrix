@@ -1027,3 +1027,43 @@ test('FASE 11: una relazione si dichiara, ha una direzione e non nasce da sola',
   await expect(page.getByLabel('Relazioni').locator('.relation-direction')).toHaveText('←')
   await expect(page.getByLabel('Relazioni')).toContainText('Individuazione junghiana')
 })
+
+test('FASE 12: una relazione dichiara su quali dati si basa', async ({ page }) => {
+  await page.goto('/')
+  await newDocument(page)
+  await createConceptFrom(page, 'Sincronicità', 'Sincronicità evidenza')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Fonte della relazione')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await newDocument(page)
+  await createConceptFrom(page, 'Causalità', 'Causalità evidenza')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento collegato')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Concept' }).click()
+  const relations = page.getByLabel('Relazioni')
+  await relations.getByRole('button', { name: 'Collega' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Nuova relazione' })
+  await dialog.getByLabel('Predicato').fill('si oppone a')
+  await dialog.getByLabel('Cerca la destinazione').fill('Sincronicità evidenza')
+  await dialog.getByRole('button', { name: 'Cerca', exact: true }).click()
+  await expect(dialog.getByText('Sincronicità evidenza')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Collega' }).click()
+  await expect(relations.locator('li')).toHaveCount(1)
+
+  await relations.getByRole('button', { name: 'Evidenze' }).click()
+  const evidence = page.getByLabel('Su cosa si basa')
+  await expect(evidence).toContainText('Nessuna evidenza dichiarata')
+
+  await evidence.getByRole('button', { name: 'Aggiungi il documento aperto' }).click()
+  await expect(evidence).toContainText('Documento collegato')
+  await expect(evidence).toContainText('Documento')
+
+  // Togliere l'evidenza non tocca il documento.
+  await evidence.getByRole('button', { name: /Toglie l’evidenza/ }).click()
+  await expect(evidence).toContainText('Nessuna evidenza dichiarata')
+  await expect(page.locator('.sidebar nav')).toContainText('Documento collegato')
+})

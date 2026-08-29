@@ -5,12 +5,13 @@
     DuplicateCandidate,
     EntityIdentifierInput,
     KnowledgeObjectDetail,
+    EvidenceView,
     KnowledgeOccurrenceView,
     RelationView,
     SemanticBlock,
     Template,
   } from '../lib/api'
-  import { inspectorStrings, relationStrings } from '../lib/strings'
+  import { evidenceStrings, inspectorStrings, relationStrings } from '../lib/strings'
   import ConceptInspector from './ConceptInspector.svelte'
   import EntityInspector from './EntityInspector.svelte'
 
@@ -36,6 +37,11 @@
     onAddRelation,
     onRemoveRelation,
     onOpenRelated,
+    evidence,
+    canAddDocumentEvidence,
+    onShowEvidence,
+    onAddDocumentEvidence,
+    onRemoveEvidence,
   }: {
     object: KnowledgeObjectDetail
     busy?: boolean
@@ -60,6 +66,12 @@
     onAddRelation: () => void
     onRemoveRelation: (relationId: string) => void
     onOpenRelated: (objectId: string) => void
+    /** Evidence of the relation currently expanded, if any. */
+    evidence: { relationId: string; items: EvidenceView[] } | null
+    canAddDocumentEvidence: boolean
+    onShowEvidence: (relationId: string) => void
+    onAddDocumentEvidence: (relationId: string) => void
+    onRemoveEvidence: (relationId: string, family: EvidenceView['family'], evidenceId: string) => void
   } = $props()
 
   function startEditing(): void {
@@ -170,12 +182,55 @@
             </button>
             <button
               type="button"
+              class="relation-evidence-toggle"
+              disabled={busy}
+              title={evidenceStrings.show.description}
+              onclick={() => onShowEvidence(relation.id)}
+            >{evidenceStrings.show.label}</button>
+            <button
+              type="button"
               disabled={busy}
               aria-label={`${relationStrings.remove.description}: ${relation.relationType} ${relation.otherName}`}
               title={relationStrings.remove.description}
               onclick={() => onRemoveRelation(relation.id)}
             >{relationStrings.remove.label}</button>
           </li>
+
+          {#if evidence !== null && evidence.relationId === relation.id}
+            <li class="relation-evidence" aria-label={evidenceStrings.label} title={evidenceStrings.description}>
+              {#if evidence.items.length === 0}
+                <span class="muted">{evidenceStrings.empty}</span>
+              {:else}
+                <ul>
+                  {#each evidence.items as item (item.id)}
+                    <li>
+                      <span>
+                        <small>{evidenceStrings.families[item.family] ?? item.family}</small>
+                        {item.label}
+                        <small>{evidenceStrings.states[item.state] ?? item.state}</small>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`${evidenceStrings.remove.description}: ${item.label}`}
+                        title={evidenceStrings.remove.description}
+                        onclick={() => onRemoveEvidence(relation.id, item.family, item.id)}
+                      >{evidenceStrings.remove.label}</button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+              {#if canAddDocumentEvidence}
+                <button
+                  type="button"
+                  class="inspector-secondary"
+                  disabled={busy}
+                  title={evidenceStrings.addDocument.description}
+                  onclick={() => onAddDocumentEvidence(relation.id)}
+                >{evidenceStrings.addDocument.label}</button>
+              {/if}
+            </li>
+          {/if}
         {/each}
       </ul>
     {/if}

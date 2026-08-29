@@ -23,6 +23,8 @@ use Nectrix\ReferenceExtractor;
 use Nectrix\ReferenceRepository;
 use Nectrix\RelationRepository;
 use Nectrix\RelationService;
+use Nectrix\EvidenceRepository;
+use Nectrix\EvidenceService;
 use Nectrix\QueryService;
 use Nectrix\SearchRepository;
 use Nectrix\SearchService;
@@ -197,7 +199,7 @@ $suite->test('le migrazioni estendono lo schema Document senza rimuovere le colo
 
     assertSameValue($phaseOne, array_slice($columns, 0, count($phaseOne)));
     assertSameValue(['status', 'context_id'], array_slice($columns, count($phaseOne)));
-    assertSameValue(9, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(10, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
 });
 
 $domainFixture = [];
@@ -530,7 +532,7 @@ $suite->test('la migration Phase 1.1 aggiorna un database FASE 1 senza perdere D
 
     assertSameValue(1, (int) $upgradePdo->query('SELECT COUNT(*) FROM documents')->fetchColumn());
     assertSameValue('Documento preesistente', $upgradePdo->query('SELECT title FROM documents')->fetchColumn());
-    assertSameValue(9, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(10, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
     assertSameValue('field_values', $upgradePdo->query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'field_values'")->fetchColumn());
 });
 
@@ -2414,6 +2416,123 @@ $suite->test('eliminare una relazione non tocca gli oggetti collegati', static f
     assertSameValue('Concetto persistente', $knowledge->object($conceptId)['name']);
     assertSameValue('Entity persistente', $knowledge->object($entityId)['name']);
     assertSameValue(1, count($knowledge->object($conceptId)['occurrences']));
+});
+
+function evidenceService(PDO $pdo): EvidenceService
+{
+    return new EvidenceService(new EvidenceRepository($pdo), new RelationRepository($pdo));
+}
+
+$suite->test('l’evidence di una relazione usa una famiglia dedicata e conserva il percorso', static function () use ($pdo, $service): void {
+    $relations = relationService($pdo);
+    $evidence = evidenceService($pdo);
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+
+    $conceptId = UuidV7::generate();
+    $document = $service->create(['title' => 'Documento evidenza']);
+    $occurrenceId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([occurrenceText('Prova', $occurrenceId, $conceptId)]), [
+        conceptCreate($occurrenceId, $conceptId, 'Concetto con evidenza'),
+    ], 'Documento evidenza');
+    $entityId = entityWithOccurrence($service, $knowledge, 'Entity con evidenza', 'Tipo evidenza');
+    $template = $templates->create(['name' => 'Scheda evidenza']);
+    $template = $templates->addField($template['id'], ['name' => 'Nota', 'fieldType' => 'text']);
+    $blockId = $blocks->addBlock($entityId, ['templateId' => $template['id']])[0]['id'];
+    $withValue = $blocks->setValues($blockId, ['fieldId' => fieldNamed($template, 'Nota')['id'], 'values' => ['un valore']]);
+    $valueId = $withValue[0]['fields'][0]['values'][0]['id'];
+
+    $relationId = $relations->create($conceptId, ['targetId' => $entityId, 'relationType' => 'riguarda'])[0]['id'];
+
+    $evidence->add('relation', $relationId, ['family' => 'document', 'destinationId' => $document['id'], 'note' => 'Letto qui']);
+    $evidence->add('relation', $relationId, ['family' => 'occurrence', 'destinationId' => $occurrenceId]);
+    $evidence->add('relation', $relationId, ['family' => 'semantic_block', 'destinationId' => $blockId]);
+    $all = $evidence->add('relation', $relationId, ['family' => 'field_value', 'destinationId' => $valueId]);
+
+    assertSameValue(4, count($all));
+    $byFamily = [];
+    foreach ($all as $row) {
+        $byFamily[$row['family']] = $row;
+    }
+    assertSameValue('Documento evidenza', $byFamily['document']['label']);
+    assertSameValue('Letto qui', $byFamily['document']['note']);
+    assertSameValue($document['id'], $byFamily['occurrence']['document_id']);
+    assertSameValue('Concetto con evidenza', $byFamily['occurrence']['detail']);
+    assertSameValue('Scheda evidenza', $byFamily['semantic_block']['label']);
+    assertSameValue('Entity con evidenza', $byFamily['field_value']['detail']);
+    assertSameValue('manual', $byFamily['field_value']['state']);
+});
+
+$suite->test('una destinazione inesistente o di famiglia sbagliata viene rifiutata', static function () use ($pdo, $service): void {
+    $relations = relationService($pdo);
+    $evidence = evidenceService($pdo);
+    $primo = conceptWithOccurrence($service, 'Evidenza primo');
+    $secondo = conceptWithOccurrence($service, 'Evidenza secondo');
+    $relationId = $relations->create($primo, ['targetId' => $secondo, 'relationType' => 'riguarda'])[0]['id'];
+    $document = $service->create(['title' => 'Documento per famiglia']);
+
+    try {
+        $evidence->add('relation', $relationId, ['family' => 'document', 'destinationId' => UuidV7::generate()]);
+        throw new RuntimeException('Destinazione inesistente accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('evidence_not_found', $error->errorCode);
+    }
+
+    // Un Document non e una occurrence: la famiglia sbagliata non trova la destinazione.
+    try {
+        $evidence->add('relation', $relationId, ['family' => 'occurrence', 'destinationId' => $document['id']]);
+        throw new RuntimeException('Famiglia sbagliata accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('evidence_not_found', $error->errorCode);
+    }
+
+    try {
+        $evidence->add('relation', $relationId, ['family' => 'source', 'destinationId' => $document['id']]);
+        throw new RuntimeException('Famiglia non prevista accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_request', $error->errorCode);
+    }
+
+    assertSameValue([], $evidence->of('relation', $relationId));
+});
+
+$suite->test('l’evidence resiste al normale editing e dichiara lo stato della occurrence', static function () use ($pdo, $service): void {
+    $relations = relationService($pdo);
+    $evidence = evidenceService($pdo);
+    $conceptId = UuidV7::generate();
+    $document = $service->create(['title' => 'Editing evidenza']);
+    $occurrenceId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([occurrenceText('Testo', $occurrenceId, $conceptId)]), [
+        conceptCreate($occurrenceId, $conceptId, 'Concetto editato'),
+    ]);
+    $altro = conceptWithOccurrence($service, 'Altro concetto');
+    $relationId = $relations->create($conceptId, ['targetId' => $altro, 'relationType' => 'riguarda'])[0]['id'];
+    $evidence->add('relation', $relationId, ['family' => 'occurrence', 'destinationId' => $occurrenceId]);
+
+    // Cancellare il testo stacca la occurrence, ma non la elimina: l'evidence resta navigabile.
+    saveRevision($service, $document['id'], 1, emptyDocument());
+
+    $after = $evidence->of('relation', $relationId);
+    assertSameValue(1, count($after));
+    assertSameValue('detached', $after[0]['state']);
+    assertSameValue($document['id'], $after[0]['document_id']);
+});
+
+$suite->test('rimuovere una evidence non tocca il dato che indicava', static function () use ($pdo, $service): void {
+    $relations = relationService($pdo);
+    $evidence = evidenceService($pdo);
+    $primo = conceptWithOccurrence($service, 'Rimozione evidenza primo');
+    $secondo = conceptWithOccurrence($service, 'Rimozione evidenza secondo');
+    $relationId = $relations->create($primo, ['targetId' => $secondo, 'relationType' => 'riguarda'])[0]['id'];
+    $document = $service->create(['title' => 'Documento da conservare']);
+    $added = $evidence->add('relation', $relationId, ['family' => 'document', 'destinationId' => $document['id']]);
+
+    $remaining = $evidence->remove('relation', $relationId, 'document', $added[0]['id']);
+
+    assertSameValue([], $remaining);
+    assertSameValue('Documento da conservare', $service->get($document['id'])['title']);
+    assertSameValue(1, count($relations->of($primo)));
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

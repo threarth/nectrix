@@ -194,11 +194,15 @@ Nulla genera relazioni implicitamente: comparire nello stesso Document, condivid
 
 Gate soddisfatto: direzione, sottotipo degli estremi e molteplicità preservati e verificati da entrambi i capi; nessun nodo automatico Context/Tag e nessuna relazione da co-occurrence.
 
-## FASE 12 — Provenance delle relazioni e dei dati
+## FASE 12 — Provenance delle relazioni e dei dati (completata)
 
 Associare KnowledgeRelation e dati derivati a evidence verificabili già disponibili: Document, KnowledgeOccurrence, SemanticBlock e FieldValue. Ogni famiglia di destinazione usa un'associazione dedicata, non una FK polimorfica debole. Source e SourceLocator estendono questi percorsi nella FASE 16; non vengono anticipati.
 
-Gate: evidence valida, navigabile e resistente al normale editing; ogni output `derived` conserva il percorso verso i dati autorevoli e nessun target inesistente o di tipo errato viene accettato.
+Completato: la migration 010 aggiunge una tabella per famiglia di destinazione — Document, KnowledgeOccurrence, SemanticBlock e FieldValue — ciascuna con foreign key vere. Il soggetto è una KnowledgeRelation oppure un FieldValue, entrambe colonne con FK reale, e un CHECK impone che ne sia valorizzata esattamente una: nessuna coppia generica `target_type`/`target_id` che il database non potrebbe verificare.
+
+Ogni evidence conserva il percorso verso i dati autorevoli: la occurrence porta il Document che la contiene e l'oggetto che dichiara, il blocco e il valore portano l'Entity che li possiede, e ciascuno riporta il proprio stato. Una destinazione inesistente, di famiglia sbagliata o di famiglia non prevista viene rifiutata. L'evidence resiste al normale editing: cancellare il testo stacca la occurrence senza eliminarla, e l'evidence resta navigabile dichiarando lo stato `detached`. Rimuovere una evidence non tocca il dato che indicava. Source e SourceLocator estendono questi percorsi nella FASE 16 e non sono anticipati.
+
+Gate soddisfatto: evidence valide, navigabili e verificate dopo un editing che stacca la occurrence; percorso verso i dati autorevoli conservato in ogni famiglia; destinazioni inesistenti o di tipo errato rifiutate, verificato anche passando un Document dove serve una occurrence.
 
 ## FASE 13 — Compare
 

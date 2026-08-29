@@ -21,6 +21,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 10.1.1 — Riferimenti editoriali a Entity e SemanticBlock: completata.
 - FASE 10.2 — Structured and Combined Search: completata.
 - FASE 11 — KnowledgeRelation: completata.
+- FASE 12 — Provenance delle relazioni e dei dati: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
 - API PHP minimale e database SQLite in `data/nectrix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
@@ -29,21 +30,21 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 12 — Provenance delle relazioni e dei dati
+### FASE 13 — Compare
 
-Associare KnowledgeRelation e dati derivati a evidence verificabili gia disponibili: Document, KnowledgeOccurrence, SemanticBlock e FieldValue, con associazioni dedicate e non FK polimorfiche.
+Workspace con modalita separate Compare Concepts e Compare Entities, basate solo sulla conoscenza persistita.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- evidence valida, navigabile e resistente al normale editing;
-- ogni output derived che conserva il percorso verso i dati autorevoli;
-- nessun target inesistente o di tipo errato accettato.
+- confronto basato solo su dati persistiti, senza testo generato;
+- colonne Entity allineate per TemplateField stabile;
+- nessuna modalita mista senza un caso d'uso esplicito.
 
-Gate: definito nella sezione FASE 12 di `ROADMAP.md`.
+Gate: confronto basato solo sulla conoscenza persistita, colonne Entity allineate per TemplateField stabile e nessun testo generato da AI.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 12.
+Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 13.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

@@ -21,6 +21,8 @@ use Nectrix\ReferenceExtractor;
 use Nectrix\ReferenceRepository;
 use Nectrix\RelationRepository;
 use Nectrix\RelationService;
+use Nectrix\EvidenceRepository;
+use Nectrix\EvidenceService;
 use Nectrix\QueryService;
 use Nectrix\FieldValueValidator;
 use Nectrix\SearchRepository;
@@ -91,7 +93,9 @@ try {
     $templates = new TemplateService($templateRepository, $blockRepository, $fieldValidator);
     $semanticBlocks = new SemanticBlockService($blockRepository, $templateRepository, $fieldValidator);
     $structured = new StructuredQueryService(new StructuredQueryRepository($pdo), $templateRepository, $query);
-    $relations = new RelationService(new RelationRepository($pdo), $knowledgeRepository);
+    $relationRepository = new RelationRepository($pdo);
+    $relations = new RelationService($relationRepository, $knowledgeRepository);
+    $evidence = new EvidenceService(new EvidenceRepository($pdo), $relationRepository);
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -282,6 +286,24 @@ try {
     }
     if ($method === 'PUT' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
         respond(200, ['object' => $knowledge->updateObject(rawurldecode($matches[1]), requestBody())]);
+    }
+    if (preg_match('#^/api/(relations|field-values)/([^/]+)/evidence$#', (string) $path, $matches) === 1) {
+        $subject = $matches[1] === 'relations' ? 'relation' : 'field_value';
+        $subjectId = rawurldecode($matches[2]);
+        if ($method === 'GET') {
+            respond(200, ['evidence' => $evidence->of($subject, $subjectId)]);
+        }
+        if ($method === 'POST') {
+            respond(201, ['evidence' => $evidence->add($subject, $subjectId, requestBody())]);
+        }
+    }
+    if ($method === 'DELETE' && preg_match('#^/api/(relations|field-values)/([^/]+)/evidence/([^/]+)/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, ['evidence' => $evidence->remove(
+            $matches[1] === 'relations' ? 'relation' : 'field_value',
+            rawurldecode($matches[2]),
+            rawurldecode($matches[3]),
+            rawurldecode($matches[4]),
+        )]);
     }
     if ($method === 'GET' && $path === '/api/relation-types') {
         respond(200, ['types' => $relations->types()]);

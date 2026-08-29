@@ -476,3 +476,29 @@ export const relationStrings = {
   predicatePlaceholder: 'Per esempio riguarda, deriva da',
   confirm: 'Collega',
 } as const
+
+export const evidenceStrings = {
+  label: 'Su cosa si basa',
+  description: 'Dati già presenti che sostengono la relazione: documenti, occurrence, blocchi o valori',
+  empty: 'Nessuna evidenza dichiarata.',
+  show: { label: 'Evidenze', description: 'Mostra su quali dati si basa questa relazione' },
+  addDocument: { label: 'Aggiungi il documento aperto', description: 'Usa il documento aperto come evidenza di questa relazione' },
+  remove: { label: '×', description: 'Toglie l’evidenza, senza toccare il dato che indicava' },
+  families: {
+    document: 'Documento',
+    occurrence: 'Occurrence',
+    semantic_block: 'Blocco',
+    field_value: 'Valore',
+  } as Record<string, string>,
+  states: {
+    active: 'attiva',
+    detached: 'staccata',
+    deleted: 'eliminata',
+    archived: 'archiviato',
+    trashed: 'nel cestino',
+    manual: 'manuale',
+    provider: 'da provider',
+    derived: 'derivato',
+    ai_suggested: 'proposto',
+  } as Record<string, string>,
+} as const
