@@ -406,6 +406,49 @@ export async function setBlockValues(
   return payload.blocks
 }
 
+export interface RelationView {
+  id: string
+  relationType: string
+  description: string | null
+  direction: 'outgoing' | 'incoming'
+  otherId: string
+  otherType: 'concept' | 'entity'
+  otherName: string
+}
+
+export async function listRelations(objectId: string): Promise<RelationView[]> {
+  const payload = await request<{ relations: RelationView[] }>(
+    `/api/knowledge-objects/${encodeURIComponent(objectId)}/relations`,
+  )
+  return payload.relations
+}
+
+/** Direction is part of the identity: the inverse arc is a different relation. */
+export async function createRelation(
+  objectId: string,
+  input: { targetId: string; relationType: string; description?: string },
+): Promise<RelationView[]> {
+  const payload = await request<{ relations: RelationView[] }>(
+    `/api/knowledge-objects/${encodeURIComponent(objectId)}/relations`,
+    { method: 'POST', body: JSON.stringify(input) },
+  )
+  return payload.relations
+}
+
+export async function deleteRelation(objectId: string, relationId: string): Promise<RelationView[]> {
+  const payload = await request<{ relations: RelationView[] }>(
+    `/api/knowledge-objects/${encodeURIComponent(objectId)}/relations/${encodeURIComponent(relationId)}`,
+    { method: 'DELETE' },
+  )
+  return payload.relations
+}
+
+/** Suggested predicates plus the ones already used: never a closed list. */
+export async function listRelationTypes(): Promise<string[]> {
+  const payload = await request<{ types: string[] }>('/api/relation-types')
+  return payload.types
+}
+
 export interface StructuredFilter {
   fieldId: string
   operator: string

@@ -977,3 +977,53 @@ test('FASE 10.2: la ricerca strutturata confronta i numeri come numeri', async (
   await page.getByLabel('Entity trovate').getByRole('button').first().click()
   await expect(page.locator('.inspector-name')).toHaveText('Grande numerica')
 })
+
+test('FASE 11: una relazione si dichiara, ha una direzione e non nasce da sola', async ({ page }) => {
+  await page.goto('/')
+  await newDocument(page)
+  await createConceptFrom(page, 'Individuazione', 'Individuazione junghiana')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento delle relazioni')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  // Una seconda Entity nello stesso documento: co-occorrenza, non relazione.
+  await page.locator('.tiptap').click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type(' e Jung')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.getByLabel('Comandi sul testo selezionato').getByRole('button', { name: 'Crea Entity' }).click()
+  const entityDialog = page.getByRole('dialog', { name: 'Nuova Entity' })
+  await entityDialog.getByLabel('Nome della Entity').fill('Carl Gustav Jung')
+  await entityDialog.getByLabel('Nome del nuovo EntityType').fill('Studioso')
+  await entityDialog.getByRole('button', { name: 'Crea Entity' }).click()
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  // Il Concept non ha relazioni malgrado la co-occorrenza.
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').first().click()
+  await page.getByRole('button', { name: 'Apri Concept' }).click()
+  const relations = page.getByLabel('Relazioni')
+  await expect(relations).toContainText('Nessuna relazione dichiarata')
+
+  await relations.getByRole('button', { name: 'Collega' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Nuova relazione' })
+  await dialog.getByLabel('Predicato').fill('è studiato da')
+  await dialog.getByLabel('Cerca la destinazione').fill('Carl Gustav Jung')
+  await dialog.getByRole('button', { name: 'Cerca', exact: true }).click()
+  await expect(dialog.getByText('Carl Gustav Jung')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Collega' }).click()
+
+  await expect(relations.locator('li')).toHaveCount(1)
+  await expect(relations).toContainText('è studiato da')
+  await expect(relations).toContainText('Carl Gustav Jung')
+  await expect(relations.locator('.relation-direction')).toHaveText('→')
+
+  // Dall'altro capo la stessa relazione risulta entrante.
+  await relations.getByRole('button', { name: /Carl Gustav Jung/ }).first().click()
+  await expect(page.locator('.inspector-name')).toHaveText('Carl Gustav Jung')
+  await expect(page.getByLabel('Relazioni').locator('.relation-direction')).toHaveText('←')
+  await expect(page.getByLabel('Relazioni')).toContainText('Individuazione junghiana')
+})

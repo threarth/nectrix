@@ -21,6 +21,8 @@ use Nectrix\Migrator;
 use Nectrix\PlainTextExtractor;
 use Nectrix\ReferenceExtractor;
 use Nectrix\ReferenceRepository;
+use Nectrix\RelationRepository;
+use Nectrix\RelationService;
 use Nectrix\QueryService;
 use Nectrix\SearchRepository;
 use Nectrix\SearchService;
@@ -2277,6 +2279,141 @@ $suite->test('i campi dei Template si cercano per nome, con il proprio Template'
     assertSameValue(1, count($ownField));
     assertSameValue('Dipendenti', $ownField[0]['name']);
     assertSameValue('number', $ownField[0]['field_type']);
+});
+
+function relationService(PDO $pdo): RelationService
+{
+    return new RelationService(new RelationRepository($pdo), new KnowledgeRepository($pdo));
+}
+
+$suite->test('una relazione conserva direzione e sottotipo di entrambi gli estremi', static function () use ($pdo, $service): void {
+    $relations = relationService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $conceptId = conceptWithOccurrence($service, 'Concetto sorgente');
+    $entityId = entityWithOccurrence($service, $knowledge, 'Entity destinazione', 'Tipo relazione');
+
+    $created = $relations->create($conceptId, [
+        'targetId' => $entityId,
+        'relationType' => 'è studiato da',
+        'description' => 'Dichiarata a mano',
+    ]);
+
+    assertSameValue(1, count($created));
+    assertSameValue('outgoing', $created[0]['direction']);
+    assertSameValue('entity', $created[0]['otherType']);
+    assertSameValue('Entity destinazione', $created[0]['otherName']);
+
+    // Dall'altro capo la stessa relazione risulta entrante, con il sottotipo opposto.
+    $fromTarget = $relations->of($entityId);
+    assertSameValue(1, count($fromTarget));
+    assertSameValue('incoming', $fromTarget[0]['direction']);
+    assertSameValue('concept', $fromTarget[0]['otherType']);
+    assertSameValue('Concetto sorgente', $fromTarget[0]['otherName']);
+});
+
+$suite->test('la direzione fa parte dell’identità: l’inverso è un’altra relazione', static function () use ($pdo, $service): void {
+    $relations = relationService($pdo);
+    $primo = conceptWithOccurrence($service, 'Primo direzionale');
+    $secondo = conceptWithOccurrence($service, 'Secondo direzionale');
+
+    $relations->create($primo, ['targetId' => $secondo, 'relationType' => 'deriva da']);
+
+    try {
+        $relations->create($primo, ['targetId' => $secondo, 'relationType' => 'DERIVA DA']);
+        throw new RuntimeException('Relazione duplicata accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('relation_duplicate', $error->errorCode);
+    }
+
+    $inversa = $relations->create($secondo, ['targetId' => $primo, 'relationType' => 'deriva da']);
+    assertSameValue(2, count($inversa));
+    assertSameValue(['outgoing', 'incoming'], array_column($inversa, 'direction'));
+});
+
+$suite->test('una relazione non nasce da co-occurrence, Context o Tag', static function () use ($pdo, $service): void {
+    $relations = relationService($pdo);
+    $contexts = contextService($pdo);
+    $tags = tagService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+
+    // Due oggetti nello stesso Document, stesso Context e stesso Tag.
+    $document = $service->create(['title' => 'Co-occorrenza']);
+    $conceptId = UuidV7::generate();
+    $entityId = UuidV7::generate();
+    $entityType = $knowledge->createEntityType(['name' => 'Tipo co-occorrente']);
+    $primoOccurrence = UuidV7::generate();
+    $secondoOccurrence = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([
+        occurrenceText('Idea', $primoOccurrence, $conceptId),
+        ['type' => 'text', 'text' => ' e '],
+        occurrenceText('Cosa', $secondoOccurrence, $entityId, 'entity'),
+    ]), [
+        conceptCreate($primoOccurrence, $conceptId, 'Idea co-occorrente'),
+        ['occurrenceId' => $secondoOccurrence, 'knowledgeObjectId' => $entityId, 'objectType' => 'entity',
+         'newObject' => true, 'name' => 'Cosa co-occorrente', 'entityTypeId' => $entityType['id']],
+    ]);
+    $context = $contexts->create(['name' => 'Contesto co-occorrente']);
+    $tag = $tags->create(['name' => 'Tag co-occorrente']);
+    $contexts->assignDocument($document['id'], ['contextId' => $context['id']]);
+    $tags->assign($document['id'], ['tagId' => $tag['id']]);
+
+    assertSameValue([], $relations->of($conceptId));
+    assertSameValue([], $relations->of($entityId));
+    assertSameValue(0, countRows(
+        $pdo,
+        'SELECT COUNT(*) FROM knowledge_relations WHERE source_knowledge_object_id = :concept ' .
+        'OR target_knowledge_object_id = :concept OR source_knowledge_object_id = :entity ' .
+        'OR target_knowledge_object_id = :entity',
+        ['concept' => $conceptId, 'entity' => $entityId],
+    ));
+});
+
+$suite->test('gli estremi devono esistere e non si collega un oggetto a sé stesso', static function () use ($pdo, $service): void {
+    $relations = relationService($pdo);
+    $conceptId = conceptWithOccurrence($service, 'Concetto solo');
+
+    try {
+        $relations->create($conceptId, ['targetId' => $conceptId, 'relationType' => 'riguarda']);
+        throw new RuntimeException('Auto-relazione accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('relation_self', $error->errorCode);
+    }
+
+    try {
+        $relations->create($conceptId, ['targetId' => UuidV7::generate(), 'relationType' => 'riguarda']);
+        throw new RuntimeException('Destinazione inesistente accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('knowledge_object_not_found', $error->errorCode);
+    }
+
+    assertSameValue([], $relations->of($conceptId));
+});
+
+$suite->test('i predicati suggeriti non sono un elenco chiuso', static function () use ($pdo, $service): void {
+    $relations = relationService($pdo);
+    $primo = conceptWithOccurrence($service, 'Predicato primo');
+    $secondo = conceptWithOccurrence($service, 'Predicato secondo');
+
+    $relations->create($primo, ['targetId' => $secondo, 'relationType' => 'predicato inventato']);
+
+    $types = $relations->types();
+    assertTrue(in_array('è un tipo di', $types, true), 'I suggerimenti iniziali restano disponibili.');
+    assertTrue(in_array('predicato inventato', $types, true), 'Un predicato custom entra fra i suggerimenti.');
+});
+
+$suite->test('eliminare una relazione non tocca gli oggetti collegati', static function () use ($pdo, $service): void {
+    $relations = relationService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $conceptId = conceptWithOccurrence($service, 'Concetto persistente');
+    $entityId = entityWithOccurrence($service, $knowledge, 'Entity persistente', 'Tipo persistente');
+    $created = $relations->create($conceptId, ['targetId' => $entityId, 'relationType' => 'riguarda']);
+
+    $remaining = $relations->delete($created[0]['id'], $conceptId);
+
+    assertSameValue([], $remaining);
+    assertSameValue('Concetto persistente', $knowledge->object($conceptId)['name']);
+    assertSameValue('Entity persistente', $knowledge->object($entityId)['name']);
+    assertSameValue(1, count($knowledge->object($conceptId)['occurrences']));
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

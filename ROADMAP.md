@@ -184,11 +184,15 @@ La combinazione con Context e Tag passa dal percorso dichiarato Entity→Knowled
 
 Gate soddisfatto: query strutturate e combinate con risultati e conteggi ripetuti identici; percorso del match dichiarato in ogni risultato; string matching, identità semantica e payload tipizzati restano distinti, verificato anche in negativo con operatori fuori tipo.
 
-## FASE 11 — KnowledgeRelation
+## FASE 11 — KnowledgeRelation (completata)
 
 CRUD di archi diretti Concept↔Concept, Entity↔Entity ed Entity↔Concept, tipi iniziali suggeriti e predicati custom. Co-occurrence, DocumentLink, FieldValue→Concept, Context e Tag non generano automaticamente KnowledgeRelation.
 
-Gate: direzione, sottotipo degli estremi e molteplicità preservati; nessun nodo automatico Context/Tag.
+Completato: gli archi diretti collegano Concept↔Concept, Entity↔Entity ed Entity↔Concept in qualsiasi combinazione. La direzione fa parte dell'identità: lo stesso predicato fra la stessa coppia ordinata esiste una volta sola, mentre l'arco inverso è una relazione distinta e coesiste. Ogni capo dichiara il proprio sottotipo, e l'inspector mostra la stessa relazione come uscente da un lato ed entrante dall'altro, con il nome dell'altro oggetto navigabile. I predicati iniziali sono suggerimenti, non un elenco chiuso: un predicato scritto a mano entra fra i suggeriti successivi.
+
+Nulla genera relazioni implicitamente: comparire nello stesso Document, condividere Context o Tag, o essere puntati da un FieldValue non producono archi, verificato con due oggetti che condividono documento, contesto e tag. Un oggetto non si collega a sé stesso e una destinazione inesistente viene rifiutata. Eliminare una relazione non tocca gli oggetti collegati né le loro occurrence. Context e Tag non diventano nodi.
+
+Gate soddisfatto: direzione, sottotipo degli estremi e molteplicità preservati e verificati da entrambi i capi; nessun nodo automatico Context/Tag e nessuna relazione da co-occurrence.
 
 ## FASE 12 — Provenance delle relazioni e dei dati
 

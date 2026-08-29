@@ -19,6 +19,8 @@ use Nectrix\OccurrenceTextExtractor;
 use Nectrix\PlainTextExtractor;
 use Nectrix\ReferenceExtractor;
 use Nectrix\ReferenceRepository;
+use Nectrix\RelationRepository;
+use Nectrix\RelationService;
 use Nectrix\QueryService;
 use Nectrix\FieldValueValidator;
 use Nectrix\SearchRepository;
@@ -89,6 +91,7 @@ try {
     $templates = new TemplateService($templateRepository, $blockRepository, $fieldValidator);
     $semanticBlocks = new SemanticBlockService($blockRepository, $templateRepository, $fieldValidator);
     $structured = new StructuredQueryService(new StructuredQueryRepository($pdo), $templateRepository, $query);
+    $relations = new RelationService(new RelationRepository($pdo), $knowledgeRepository);
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -279,6 +282,21 @@ try {
     }
     if ($method === 'PUT' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
         respond(200, ['object' => $knowledge->updateObject(rawurldecode($matches[1]), requestBody())]);
+    }
+    if ($method === 'GET' && $path === '/api/relation-types') {
+        respond(200, ['types' => $relations->types()]);
+    }
+    if (preg_match('#^/api/knowledge-objects/([^/]+)/relations$#', (string) $path, $matches) === 1) {
+        $objectId = rawurldecode($matches[1]);
+        if ($method === 'GET') {
+            respond(200, ['relations' => $relations->of($objectId)]);
+        }
+        if ($method === 'POST') {
+            respond(201, ['relations' => $relations->create($objectId, requestBody())]);
+        }
+    }
+    if ($method === 'DELETE' && preg_match('#^/api/knowledge-objects/([^/]+)/relations/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, ['relations' => $relations->delete(rawurldecode($matches[2]), rawurldecode($matches[1]))]);
     }
     if ($method === 'POST' && preg_match('#^/api/knowledge-objects/([^/]+)/aliases$#', (string) $path, $matches) === 1) {
         respond(201, ['object' => $knowledge->addAlias(rawurldecode($matches[1]), requestBody())]);

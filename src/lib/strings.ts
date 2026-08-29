@@ -455,3 +455,24 @@ export const structuredSearchStrings = {
     concept_reference: ['eq'],
   } as Record<string, string[]>,
 } as const
+
+export const relationStrings = {
+  label: 'Relazioni',
+  description: 'Archi dichiarati da te: comparire nello stesso documento o contesto non crea una relazione',
+  empty: 'Nessuna relazione dichiarata.',
+  outgoing: '→',
+  incoming: '←',
+  add: { label: 'Collega', description: 'Dichiara una relazione verso un altro Concept o Entity' },
+  remove: { label: '×', description: 'Rimuove la relazione, senza toccare gli oggetti collegati' },
+
+  dialogTitle: 'Nuova relazione',
+  hint: 'La direzione fa parte della relazione: l’arco inverso è una relazione diversa.',
+  queryLabel: 'Cerca la destinazione',
+  queryPlaceholder: 'Nome del Concept o della Entity',
+  search: 'Cerca',
+  searching: 'Ricerca…',
+  empty_results: 'Nessun risultato.',
+  predicateLabel: 'Predicato',
+  predicatePlaceholder: 'Per esempio riguarda, deriva da',
+  confirm: 'Collega',
+} as const

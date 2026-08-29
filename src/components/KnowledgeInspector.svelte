@@ -6,10 +6,11 @@
     EntityIdentifierInput,
     KnowledgeObjectDetail,
     KnowledgeOccurrenceView,
+    RelationView,
     SemanticBlock,
     Template,
   } from '../lib/api'
-  import { inspectorStrings } from '../lib/strings'
+  import { inspectorStrings, relationStrings } from '../lib/strings'
   import ConceptInspector from './ConceptInspector.svelte'
   import EntityInspector from './EntityInspector.svelte'
 
@@ -31,6 +32,10 @@
     onAddBlock,
     onRemoveBlock,
     onSetValues,
+    relations,
+    onAddRelation,
+    onRemoveRelation,
+    onOpenRelated,
   }: {
     object: KnowledgeObjectDetail
     busy?: boolean
@@ -50,6 +55,11 @@
     onAddBlock: (templateId: string) => void
     onRemoveBlock: (blockId: string) => void
     onSetValues: (blockId: string, fieldId: string, values: unknown[]) => void
+    /** Declared arcs towards other Concept or Entity, in both directions. */
+    relations: RelationView[]
+    onAddRelation: () => void
+    onRemoveRelation: (relationId: string) => void
+    onOpenRelated: (objectId: string) => void
   } = $props()
 
   function startEditing(): void {
@@ -141,6 +151,42 @@
       {onSetValues}
     />
   {/if}
+
+  <section class="inspector-list" aria-label={relationStrings.label} title={relationStrings.description}>
+    <h3>{relationStrings.label} ({relations.length})</h3>
+    {#if relations.length === 0}
+      <p class="muted">{relationStrings.empty}</p>
+    {:else}
+      <ul>
+        {#each relations as relation (relation.id)}
+          <li>
+            <button type="button" class="relation-open" onclick={() => onOpenRelated(relation.otherId)}>
+              <span class="relation-direction">
+                {relation.direction === 'outgoing' ? relationStrings.outgoing : relationStrings.incoming}
+              </span>
+              {relation.relationType}
+              <strong>{relation.otherName}</strong>
+              <small>{relation.otherType === 'concept' ? 'Concept' : 'Entity'}</small>
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              aria-label={`${relationStrings.remove.description}: ${relation.relationType} ${relation.otherName}`}
+              title={relationStrings.remove.description}
+              onclick={() => onRemoveRelation(relation.id)}
+            >{relationStrings.remove.label}</button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <button
+      type="button"
+      class="inspector-secondary"
+      disabled={busy}
+      title={relationStrings.add.description}
+      onclick={onAddRelation}
+    >{relationStrings.add.label}</button>
+  </section>
 
   <section class="inspector-occurrences" aria-label={inspectorStrings.occurrences.label}>
     <h3>{inspectorStrings.occurrences.label} ({object.occurrences.length})</h3>

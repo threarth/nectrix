@@ -17,6 +17,7 @@
     derivedKnowledgeObjects,
     listDocumentTags,
     listTags,
+    searchKnowledge,
     renameTag,
     addBlock,
     addTemplateField,
@@ -27,6 +28,10 @@
     search,
     searchByObject,
     setBlockValues,
+    createRelation,
+    deleteRelation,
+    listRelations,
+    listRelationTypes,
     structuredSearch,
     unassignTag,
     deleteContext,
@@ -46,6 +51,7 @@
     type ContextMode,
     type SearchResult,
     type SemanticBlock,
+    type RelationView,
     type StructuredEntity,
     type Template,
     type Tag,
@@ -60,6 +66,7 @@
   } from './lib/api'
   import ContextPanel from './components/ContextPanel.svelte'
   import DerivedObjects from './components/DerivedObjects.svelte'
+  import RelationDialog from './components/RelationDialog.svelte'
   import SearchPanel from './components/SearchPanel.svelte'
   import TemplatePanel from './components/TemplatePanel.svelte'
   import DocumentTags from './components/DocumentTags.svelte'
@@ -90,6 +97,9 @@
   let templates = $state<Template[]>([])
   let structuredResults = $state<StructuredEntity[] | null>(null)
   let structuredSearching = $state(false)
+  let relations = $state<RelationView[]>([])
+  let relationTypes = $state<string[]>([])
+  let addingRelation = $state(false)
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
@@ -461,6 +471,7 @@
       inspector = await getKnowledgeObject(knowledgeObjectId)
       duplicateCandidates = []
       blocks = inspector.objectType === 'entity' ? await listBlocks(knowledgeObjectId) : []
+      relations = await listRelations(knowledgeObjectId)
       if (templates.length === 0) templates = await listTemplates()
     } catch (cause) {
       showError(cause)
@@ -509,6 +520,24 @@
       const added = await addEntityIdentifier(object.id, input)
       inspector = added.object
       duplicateCandidates = added.duplicateCandidates
+    })
+  }
+
+  /** Relations are declared, never inferred from documents, contexts or tags. */
+  async function openRelationDialog(): Promise<void> {
+    if (relationTypes.length === 0) {
+      try {
+        relationTypes = await listRelationTypes()
+      } catch (cause) {
+        console.warn('Predicati suggeriti non disponibili.', cause)
+      }
+    }
+    addingRelation = true
+  }
+
+  async function changeRelations(operation: () => Promise<RelationView[]>): Promise<void> {
+    await withInspectorBusy(async () => {
+      relations = await operation()
     })
   }
 
@@ -882,6 +911,23 @@
     {/if}
   </main>
 
+  {#if addingRelation && inspector}
+    <RelationDialog
+      sourceName={inspector.name}
+      suggestions={relationTypes}
+      onSearch={searchKnowledge}
+      onCancel={() => (addingRelation = false)}
+      onConfirm={(input) => {
+        addingRelation = false
+        void changeRelations(async () => {
+          const updated = await createRelation(inspector?.id ?? '', input)
+          relationTypes = await listRelationTypes()
+          return updated
+        })
+      }}
+    />
+  {/if}
+
   {#if inspector}
     <KnowledgeInspector
       object={inspectorObject ?? inspector}
@@ -898,6 +944,10 @@
       onAddBlock={(templateId) => void changeBlocks(() => addBlock(inspector?.id ?? '', templateId))}
       onRemoveBlock={(blockId) => void changeBlocks(() => removeBlock(blockId))}
       onSetValues={(blockId, fieldId, values) => void changeBlocks(() => setBlockValues(blockId, fieldId, values))}
+      {relations}
+      onAddRelation={() => void openRelationDialog()}
+      onRemoveRelation={(relationId) => void changeRelations(() => deleteRelation(inspector?.id ?? '', relationId))}
+      onOpenRelated={(objectId) => void openInspector(objectId)}
       onToggleArchived={() => void toggleInspectorArchived()}
       onToggleEntityTypeArchived={() => void toggleInspectorEntityTypeArchived()}
       onOpenOccurrence={(occurrence) => void openOccurrence(occurrence)}

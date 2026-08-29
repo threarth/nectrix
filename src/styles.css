@@ -1223,6 +1223,36 @@ button:disabled {
   color: #8d3a2e;
 }
 
+.relation-open {
+  display: flex !important;
+  align-items: baseline;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  border: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.relation-open strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-open:hover strong {
+  text-decoration: underline;
+}
+
+.relation-direction {
+  flex: none;
+  color: #7c9471;
+  font-weight: 700;
+}
+
 .inspector-add {
   display: grid;
   grid-template-columns: 1fr auto;
