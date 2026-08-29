@@ -861,3 +861,74 @@ test('FASE 10.1: un Template si applica a una Entity e i valori restano tipizzat
   // I dati strutturati non toccano il documento.
   await expect(page.locator('.tiptap')).toHaveText('Rocket Lab')
 })
+
+test('FASE 10.1.1: un riferimento mostra la destinazione senza copiarla nel documento', async ({ page }) => {
+  await page.goto('/')
+  await newDocument(page)
+  await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab riferimento', 'Azienda riferita')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await newDocument(page)
+  const editor = page.locator('.tiptap')
+  await editor.click()
+  await page.keyboard.type('Vedi anche ')
+  await page.getByRole('toolbar').getByRole('button', { name: 'Riferimento' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Inserisci un riferimento' })
+  await dialog.getByLabel('Cerca una Entity').fill('Rocket Lab riferimento')
+  await dialog.getByRole('button', { name: 'Cerca', exact: true }).click()
+  await expect(dialog.getByText('Rocket Lab riferimento')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Inserisci' }).click()
+
+  const reference = editor.locator('.nectrix-reference')
+  await expect(reference).toHaveCount(1)
+  await expect(reference).toHaveAttribute('data-label', 'Rocket Lab riferimento')
+
+  // Il contenuto salvato porta solo gli ID: il nome non compare nel documento.
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.reload()
+  await expect(page.locator('.tiptap .nectrix-reference')).toHaveAttribute('data-label', 'Rocket Lab riferimento')
+  await expect(page.locator('.tiptap')).toHaveText('Vedi anche ')
+
+  const attributes = await page.locator('.tiptap .nectrix-reference').evaluate((node) =>
+    Array.from(node.attributes).map((attribute) => attribute.name).sort())
+  expect(attributes).toContain('data-reference-id')
+  expect(attributes).toContain('data-entity-id')
+  expect(attributes).not.toContain('data-name')
+})
+
+test('FASE 10.1.1: copiare un riferimento genera una nuova collocazione, stessa destinazione', async ({ page }) => {
+  await page.goto('/')
+  await newDocument(page)
+  await createEntityFrom(page, 'Electron', 'Electron vettore', 'Vettore')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+
+  await newDocument(page)
+  const editor = page.locator('.tiptap')
+  await editor.click()
+  await page.getByRole('toolbar').getByRole('button', { name: 'Riferimento' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Inserisci un riferimento' })
+  await dialog.getByLabel('Cerca una Entity').fill('Electron vettore')
+  await dialog.getByRole('button', { name: 'Cerca', exact: true }).click()
+  await expect(dialog.getByText('Electron vettore')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Inserisci' }).click()
+  await expect(editor.locator('.nectrix-reference')).toHaveCount(1)
+
+  const before = await editor.locator('.nectrix-reference').getAttribute('data-reference-id')
+  await editor.press('Control+A')
+  await page.keyboard.press('Control+C')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('Control+V')
+
+  await expect(editor.locator('.nectrix-reference')).toHaveCount(2)
+  const ids = await editor.locator('.nectrix-reference').evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute('data-reference-id')))
+  const destinations = await editor.locator('.nectrix-reference').evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute('data-entity-id')))
+  expect(new Set(ids).size).toBe(2)
+  expect(ids).toContain(before)
+  expect(new Set(destinations).size).toBe(1)
+})

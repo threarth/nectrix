@@ -164,11 +164,15 @@ La rinomina di Template e campi preserva l'ID, quindi i valori già scritti rest
 
 Gate soddisfatto: ordinamento dei campi e conservazione dell'ID alla rinomina; valori tipizzati, cardinalità e appartenenza validati con scrittura atomica per campo; cambio di tipo bloccato nel CRUD ordinario, con preview e transazione nel comando separato; nessuna creazione automatica di Concept e nessun overwrite implicito, verificati contando i Concept prima e dopo.
 
-## FASE 10.1.1 — Riferimenti editoriali a Entity e SemanticBlock
+## FASE 10.1.1 — Riferimenti editoriali a Entity e SemanticBlock (completata)
 
 Introdurre i nodi `entityReference` e `semanticBlockReference` come riferimenti/rendering derivati. Ogni collocazione conserva `referenceId` e ID della destinazione; non incorpora nome, Template o FieldValue autorevoli. Copy/paste rigenera `referenceId` mantenendo la destinazione, cut/paste interno verificato può conservarlo e input manipolato non crea Entity o SemanticBlock.
 
-Gate: destinazioni validate, delete/undo/reload e clipboard coperti da test; nessun payload strutturato duplicato nel `document_json`; export e inspector possono risolvere entrambi i riferimenti.
+Completato: i nodi inline atomici `entityReference` e `semanticBlockReference` conservano soltanto `referenceId` e l'ID della destinazione. Nome, Template e valori non entrano nel contenuto: l'etichetta mostrata è una decorazione risolta a ogni disegno, così rinominare la destinazione si vede subito e il `document_json` non invecchia. Il validatore rifiuta attributi estranei, ID non canonici e lo stesso `referenceId` due volte; il salvataggio verifica che ogni destinazione esista e fallisce atomicamente altrimenti, senza creare nulla.
+
+Il clipboard segue la stessa politica delle occurrence: il copy/paste rigenera il `referenceId` mantenendo la destinazione, un cut/paste verificato nello stesso Document può conservarlo, e l'impronta del taglio comprende anche le identità dei riferimenti. Un endpoint di risoluzione restituisce le etichette per l'editor e, in futuro, per gli exporter.
+
+Gate soddisfatto: destinazioni validate al salvataggio; copy/paste, reload e persistenza coperti da test end-to-end che verificano gli attributi effettivi del nodo; nessun payload strutturato duplicato nel contenuto, verificato cercando il nome della destinazione nel JSON salvato; entrambi i riferimenti risolvibili dalla stessa API.
 
 ## FASE 10.2 — Structured and Combined Search
 

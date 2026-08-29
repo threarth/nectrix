@@ -13,6 +13,12 @@ final class DocumentValidator
     private const LEGACY_HIGHLIGHT_COLORS = ['yellow', 'green', 'blue', 'pink'];
     private const BLOCKS = ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList'];
 
+    /** Inline nodes that point at a destination without copying anything of it. */
+    private const REFERENCES = [
+        'entityReference' => 'entityId',
+        'semanticBlockReference' => 'semanticBlockId',
+    ];
+
     /** @param array<string, mixed> $document */
     public function validate(array $document): void
     {
@@ -65,7 +71,32 @@ final class DocumentValidator
         }
         $content = $this->assertList($node['content'], $path . '.content', true);
         foreach ($content as $index => $child) {
-            $this->validateText($this->assertObject($child, "{$path}.content[{$index}]"), "{$path}.content[{$index}]");
+            $childPath = "{$path}.content[{$index}]";
+            $childNode = $this->assertObject($child, $childPath);
+            if (isset(self::REFERENCES[$childNode['type'] ?? ''])) {
+                $this->validateReference($childNode, $childPath);
+                continue;
+            }
+            $this->validateText($childNode, $childPath);
+        }
+    }
+
+    /**
+     * A reference carries its own identity and the ID of the destination, nothing else: name,
+     * Template and values stay authoritative in the database and are never duplicated here.
+     *
+     * @param array<string, mixed> $node
+     */
+    private function validateReference(array $node, string $path): void
+    {
+        $destination = self::REFERENCES[$node['type']];
+        $this->assertKeys($node, ['type', 'attrs'], ['type', 'attrs'], $path);
+        $attrs = $this->assertObject($node['attrs'], $path . '.attrs');
+        $this->assertKeys($attrs, ['referenceId', $destination], ['referenceId', $destination], $path . '.attrs');
+        foreach (['referenceId', $destination] as $key) {
+            if (!is_string($attrs[$key]) || !UuidV7::isValid($attrs[$key])) {
+                $this->invalid($path . '.attrs.' . $key, 'ID del riferimento non valido.');
+            }
         }
     }
 

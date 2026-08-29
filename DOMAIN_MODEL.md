@@ -333,6 +333,10 @@ Sono vietati cicli e auto-parenting. La profondità non ha un limite di dominio.
 
 Un sub-context è semplicemente un Context con `parent_id`; non richiede una seconda tabella. Un Context non definisce il significato dei KnowledgeObject osservati nei Document. Concept, Entity, EntityType e SemanticBlock vengono raggiunti inizialmente tramite Context→Document→KnowledgeOccurrence→KnowledgeObject e, per i dati strutturati, →Entity→SemanticBlock. Spostare un Document o un ramo Context non duplica, rinomina o riassegna direttamente KnowledgeObject.
 
+### 3.12.1 Riferimenti editoriali
+
+I nodi `entityReference` e `semanticBlockReference` collocano nel contenuto un rimando a una Entity o a un suo SemanticBlock. Conservano `referenceId`, identità della collocazione, e l'ID della destinazione: nome, Template e FieldValue non vengono mai copiati nel `document_json` e sono risolti al momento del disegno. Copy/paste rigenera `referenceId` mantenendo la destinazione; un cut/paste verificato nello stesso Document può conservarlo. Un riferimento verso una destinazione inesistente fa fallire il salvataggio e non crea nulla.
+
 ### 3.13 Tag
 
 Metadata libero usato per classificazione e gestione.

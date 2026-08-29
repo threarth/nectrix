@@ -89,7 +89,10 @@ describe('schema editoriale fino alla FASE 2', () => {
   test('espone solo i nodi e mark persistenti in allowlist', () => {
     const editor = createEditor(richDocument)
     expect(Object.keys(editor.schema.nodes).sort()).toEqual(
-      ['blockquote', 'bulletList', 'doc', 'heading', 'listItem', 'orderedList', 'paragraph', 'text'].sort(),
+      [
+        'blockquote', 'bulletList', 'doc', 'entityReference', 'heading', 'listItem',
+        'orderedList', 'paragraph', 'semanticBlockReference', 'text',
+      ].sort(),
     )
     expect(Object.keys(editor.schema.marks).sort()).toEqual(['bold', 'highlight', 'italic', 'knowledgeOccurrence', 'underline'])
   })

@@ -9,6 +9,8 @@
     normalizeHighlightColor,
     occurrenceClipboardExtension,
     occurrenceFreeRanges,
+    referenceDestinations,
+    referenceLabelsExtension,
     occurrenceRangeAt,
     removeOccurrenceMarks,
     type HighlightColor,
@@ -29,13 +31,16 @@
   import { uuidV7 } from '../lib/uuid'
   import {
     createEntityType,
+    listBlocks,
     listEntityTypes,
     resolveKnowledgeObjects,
+    resolveReferences,
     searchKnowledge,
     type EntityType,
     type KnowledgeSearchResult,
   } from '../lib/api'
   import AttachDialog from './AttachDialog.svelte'
+  import ReferenceDialog from './ReferenceDialog.svelte'
   import ConceptDialog from './ConceptDialog.svelte'
   import EntityDialog from './EntityDialog.svelte'
   import {
@@ -43,6 +48,7 @@
     highlightPopoverStrings,
     occurrencePopoverStrings,
     palettePanelStrings,
+    referenceStrings,
   } from '../lib/strings'
   import ToolbarButton from './ToolbarButton.svelte'
 
@@ -125,6 +131,10 @@
   let entityTypes = $state<EntityType[]>([])
   let dialogBusy = $state(false)
   let dialogError = $state('')
+  let referencing = $state(false)
+
+  /** Labels of the reference destinations, resolved from the API and never written in the content. */
+  const referenceLabels = new Map<string, string>()
 
   onMount(() => {
     highlightPalette = readHighlightPalette()
@@ -140,6 +150,10 @@
           createId: uuidV7,
           onPaste: (occurrences) => void verifyPastedOccurrences(occurrences),
         }),
+        referenceLabelsExtension({
+          label: (node, destinationId) => referenceLabels.get(`${node}:${destinationId}`),
+          fallback: referenceStrings.unresolved,
+        }),
       ],
       content: initialContent,
       editable,
@@ -148,11 +162,13 @@
         syncEditorPopover(editor)
         if (transaction.docChanged) {
           onChange(editor.getJSON())
+          void loadReferenceLabels(editor)
         }
       },
       onSelectionUpdate: ({ editor }) => syncEditorPopover(editor),
     })
     editorState = { editor }
+    void loadReferenceLabels(editor)
   })
 
   onDestroy(() => editorState.editor?.destroy())
@@ -164,6 +180,39 @@
   function run(command: (editor: Editor) => void): void {
     const editor = editorState.editor
     if (editor) command(editor)
+  }
+
+  /**
+   * Resolves the labels of the destinations still unknown and redraws, so the reference shows what
+   * it points at without the document ever storing that text.
+   */
+  async function loadReferenceLabels(editor: Editor): Promise<void> {
+    const { entities, blocks } = referenceDestinations(editor.state)
+    const missingEntities = entities.filter((id) => !referenceLabels.has(`entityReference:${id}`))
+    const missingBlocks = blocks.filter((id) => !referenceLabels.has(`semanticBlockReference:${id}`))
+    if (missingEntities.length === 0 && missingBlocks.length === 0) return
+
+    try {
+      const resolved = await resolveReferences(missingEntities, missingBlocks)
+      for (const entity of resolved.entities) referenceLabels.set(`entityReference:${entity.id}`, entity.label)
+      for (const block of resolved.semanticBlocks) {
+        referenceLabels.set(`semanticBlockReference:${block.id}`, `${block.detail} · ${block.label}`)
+      }
+      if (!editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false))
+    } catch (cause) {
+      console.warn('Etichette dei riferimenti non disponibili.', cause)
+    }
+  }
+
+  function insertReference(destination: { kind: 'entityReference' | 'semanticBlockReference'; id: string }): void {
+    const editor = editorState.editor
+    if (!editor) return
+    const attrs = destination.kind === 'entityReference'
+      ? { referenceId: uuidV7(), entityId: destination.id }
+      : { referenceId: uuidV7(), semanticBlockId: destination.id }
+    editor.chain().focus().insertContent({ type: destination.kind, attrs }).run()
+    referencing = false
+    void loadReferenceLabels(editor)
   }
 
   /** Opens the dialog of a semantic command on the current selection. */
@@ -413,6 +462,10 @@
         onclick={() => openCommand('attach')}
       />
       <ToolbarButton
+        command={referenceStrings.command}
+        onclick={() => (referencing = true)}
+      />
+      <ToolbarButton
         command={editorStrings.palette}
         toggle
         active={paletteSelectorOpen}
@@ -483,6 +536,19 @@
     </div>
   {/if}
   <div class="editor-content" bind:this={element}></div>
+  {#if referencing}
+    <ReferenceDialog
+      initialQuery={editorState.editor?.state.doc.textBetween(
+        editorState.editor.state.selection.from,
+        editorState.editor.state.selection.to,
+        ' ',
+      ) ?? ''}
+      onSearch={searchKnowledge}
+      onLoadBlocks={listBlocks}
+      onCancel={() => (referencing = false)}
+      onConfirm={insertReference}
+    />
+  {/if}
   {#if pendingCommand?.kind === 'concept'}
     <ConceptDialog initialName={pendingCommand.text} onCancel={closeCommand} onConfirm={confirmConcept} />
   {:else if pendingCommand?.kind === 'entity'}

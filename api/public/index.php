@@ -17,6 +17,8 @@ use Nectrix\KnowledgeRepository;
 use Nectrix\KnowledgeService;
 use Nectrix\OccurrenceTextExtractor;
 use Nectrix\PlainTextExtractor;
+use Nectrix\ReferenceExtractor;
+use Nectrix\ReferenceRepository;
 use Nectrix\QueryService;
 use Nectrix\FieldValueValidator;
 use Nectrix\SearchRepository;
@@ -70,6 +72,8 @@ try {
         new PlainTextExtractor(),
         new KnowledgeOccurrenceExtractor(),
         $knowledgeRepository,
+        new ReferenceExtractor(),
+        new ReferenceRepository($pdo),
     );
     $knowledge = new KnowledgeService($knowledgeRepository, new OccurrenceTextExtractor());
     $documentRepository = new DocumentRepository($pdo);
@@ -104,6 +108,13 @@ try {
             (string) ($_GET['contextMode'] ?? 'subtree'),
             (string) ($_GET['tagIds'] ?? ''),
         )]);
+    }
+    if ($method === 'GET' && $path === '/api/references') {
+        $split = static fn (string $value): array => array_values(array_filter(explode(',', $value), static fn (string $id): bool => $id !== ''));
+        respond(200, (new ReferenceRepository($pdo))->resolve(
+            $split((string) ($_GET['entities'] ?? '')),
+            $split((string) ($_GET['blocks'] ?? '')),
+        ));
     }
     if ($method === 'GET' && $path === '/api/templates') {
         respond(200, ['templates' => $templates->list()]);

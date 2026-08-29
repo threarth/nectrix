@@ -24,7 +24,9 @@ final class PlainTextExtractor
         if ($node['type'] === 'paragraph' || $node['type'] === 'heading') {
             $text = '';
             foreach ($node['content'] ?? [] as $child) {
-                $text .= $child['text'];
+                // Un nodo inline senza testo, come un riferimento editoriale, non contribuisce al
+                // testo derivato: la sua etichetta vive nel database, non nel contenuto.
+                $text .= is_array($child) && is_string($child['text'] ?? null) ? $child['text'] : '';
             }
             $lines[] = $text;
             return;

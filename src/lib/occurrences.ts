@@ -154,6 +154,32 @@ export function collectSliceOccurrenceRuns(slice: Slice): OccurrenceAttributes[]
   return runs
 }
 
+export const REFERENCE_NODES = ['entityReference', 'semanticBlockReference'] as const
+
+export type ReferenceNodeName = (typeof REFERENCE_NODES)[number]
+
+export interface SliceReference {
+  node: ReferenceNodeName
+  referenceId: string
+}
+
+/** Editorial references carried by a clipboard slice, in slice order. */
+export function collectSliceReferences(slice: Slice): SliceReference[] {
+  const references: SliceReference[] = []
+  const visit = (nodes: JSONContent[]): void => {
+    for (const node of nodes) {
+      const name = node.type as ReferenceNodeName
+      if (REFERENCE_NODES.includes(name) && typeof node.attrs?.referenceId === 'string') {
+        references.push({ node: name, referenceId: node.attrs.referenceId })
+        continue
+      }
+      visit(node.content ?? [])
+    }
+  }
+  visit((slice.content.toJSON() as JSONContent[] | null) ?? [])
+  return references
+}
+
 const FNV_OFFSET_BASIS = 0x811c9dc5
 const FNV_PRIME = 0x01000193
 const FINGERPRINT_HEX_LENGTH = 8
@@ -176,7 +202,11 @@ export function occurrenceFingerprint(text: string, occurrenceIds: readonly stri
 /** Fingerprint of a clipboard slice, computed identically at cut time and at paste time. */
 export function sliceFingerprint(slice: Slice): string {
   const text = slice.content.textBetween(0, slice.content.size, BLOCK_SEPARATOR, '')
-  return occurrenceFingerprint(text, collectSliceOccurrenceRuns(slice).map((run) => run.occurrenceId))
+  const identities = [
+    ...collectSliceOccurrenceRuns(slice).map((run) => run.occurrenceId),
+    ...collectSliceReferences(slice).map((reference) => reference.referenceId),
+  ]
+  return occurrenceFingerprint(text, identities)
 }
 
 /** What travels in the custom clipboard format. It is a claim, never a proof on its own. */
@@ -260,12 +290,23 @@ function remapFragment(fragment: Fragment, mapping: ReadonlyMap<string, string>)
   const nodes: ProseMirrorNode[] = []
   fragment.forEach((node) => {
     const marks = remapMarks(node.marks, mapping)
-    nodes.push(node.isText ? node.mark(marks) : node.copy(remapFragment(node.content, mapping)).mark(marks))
+    if (node.isText) {
+      nodes.push(node.mark(marks))
+      return
+    }
+    const rewritten = REFERENCE_NODES.includes(node.type.name as ReferenceNodeName)
+      ? mapping.get(node.attrs.referenceId as string)
+      : undefined
+    const attrs = rewritten === undefined ? node.attrs : { ...node.attrs, referenceId: rewritten }
+    nodes.push(node.type.create(attrs, remapFragment(node.content, mapping), marks))
   })
   return Fragment.fromArray(nodes)
 }
 
-/** Rewrites every occurrenceId of a clipboard slice according to the mapping. */
+/**
+ * Rewrites the identities carried by a clipboard slice: occurrenceId of the marks and referenceId
+ * of the editorial references. The destinations are never touched.
+ */
 export function remapSliceOccurrences(slice: Slice, mapping: ReadonlyMap<string, string>): Slice {
   if (mapping.size === 0) return slice
   return new Slice(remapFragment(slice.content, mapping), slice.openStart, slice.openEnd)

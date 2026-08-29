@@ -19,6 +19,8 @@ use Nectrix\KnowledgeService;
 use Nectrix\OccurrenceTextExtractor;
 use Nectrix\Migrator;
 use Nectrix\PlainTextExtractor;
+use Nectrix\ReferenceExtractor;
+use Nectrix\ReferenceRepository;
 use Nectrix\QueryService;
 use Nectrix\SearchRepository;
 use Nectrix\SearchService;
@@ -170,7 +172,15 @@ $migrator->migrate();
 $validator = new DocumentValidator();
 $extractor = new PlainTextExtractor();
 $repository = new DocumentRepository($pdo);
-$service = new DocumentService($repository, $validator, $extractor, new KnowledgeOccurrenceExtractor(), new KnowledgeRepository($pdo));
+$service = new DocumentService(
+    $repository,
+    $validator,
+    $extractor,
+    new KnowledgeOccurrenceExtractor(),
+    new KnowledgeRepository($pdo),
+    new ReferenceExtractor(),
+    new ReferenceRepository($pdo),
+);
 $suite = new TestSuite();
 
 $suite->test('la connessione SQLite abilita sempre le foreign key', static function () use ($pdo): void {
@@ -2011,6 +2021,103 @@ $suite->test('un blocco appartiene alla propria Entity e i campi al proprio Temp
     $remaining = $blocks->deleteBlock($due[1]['id']);
     assertSameValue(1, count($remaining));
     assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM semantic_blocks WHERE entity_id = :id', ['id' => $entityId]));
+});
+
+/** Inline reference node, as the editor writes it into the document content. */
+function referenceNode(string $kind, string $referenceId, string $destinationId): array
+{
+    return ['type' => $kind, 'attrs' => [
+        'referenceId' => $referenceId,
+        ReferenceExtractor::KINDS[$kind] => $destinationId,
+    ]];
+}
+
+$suite->test('un riferimento editoriale conserva solo gli ID, mai nome o valori', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityId = entityWithOccurrence($service, $knowledge, 'Entity riferita', 'Tipo riferito');
+    $document = $service->create(['title' => 'Con riferimento']);
+    $referenceId = UuidV7::generate();
+
+    $saved = saveRevision($service, $document['id'], 0, documentOfParagraphs([
+        ['type' => 'text', 'text' => 'Vedi '],
+        referenceNode('entityReference', $referenceId, $entityId),
+    ]));
+
+    $node = $saved['documentJson']['content'][0]['content'][1];
+    assertSameValue(['referenceId', 'entityId'], array_keys($node['attrs']));
+    assertSameValue($entityId, $node['attrs']['entityId']);
+
+    // Nome, Template e valori non finiscono nel contenuto.
+    assertTrue(!str_contains(json_encode($saved['documentJson']), 'Entity riferita'), 'Il nome della destinazione non va duplicato.');
+});
+
+$suite->test('un riferimento a una destinazione inesistente blocca il salvataggio', static function () use ($pdo, $service): void {
+    $document = $service->create(['title' => 'Riferimento rotto']);
+
+    try {
+        saveRevision($service, $document['id'], 0, documentOfParagraphs([
+            referenceNode('entityReference', UuidV7::generate(), UuidV7::generate()),
+        ]));
+        throw new RuntimeException('Riferimento inesistente accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('reference_not_found', $error->errorCode);
+    }
+
+    assertSameValue(0, $service->get($document['id'])['revision']);
+    assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM entities WHERE name = :name', ['name' => 'inesistente']));
+});
+
+$suite->test('lo stesso referenceId due volte è un documento corrotto', static function () use ($pdo, $service): void {
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityId = entityWithOccurrence($service, $knowledge, 'Entity duplicabile', 'Tipo duplicabile');
+    $document = $service->create(['title' => 'Riferimento duplicato']);
+    $referenceId = UuidV7::generate();
+
+    try {
+        saveRevision($service, $document['id'], 0, documentOfParagraphs([
+            referenceNode('entityReference', $referenceId, $entityId),
+            referenceNode('entityReference', $referenceId, $entityId),
+        ]));
+        throw new RuntimeException('referenceId duplicato accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('reference_duplicate', $error->errorCode);
+    }
+});
+
+$suite->test('un riferimento con attributi estranei o ID non validi viene rifiutato', static function () use ($service): void {
+    $document = $service->create(['title' => 'Riferimento manipolato']);
+
+    foreach ([
+        ['referenceId' => UuidV7::generate(), 'entityId' => UuidV7::generate(), 'name' => 'Payload duplicato'],
+        ['referenceId' => 'non-un-uuid', 'entityId' => UuidV7::generate()],
+        ['referenceId' => UuidV7::generate()],
+    ] as $attrs) {
+        try {
+            saveRevision($service, $document['id'], 0, documentOfParagraphs([
+                ['type' => 'entityReference', 'attrs' => $attrs],
+            ]));
+            throw new RuntimeException('Riferimento manipolato accettato.');
+        } catch (ApiException $error) {
+            assertSameValue('invalid_document', $error->errorCode);
+        }
+    }
+});
+
+$suite->test('i riferimenti si risolvono in etichette derivate, non persistite nel documento', static function () use ($pdo, $service): void {
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $references = new ReferenceRepository($pdo);
+    $entityId = entityWithOccurrence($service, $knowledge, 'Entity risolvibile', 'Tipo risolvibile');
+    $template = $templates->create(['name' => 'Scheda risolvibile']);
+    $blockId = $blocks->addBlock($entityId, ['templateId' => $template['id']])[0]['id'];
+
+    $resolved = $references->resolve([$entityId], [$blockId]);
+
+    assertSameValue('Entity risolvibile', $resolved['entities'][0]['label']);
+    assertSameValue('Tipo risolvibile', $resolved['entities'][0]['detail']);
+    assertSameValue('Scheda risolvibile', $resolved['semanticBlocks'][0]['label']);
+    assertSameValue('Entity risolvibile', $resolved['semanticBlocks'][0]['detail']);
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

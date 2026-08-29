@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Extension, Mark, type Editor } from '@tiptap/core'
+import { Extension, Mark, Node, type Editor } from '@tiptap/core'
 import { AllSelection, Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state'
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
 import type { Mark as ProseMirrorMark, Slice } from '@tiptap/pm/model'
@@ -9,7 +9,9 @@ import {
   canKeepCutOccurrenceIds,
   collectOccurrences,
   collectSliceOccurrenceRuns,
+  collectSliceReferences,
   CUT_CLIPBOARD_FORMAT,
+  REFERENCE_NODES,
   isOccurrenceAttributes,
   parseCutClipboardPayload,
   planOccurrenceIdRewrite,
@@ -18,7 +20,10 @@ import {
   type CutClipboardPayload,
   type CutToken,
   type OccurrenceAttributes,
+  type ReferenceNodeName,
+  type SliceReference,
 } from './occurrences'
+import { isUuidV7 } from './uuid'
 import { occurrenceHandleStrings } from './strings'
 
 export type HighlightColor = string
@@ -188,6 +193,65 @@ const OccurrenceHandles = Extension.create({
   },
 })
 
+/**
+ * Editorial references to an Entity or to one of its SemanticBlock. They are pointers, not copies:
+ * the node keeps its own referenceId and the ID of the destination, never the name, the Template
+ * or the values, which stay authoritative in the database and are resolved when rendering.
+ */
+const REFERENCE_ATTRIBUTES = {
+  entityReference: { destination: 'entityId', dataset: 'data-entity-id' },
+  semanticBlockReference: { destination: 'semanticBlockId', dataset: 'data-semantic-block-id' },
+} as const
+
+function referenceNode(name: keyof typeof REFERENCE_ATTRIBUTES) {
+  const { destination, dataset } = REFERENCE_ATTRIBUTES[name]
+  const tag = `span[data-reference-kind="${name}"]`
+
+  return Node.create({
+    name,
+    inline: true,
+    group: 'inline',
+    atom: true,
+    selectable: true,
+
+    addAttributes() {
+      return {
+        referenceId: {
+          default: null,
+          parseHTML: (element: HTMLElement) => element.getAttribute('data-reference-id'),
+          renderHTML: (attributes: Record<string, unknown>) => ({ 'data-reference-id': attributes.referenceId }),
+        },
+        [destination]: {
+          default: null,
+          parseHTML: (element: HTMLElement) => element.getAttribute(dataset),
+          renderHTML: (attributes: Record<string, unknown>) => ({ [dataset]: attributes[destination] }),
+        },
+      }
+    },
+
+    parseHTML() {
+      return [{
+        tag,
+        // A manipulated fragment never becomes a reference: both IDs must be canonical.
+        getAttrs: (element: HTMLElement) => {
+          const referenceId = element.getAttribute('data-reference-id')
+          const target = element.getAttribute(dataset)
+          return isUuidV7(referenceId) && isUuidV7(target)
+            ? { referenceId, [destination]: target }
+            : false
+        },
+      }]
+    },
+
+    renderHTML({ HTMLAttributes }) {
+      return ['span', { ...HTMLAttributes, 'data-reference-kind': name, class: `nectrix-reference nectrix-${name}` }]
+    },
+  })
+}
+
+const EntityReference = referenceNode('entityReference')
+const SemanticBlockReference = referenceNode('semanticBlockReference')
+
 export const editorExtensions = [
   StarterKit.configure({
     code: false,
@@ -203,6 +267,8 @@ export const editorExtensions = [
   }),
   Highlight,
   KnowledgeOccurrence,
+  EntityReference,
+  SemanticBlockReference,
   SelectionCaret,
   OccurrenceHandles,
 ]
@@ -242,7 +308,10 @@ class OccurrenceClipboard {
       nonce: this.options.createId(),
       documentId: this.options.documentId,
       fingerprint: sliceFingerprint(slice),
-      occurrenceIds: collectSliceOccurrenceRuns(slice).map((run) => run.occurrenceId),
+      occurrenceIds: [
+        ...collectSliceOccurrenceRuns(slice).map((run) => run.occurrenceId),
+        ...collectSliceReferences(slice).map((reference) => reference.referenceId),
+      ],
       consumed: false,
     }
   }
@@ -268,17 +337,23 @@ class OccurrenceClipboard {
 
   transformPasted(slice: Slice, view: EditorView): Slice {
     const runs = collectSliceOccurrenceRuns(slice)
+    const references = collectSliceReferences(slice)
     const payload = this.pastedPayload
     this.pastedPayload = null
-    if (runs.length === 0) return slice
+    if (runs.length === 0 && references.length === 0) return slice
 
-    if (this.canKeepIds(slice, runs, payload, view)) {
+    if (this.canKeepIds(slice, runs, references, payload, view)) {
       if (this.cutToken !== null) this.cutToken = { ...this.cutToken, consumed: true }
       this.options.onPaste(uniqueByOccurrenceId(runs))
       return slice
     }
 
+    // Copy/paste rigenera l'identita della collocazione, non la destinazione: un riferimento
+    // incollato punta ancora alla stessa Entity o allo stesso SemanticBlock.
     const mapping = planOccurrenceIdRewrite(runs, this.options.createId)
+    for (const reference of references) {
+      if (!mapping.has(reference.referenceId)) mapping.set(reference.referenceId, this.options.createId())
+    }
     const pasted = runs.map((run) => ({ ...run, occurrenceId: mapping.get(run.occurrenceId) ?? run.occurrenceId }))
     this.options.onPaste(uniqueByOccurrenceId(pasted))
     return remapSliceOccurrences(slice, mapping)
@@ -287,6 +362,7 @@ class OccurrenceClipboard {
   private canKeepIds(
     slice: Slice,
     runs: readonly OccurrenceAttributes[],
+    references: readonly SliceReference[],
     payload: CutClipboardPayload | null,
     view: EditorView,
   ): boolean {
@@ -295,8 +371,11 @@ class OccurrenceClipboard {
       payload,
       documentId: this.options.documentId,
       fingerprint: sliceFingerprint(slice),
-      pastedIds: runs.map((run) => run.occurrenceId),
-      presentIds: new Set(collectOccurrences(view.state.doc.toJSON()).keys()),
+      pastedIds: [...runs.map((run) => run.occurrenceId), ...references.map((reference) => reference.referenceId)],
+      presentIds: new Set([
+        ...collectOccurrences(view.state.doc.toJSON()).keys(),
+        ...documentReferenceIds(view.state),
+      ]),
     })
   }
 }
@@ -336,6 +415,59 @@ function createOccurrenceClipboardPlugin(options: OccurrenceClipboardOptions): P
       }
     },
   })
+}
+
+export interface ReferenceLabelOptions {
+  /** Label of a destination, resolved outside the document and never stored in it. */
+  label: (node: ReferenceNodeName, destinationId: string) => string | undefined
+  /** Shown while the label is unknown or the destination cannot be resolved. */
+  fallback: string
+}
+
+/**
+ * Shows the label of each editorial reference as a decoration. The document keeps only the IDs:
+ * what you read is resolved at render time, so renaming the destination is immediately visible.
+ */
+export function referenceLabelsExtension(options: ReferenceLabelOptions): Extension {
+  return Extension.create({
+    name: 'referenceLabels',
+
+    addProseMirrorPlugins() {
+      return [
+        new Plugin({
+          key: new PluginKey('referenceLabels'),
+          props: {
+            decorations(state) {
+              const decorations: Decoration[] = []
+              state.doc.descendants((node, position) => {
+                const name = node.type.name as ReferenceNodeName
+                if (!REFERENCE_NODES.includes(name)) return true
+                const destination = name === 'entityReference'
+                  ? node.attrs.entityId
+                  : node.attrs.semanticBlockId
+                const label = options.label(name, String(destination)) ?? options.fallback
+                decorations.push(Decoration.node(position, position + node.nodeSize, { 'data-label': label }))
+                return true
+              })
+              return DecorationSet.create(state.doc, decorations)
+            },
+          },
+        }),
+      ]
+    },
+  })
+}
+
+/** Destinations referenced by the content, so the client can resolve their labels. */
+export function referenceDestinations(state: EditorState): { entities: string[]; blocks: string[] } {
+  const entities: string[] = []
+  const blocks: string[] = []
+  state.doc.descendants((node) => {
+    if (node.type.name === 'entityReference' && typeof node.attrs.entityId === 'string') entities.push(node.attrs.entityId)
+    if (node.type.name === 'semanticBlockReference' && typeof node.attrs.semanticBlockId === 'string') blocks.push(node.attrs.semanticBlockId)
+    return true
+  })
+  return { entities: [...new Set(entities)], blocks: [...new Set(blocks)] }
 }
 
 /** Clipboard rules of the knowledgeOccurrence mark, bound to the Document being edited. */
@@ -397,6 +529,16 @@ export function occurrenceFreeRanges(state: EditorState, from: number, to: numbe
 
   if (cursor < to) ranges.push({ from: cursor, to })
   return ranges
+}
+
+/** referenceId already placed in the document: a paste must not duplicate one. */
+function documentReferenceIds(state: EditorState): string[] {
+  const ids: string[] = []
+  state.doc.descendants((node) => {
+    if (typeof node.attrs.referenceId === 'string') ids.push(node.attrs.referenceId)
+    return true
+  })
+  return ids
 }
 
 /** One text node of a textblock, with the occurrence mark it carries. */

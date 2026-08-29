@@ -393,3 +393,22 @@ export const structuredStrings = {
   ] as const,
   optionsLabel: 'Opzioni separate da virgola',
 } as const
+
+export const referenceStrings = {
+  command: {
+    label: 'Riferimento',
+    description: 'Inserisce un rimando a una Entity o a un suo blocco di dati: il documento conserva solo l’ID',
+  },
+  dialogTitle: 'Inserisci un riferimento',
+  hint: 'Il documento non copia nome né valori: li mostra risolvendoli dalla destinazione.',
+  queryLabel: 'Cerca una Entity',
+  queryPlaceholder: 'Nome della Entity',
+  search: 'Cerca',
+  searching: 'Ricerca…',
+  empty: 'Nessuna Entity trovata.',
+  blockLabel: 'Riferisci',
+  wholeEntity: 'La Entity',
+  confirm: 'Inserisci',
+  unresolved: 'riferimento non risolto',
+  loading: '…',
+} as const

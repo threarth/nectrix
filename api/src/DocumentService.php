@@ -22,6 +22,8 @@ final class DocumentService
         private readonly PlainTextExtractor $plainTextExtractor,
         private readonly KnowledgeOccurrenceExtractor $occurrenceExtractor,
         private readonly KnowledgeRepository $knowledgeRepository,
+        private readonly ReferenceExtractor $referenceExtractor,
+        private readonly ReferenceRepository $referenceRepository,
     ) {
     }
 
@@ -112,13 +114,17 @@ final class DocumentService
         $creates = $input['occurrenceCreates'] ?? [];
         if (!is_array($creates) || !array_is_list($creates)) throw new ApiException(422, 'invalid_request', 'occurrenceCreates deve essere una lista.');
         $marks = $this->occurrenceExtractor->extract($document);
+        $references = $this->referenceExtractor->extract($document);
         return $this->repository->update(
             $id,
             $input['baseRevision'],
             $this->title($input['title']),
             $document,
             $this->plainTextExtractor->extract($document),
-            fn (string $documentId) => $this->knowledgeRepository->reconcileOccurrences($documentId, $marks, $creates),
+            function (string $documentId) use ($marks, $creates, $references): void {
+                $this->referenceRepository->assertDestinationsExist($references);
+                $this->knowledgeRepository->reconcileOccurrences($documentId, $marks, $creates);
+            },
         );
     }
 

@@ -679,6 +679,34 @@ button:disabled {
   line-height: 1;
 }
 
+/*
+ * Un riferimento editoriale mostra l'etichetta della destinazione risolta al momento del disegno:
+ * il contenuto del documento conserva solo gli ID, mai il nome.
+ */
+.nectrix-reference::after {
+  content: attr(data-label);
+}
+
+.nectrix-reference {
+  display: inline;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: #eee7f3;
+  box-shadow: inset 0 -1px 0 #8b7bab;
+  color: #3a3350;
+  cursor: default;
+}
+
+.nectrix-semanticBlockReference {
+  background: #e7eef3;
+  box-shadow: inset 0 -1px 0 #6f86a8;
+  color: #2f3f4c;
+}
+
+.nectrix-reference.ProseMirror-selectednode {
+  outline: 2px solid #a9c09f;
+}
+
 .nectrix-occurrence-handle {
   display: inline-block;
   width: 5px;

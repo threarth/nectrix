@@ -406,6 +406,22 @@ export async function setBlockValues(
   return payload.blocks
 }
 
+export interface ResolvedReference { id: string; label: string; detail: string | null }
+
+/** Labels of the destinations of the editorial references, derived and never stored. */
+export async function resolveReferences(
+  entities: string[],
+  blocks: string[],
+): Promise<{ entities: ResolvedReference[]; semanticBlocks: ResolvedReference[] }> {
+  if (entities.length === 0 && blocks.length === 0) return { entities: [], semanticBlocks: [] }
+  const query = new URLSearchParams()
+  if (entities.length > 0) query.set('entities', entities.join(','))
+  if (blocks.length > 0) query.set('blocks', blocks.join(','))
+  return request<{ entities: ResolvedReference[]; semanticBlocks: ResolvedReference[] }>(
+    `/api/references?${query.toString()}`,
+  )
+}
+
 export interface Tag { id: string; name: string }
 export interface TagSummary extends Tag { documents: number }
 
