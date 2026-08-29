@@ -519,3 +519,42 @@ export const compareStrings = {
     field_value: 'valore strutturato',
   } as Record<string, string>,
 } as const
+
+export const matrixStrings = {
+  open: { label: 'Viste matrice', description: 'Incrocia Concept, Entity, EntityType e Template con i Context' },
+  dialogTitle: 'Matrice per Context',
+  close: 'Chiudi',
+  axisLabel: 'Righe della matrice',
+  axes: [
+    { value: 'concept', label: 'Concept', description: 'Un Concept per riga' },
+    { value: 'entity', label: 'Entity', description: 'Una Entity per riga' },
+    { value: 'entity_type', label: 'EntityType', description: 'Un tipo di Entity per riga' },
+    { value: 'template', label: 'Template', description: 'Un Template per riga, attraverso i SemanticBlock' },
+  ] as const,
+  modeLabel: 'Come si contano i Context',
+  modes: [
+    { value: 'exact', label: 'Solo il Context', description: 'Conta solo i Document assegnati a quel Context' },
+    { value: 'subtree', label: 'Con i discendenti', description: 'Somma anche i Document dei Context figli' },
+  ] as const,
+  filterLabel: 'Filtro sui valori strutturati',
+  filterNone: 'Nessun filtro',
+  filterUnavailable: 'Il filtro sui FieldValue non si applica a un Concept: un Concept non ha SemanticBlock.',
+  noContext: 'Senza Context',
+  rowHeader: 'Riga',
+  totalHeader: 'Totale',
+  empty: 'Nessun dato: la matrice si popola quando le occurrence vivono in Document assegnati a un Context.',
+  truncated: (limit: number): string => `Mostrate le prime ${limit} righe per totale.`,
+  cellLabel: (row: string, column: string, matches: number): string => `${row} in ${column}: ${matches}`,
+  drillTitle: (row: string, column: string): string => `${row} — ${column}`,
+  drillEmpty: 'Nessuna occurrence in questa cella.',
+  drillClose: 'Chiudi il dettaglio',
+  coObjects: 'Insieme a:',
+  openDocument: 'Apri il documento',
+  sourceLater: 'Le Source compaiono nel drill-down dalla FASE 16.',
+  paths: {
+    occurrence: 'Document → KnowledgeOccurrence',
+    occurrence_entity_type: 'Document → KnowledgeOccurrence → Entity → EntityType',
+    semantic_block: 'Document → KnowledgeOccurrence → Entity → SemanticBlock',
+    field_value: 'Document → KnowledgeOccurrence → Entity → SemanticBlock → FieldValue',
+  } as Record<string, string>,
+} as const

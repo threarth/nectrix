@@ -73,6 +73,7 @@
   import ContextPanel from './components/ContextPanel.svelte'
   import DerivedObjects from './components/DerivedObjects.svelte'
   import CompareDialog from './components/CompareDialog.svelte'
+  import MatrixDialog from './components/MatrixDialog.svelte'
   import RelationDialog from './components/RelationDialog.svelte'
   import SearchPanel from './components/SearchPanel.svelte'
   import TemplatePanel from './components/TemplatePanel.svelte'
@@ -80,7 +81,7 @@
   import TagPanel from './components/TagPanel.svelte'
   import KnowledgeInspector from './components/KnowledgeInspector.svelte'
   import { contextPathLabel, orderContexts, type ContextNode } from './lib/contexts'
-  import { compareStrings, contextStrings, documentStrings, tagStrings } from './lib/strings'
+  import { compareStrings, contextStrings, documentStrings, matrixStrings, tagStrings } from './lib/strings'
   import {
     collectOccurrences,
     deriveOccurrenceCreates,
@@ -110,6 +111,7 @@
   let relationEvidence = $state<{ relationId: string; items: EvidenceView[] } | null>(null)
   let compareQueue = $state<{ id: string; name: string }[]>([])
   let comparison = $state<Comparison | null>(null)
+  let showingMatrix = $state(false)
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
@@ -819,6 +821,13 @@
       onOpenEntity={(entityId) => void openInspector(entityId)}
     />
 
+    <button
+      type="button"
+      class="matrix-open"
+      title={matrixStrings.open.description}
+      onclick={() => (showingMatrix = true)}
+    >{matrixStrings.open.label}</button>
+
     {#if selectedContextId !== null || selectedTagIds.length > 0}
       <DerivedObjects objects={contextObjects} />
     {/if}
@@ -985,6 +994,19 @@
 
   {#if comparison !== null}
     <CompareDialog {comparison} onClose={() => (comparison = null)} />
+  {/if}
+
+  {#if showingMatrix}
+    <MatrixDialog
+      {contexts}
+      {templates}
+      onOpenDocument={(documentId) => {
+        showingMatrix = false
+        void openDocument(documentId)
+      }}
+      onError={(message) => (error = message)}
+      onClose={() => (showingMatrix = false)}
+    />
   {/if}
 
   {#if addingRelation && inspector}

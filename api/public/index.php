@@ -25,6 +25,9 @@ use Nectrix\EvidenceRepository;
 use Nectrix\EvidenceService;
 use Nectrix\CompareRepository;
 use Nectrix\CompareService;
+use Nectrix\FieldFilterCompiler;
+use Nectrix\MatrixRepository;
+use Nectrix\MatrixService;
 use Nectrix\QueryService;
 use Nectrix\FieldValueValidator;
 use Nectrix\SearchRepository;
@@ -85,20 +88,23 @@ try {
     );
     $knowledge = new KnowledgeService($knowledgeRepository, new OccurrenceTextExtractor());
     $documentRepository = new DocumentRepository($pdo);
-    $contexts = new ContextService(new ContextRepository($pdo), $documentRepository, $knowledgeRepository);
+    $contextRepository = new ContextRepository($pdo);
+    $contexts = new ContextService($contextRepository, $documentRepository, $knowledgeRepository);
     $tags = new TagService(new TagRepository($pdo), $documentRepository);
     $query = new QueryService($contexts, $tags, $service, $knowledgeRepository);
-    $search = new SearchService(new SearchRepository($pdo), new ContextRepository($pdo));
+    $search = new SearchService(new SearchRepository($pdo), $contextRepository);
     $templateRepository = new TemplateRepository($pdo);
+    $fieldFilters = new FieldFilterCompiler($templateRepository);
     $blockRepository = new SemanticBlockRepository($pdo);
     $fieldValidator = new FieldValueValidator();
     $templates = new TemplateService($templateRepository, $blockRepository, $fieldValidator);
     $semanticBlocks = new SemanticBlockService($blockRepository, $templateRepository, $fieldValidator);
-    $structured = new StructuredQueryService(new StructuredQueryRepository($pdo), $templateRepository, $query);
+    $structured = new StructuredQueryService(new StructuredQueryRepository($pdo), $fieldFilters, $query);
     $relationRepository = new RelationRepository($pdo);
     $relations = new RelationService($relationRepository, $knowledgeRepository);
     $evidence = new EvidenceService(new EvidenceRepository($pdo), $relationRepository);
     $compare = new CompareService(new CompareRepository($pdo), $knowledge, $relations, $templateRepository);
+    $matrix = new MatrixService(new MatrixRepository($pdo), $contextRepository, $fieldFilters);
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -310,6 +316,12 @@ try {
     }
     if ($method === 'POST' && $path === '/api/compare') {
         respond(200, $compare->compare(requestBody()));
+    }
+    if ($method === 'POST' && $path === '/api/matrix') {
+        respond(200, $matrix->matrix(requestBody()));
+    }
+    if ($method === 'POST' && $path === '/api/matrix/cell') {
+        respond(200, $matrix->cell(requestBody()));
     }
     if ($method === 'GET' && $path === '/api/relation-types') {
         respond(200, ['types' => $relations->types()]);

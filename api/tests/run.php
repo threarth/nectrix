@@ -6,6 +6,9 @@ declare(strict_types=1);
 
 use Nectrix\ApiException;
 use Nectrix\ContextRepository;
+use Nectrix\FieldFilterCompiler;
+use Nectrix\MatrixRepository;
+use Nectrix\MatrixService;
 use Nectrix\ContextService;
 use Nectrix\Database;
 use Nectrix\DocumentPurgeService;
@@ -2132,7 +2135,7 @@ function structuredService(PDO $pdo, DocumentService $service): StructuredQueryS
 {
     return new StructuredQueryService(
         new StructuredQueryRepository($pdo),
-        new TemplateRepository($pdo),
+        new FieldFilterCompiler(new TemplateRepository($pdo)),
         queryService($pdo, $service),
     );
 }
@@ -2639,6 +2642,143 @@ $suite->test('Concept ed Entity non si confrontano insieme', static function () 
         throw new RuntimeException('Confronto con un solo oggetto accettato.');
     } catch (ApiException $error) {
         assertSameValue('invalid_request', $error->errorCode);
+    }
+});
+
+function matrixService(PDO $pdo): MatrixService
+{
+    return new MatrixService(
+        new MatrixRepository($pdo),
+        new ContextRepository($pdo),
+        new FieldFilterCompiler(new TemplateRepository($pdo)),
+    );
+}
+
+/** @return array<string, mixed>|null the cell of one row on one Context column */
+function matrixCell(array $matrix, string $label, ?string $contextId): ?array
+{
+    foreach ($matrix['rows'] as $row) {
+        if ($row['label'] !== $label) {
+            continue;
+        }
+        foreach ($row['cells'] as $cell) {
+            if ($cell['contextId'] === $contextId) {
+                return $cell;
+            }
+        }
+        return null;
+    }
+    return null;
+}
+
+$suite->test('FASE 14: la matrice Concept x Context conta le occurrence e dichiara il percorso', static function () use ($pdo, $service): void {
+    $contexts = contextService($pdo);
+    $radice = $contexts->create(['name' => 'Matrice radice']);
+    $foglia = $contexts->create(['name' => 'Matrice foglia', 'parentId' => $radice['id']]);
+
+    $conceptId = UuidV7::generate();
+    $primo = $service->create(['title' => 'Matrice primo']);
+    $secondo = $service->create(['title' => 'Matrice secondo']);
+    $primaOccorrenza = UuidV7::generate();
+    $secondaOccorrenza = UuidV7::generate();
+    saveRevision($service, $primo['id'], 0, documentOfParagraphs([occurrenceText('Soglia', $primaOccorrenza, $conceptId)]), [
+        conceptCreate($primaOccorrenza, $conceptId, 'Soglia della matrice'),
+    ]);
+    saveRevision($service, $secondo['id'], 0, documentOfParagraphs([occurrenceText('Soglia', $secondaOccorrenza, $conceptId)]), [
+        ['occurrenceId' => $secondaOccorrenza, 'knowledgeObjectId' => $conceptId, 'objectType' => 'concept', 'newObject' => false],
+    ]);
+    $contexts->assignDocument($primo['id'], ['contextId' => $radice['id']]);
+    $contexts->assignDocument($secondo['id'], ['contextId' => $foglia['id']]);
+    $matrix = matrixService($pdo);
+
+    $esatta = $matrix->matrix(['axis' => 'concept', 'mode' => 'exact']);
+    $sottoalbero = $matrix->matrix(['axis' => 'concept', 'mode' => 'subtree']);
+
+    assertSameValue(1, matrixCell($esatta, 'Soglia della matrice', $radice['id'])['matches']);
+    assertSameValue(1, matrixCell($esatta, 'Soglia della matrice', $foglia['id'])['matches']);
+    // Nel sottoalbero la radice somma la foglia, senza contare due volte la stessa occurrence.
+    assertSameValue(2, matrixCell($sottoalbero, 'Soglia della matrice', $radice['id'])['matches']);
+    assertSameValue(1, matrixCell($sottoalbero, 'Soglia della matrice', $foglia['id'])['matches']);
+    assertSameValue('occurrence', matrixCell($sottoalbero, 'Soglia della matrice', $radice['id'])['path']);
+
+    $drill = $matrix->cell([
+        'axis' => 'concept', 'mode' => 'subtree', 'rowId' => $conceptId, 'contextId' => $radice['id'],
+    ]);
+    assertSameValue(2, $drill['counts']['occurrences']);
+    assertSameValue('occurrence', $drill['path']);
+    $documenti = array_values(array_unique(array_column($drill['occurrences'], 'documentId')));
+    sort($documenti);
+    $attesi = [$primo['id'], $secondo['id']];
+    sort($attesi);
+    assertSameValue($attesi, $documenti);
+});
+
+$suite->test('FASE 14: EntityType e Template raggiungono il Context solo attraverso le occurrence', static function () use ($pdo, $service): void {
+    $contexts = contextService($pdo);
+    $contesto = $contexts->create(['name' => 'Matrice schede']);
+    [$entityId, $template] = entityWithValues($pdo, $service, 'Azienda in matrice', [
+        'Settore' => 'Editoria', 'Dipendenti' => 40,
+    ]);
+    $matrix = matrixService($pdo);
+
+    $senzaContesto = $matrix->matrix(['axis' => 'template', 'mode' => 'exact']);
+    assertSameValue(null, matrixCell($senzaContesto, 'Scheda ricercabile', $contesto['id']));
+    assertTrue(
+        matrixCell($senzaContesto, 'Scheda ricercabile', null)['matches'] >= 1,
+        'Senza Context la scheda deve restare nella colonna dei Document non assegnati.',
+    );
+
+    $documentId = $matrix->cell([
+        'axis' => 'entity', 'mode' => 'exact', 'rowId' => $entityId, 'contextId' => null,
+    ])['occurrences'][0]['documentId'];
+    $contexts->assignDocument($documentId, ['contextId' => $contesto['id']]);
+
+    $perTemplate = $matrix->matrix(['axis' => 'template', 'mode' => 'exact']);
+    $perTipo = $matrix->matrix(['axis' => 'entity_type', 'mode' => 'exact']);
+
+    assertSameValue(1, matrixCell($perTemplate, 'Scheda ricercabile', $contesto['id'])['matches']);
+    assertSameValue('semantic_block', matrixCell($perTemplate, 'Scheda ricercabile', $contesto['id'])['path']);
+    assertSameValue(1, matrixCell($perTipo, 'Azienda ricercabile', $contesto['id'])['matches']);
+    assertSameValue('occurrence_entity_type', matrixCell($perTipo, 'Azienda ricercabile', $contesto['id'])['path']);
+
+    $filtrata = $matrix->matrix(['axis' => 'entity', 'mode' => 'exact', 'fieldFilter' => [
+        'fieldId' => fieldNamed($template, 'Dipendenti')['id'], 'operator' => 'gt', 'value' => 1000,
+    ]]);
+    $inclusa = $matrix->matrix(['axis' => 'entity', 'mode' => 'exact', 'fieldFilter' => [
+        'fieldId' => fieldNamed($template, 'Dipendenti')['id'], 'operator' => 'lt', 'value' => 100,
+    ]]);
+
+    assertSameValue(null, matrixCell($filtrata, 'Azienda in matrice', $contesto['id']));
+    assertSameValue(1, matrixCell($inclusa, 'Azienda in matrice', $contesto['id'])['matches']);
+    assertSameValue('field_value', matrixCell($inclusa, 'Azienda in matrice', $contesto['id'])['path']);
+    assertSameValue('Dipendenti', $inclusa['field']['name']);
+});
+
+$suite->test('FASE 14: la matrice rifiuta un asse sconosciuto e un filtro non applicabile', static function () use ($pdo, $service): void {
+    $matrix = matrixService($pdo);
+    [, $template] = entityWithValues($pdo, $service, 'Azienda di controllo', ['Settore' => 'Chimica']);
+
+    try {
+        $matrix->matrix(['axis' => 'source']);
+        throw new RuntimeException('Asse sconosciuto accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_matrix_axis', $error->errorCode);
+    }
+
+    try {
+        $matrix->matrix(['axis' => 'concept', 'fieldFilter' => [
+            'fieldId' => fieldNamed($template, 'Settore')['id'], 'value' => 'Chimica',
+        ]]);
+        throw new RuntimeException('Filtro su Concept accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('matrix_filter_not_applicable', $error->errorCode);
+    }
+
+    try {
+        $matrix->matrix(['axis' => 'entity', 'mode' => 'ovunque']);
+        throw new RuntimeException('Modalita del Context sconosciuta accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_context_mode', $error->errorCode);
     }
 });
 

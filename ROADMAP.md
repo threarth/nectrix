@@ -216,11 +216,17 @@ La UI aggiunge una barra di confronto che accumula i soggetti scelti dall'inspec
 
 Gate soddisfatto: confronto basato solo sulla conoscenza persistita, colonne Entity allineate per TemplateField stabile, modalità mista rifiutata e nessun testo generato da AI.
 
-## FASE 14 — Matrix e Context views
+## FASE 14 — Matrix e Context views (completata)
 
 Viste `Concept × Context`, `Entity × Context`, `EntityType × Context`, `Template × Context` e filtri FieldValue×Context. Entity, Template e FieldValue raggiungono il Context tramite Document→KnowledgeOccurrence(entity)→Entity→SemanticBlock. Il drill-down mostra Document, occurrence, co-KnowledgeObject e Source quando disponibili.
 
-Gate: conteggi e filtri coerenti con le query strutturate e ogni cella dichiara il percorso che ha prodotto il match.
+Completato: `POST /api/matrix` costruisce le quattro matrici sullo stesso scheletro Document→KnowledgeOccurrence, perché il Context raggiunge un KnowledgeObject solo attraverso il contenuto editoriale: EntityType, Template e FieldValue estendono quel percorso, non lo scavalcano. Ogni cella dichiara il percorso che l'ha prodotta — `occurrence`, `occurrence_entity_type`, `semantic_block`, `field_value` — così un numero non arriva mai senza provenance.
+
+Il conteggio è il numero di KnowledgeOccurrence attive distinte, quindi `POST /api/matrix/cell` restituisce esattamente le righe che la cella dichiara. Le modalità `exact` e `subtree` usano lo stesso conteggio di foglia: nel sottoalbero un antenato somma le foglie senza contare due volte la stessa occurrence, e il totale di riga resta il conteggio distinto. I Document senza Context restano in una colonna propria invece di sparire.
+
+Il filtro FieldValue riusa il compilatore tipizzato della ricerca strutturata, estratto in `FieldFilterCompiler` e condiviso con la FASE 10.2: il confronto avviene sulla colonna che la famiglia del campo scrive, mai su un cast a testo. Su un asse Concept il filtro viene rifiutato con `matrix_filter_not_applicable` invece di essere ignorato in silenzio, perché un Concept non ha SemanticBlock. Il drill-down mostra Document, occurrence e co-KnowledgeObject; la Source entra in questo percorso con la FASE 16 e non viene simulata.
+
+Gate soddisfatto: conteggi coerenti fra matrice, drill-down e query strutturate, ogni cella dichiara il percorso che ha prodotto il match, e assi, modalità e filtri non applicabili vengono rifiutati.
 
 ## FASE 15 — Knowledge Map
 

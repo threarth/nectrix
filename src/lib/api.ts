@@ -670,3 +670,75 @@ export async function assignDocumentContext(documentId: string, contextId: strin
   )
   return payload.document
 }
+
+export type MatrixAxis = 'concept' | 'entity' | 'entity_type' | 'template'
+
+export interface MatrixCell {
+  contextId: string | null
+  matches: number
+  /** How the count was produced: a cell is never a number without its path. */
+  path: 'occurrence' | 'occurrence_entity_type' | 'semantic_block' | 'field_value'
+}
+
+export interface MatrixRow {
+  id: string
+  label: string
+  cells: MatrixCell[]
+  /** Distinct occurrence of the row, counted once even when several columns show them. */
+  total: number
+}
+
+export interface MatrixColumn {
+  id: string | null
+  parentId: string | null
+  name: string | null
+}
+
+export interface Matrix {
+  axis: MatrixAxis
+  mode: 'exact' | 'subtree'
+  path: MatrixCell['path']
+  field: { id: string; name: string; fieldType: string; template: string | null } | null
+  columns: MatrixColumn[]
+  rows: MatrixRow[]
+  truncated: boolean
+  counts: { rows: number; contexts: number }
+}
+
+export interface MatrixOccurrence {
+  occurrenceId: string
+  status: string
+  objectId: string
+  objectType: 'concept' | 'entity'
+  documentId: string
+  documentTitle: string
+  contextId: string | null
+  coObjects: { id: string; objectType: 'concept' | 'entity'; label: string }[]
+}
+
+export interface MatrixDrill {
+  axis: MatrixAxis
+  path: MatrixCell['path']
+  rowId: string
+  contextId: string | null
+  occurrences: MatrixOccurrence[]
+  counts: { occurrences: number }
+}
+
+export interface MatrixQuery {
+  axis: MatrixAxis
+  mode: 'exact' | 'subtree'
+  fieldFilter?: { fieldId: string; operator: string; value?: unknown }
+}
+
+/** The matrix of one axis against the Context, counted on the active occurrence. */
+export async function fetchMatrix(query: MatrixQuery): Promise<Matrix> {
+  return request<Matrix>('/api/matrix', { method: 'POST', body: JSON.stringify(query) })
+}
+
+/** The occurrence behind one cell, with the Document that carry them. */
+export async function fetchMatrixCell(
+  query: MatrixQuery & { rowId: string; contextId: string | null },
+): Promise<MatrixDrill> {
+  return request<MatrixDrill>('/api/matrix/cell', { method: 'POST', body: JSON.stringify(query) })
+}

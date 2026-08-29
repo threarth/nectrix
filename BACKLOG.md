@@ -30,21 +30,22 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 14 — Matrix e Context views
+### FASE 15 — Knowledge Map
 
-Viste `Concept × Context`, `Entity × Context`, `EntityType × Context`, `Template × Context` e filtri FieldValue×Context, con drill-down sui Document e sulle occurrence che hanno prodotto il match.
+Mappa navigabile dei KnowledgeObject: nodi Concept ed Entity distinti visivamente, archi KnowledgeRelation, viste Concept only, Entity only e Concept+Entity. Context e Tag restano filtri, grouping e coloring, non nodi.
+
+**La fase non puo' iniziare prima di chiudere ADR-P15-01** (renderer e libreria della mappa: Cytoscape.js o Sigma.js), che va portata all'utente con opzioni gratuite e licenza verificata.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- conteggi coerenti con le query strutturate gia' disponibili;
-- ogni cella dichiara il percorso che ha prodotto il match;
-- Entity, Template e FieldValue raggiungono il Context solo tramite Document->KnowledgeOccurrence.
+- inspector, provenance e filtri navigabili dalla mappa;
+- SemanticBlock, TemplateField, FieldValue, Context, Tag e KnowledgeOccurrence consultabili senza diventare nodi principali.
 
-Gate: conteggi e filtri coerenti con le query strutturate e ogni cella dichiara il percorso che ha prodotto il match.
+Gate: inspector, provenance e filtri navigabili; occurrence e dati strutturati consultabili senza essere trasformati in nodi principali.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 14; la prima decisione dovuta è ADR-P15-01 sul renderer della Knowledge Map, all'inizio della FASE 15.
+Il registro unico è `DECISIONS.md`. ADR-P15-01 — renderer e libreria della Knowledge Map — è dovuta prima della FASE 15 e va chiusa con l'utente prima di scrivere codice della mappa.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

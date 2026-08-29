@@ -1104,3 +1104,47 @@ test('FASE 13: due Concept si confrontano affiancati sulla conoscenza registrata
   const occurrenceRow = dialog.getByRole('row', { name: /^Occurrence/ })
   await expect(occurrenceRow).toContainText('derivato dalle occurrence')
 })
+
+test('FASE 14: la matrice conta per Context, dichiara il percorso e apre il drill-down', async ({ page }) => {
+  await page.goto('/')
+  const panel = page.getByLabel('Contesti')
+
+  await panel.getByRole('button', { name: 'Nuovo' }).click()
+  let contextDialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
+  await contextDialog.getByLabel('Nome del contesto').fill('Matrice radice')
+  await contextDialog.getByRole('button', { name: 'Nuovo' }).click()
+  await expect(panel.getByRole('button', { name: 'Matrice radice' })).toBeVisible()
+
+  await panel.getByRole('button', { name: 'Matrice radice' }).click()
+  await panel.getByRole('button', { name: 'Nuovo' }).click()
+  contextDialog = page.getByRole('dialog', { name: 'Nuovo contesto' })
+  await contextDialog.getByLabel('Nome del contesto').fill('Matrice foglia')
+  await contextDialog.getByRole('button', { name: 'Nuovo' }).click()
+  await expect(panel.getByRole('button', { name: 'Matrice foglia' })).toBeVisible()
+
+  await newDocument(page)
+  await createConceptFrom(page, 'Ombra', 'Ombra della matrice')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento della matrice')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.getByLabel('Contesto del documento').selectOption({ label: 'Matrice radice / Matrice foglia' })
+
+  await page.getByRole('button', { name: 'Viste matrice' }).click()
+  const matrix = page.getByRole('dialog', { name: 'Matrice per Context' })
+  await expect(matrix).toContainText('Document → KnowledgeOccurrence')
+
+  // Con i discendenti la radice somma la foglia; con il solo Context la radice resta vuota.
+  const riga = matrix.locator('tbody tr').filter({ hasText: 'Ombra della matrice' })
+  await expect(riga.getByRole('button', { name: 'Ombra della matrice in Matrice radice: 1' })).toBeVisible()
+  await matrix.getByRole('button', { name: 'Solo il Context' }).click()
+  await expect(riga.getByRole('button', { name: 'Ombra della matrice in Matrice radice: 1' })).toHaveCount(0)
+
+  const cella = riga.getByRole('button', { name: 'Ombra della matrice in Matrice radice / Matrice foglia: 1' })
+  await expect(cella).toBeVisible()
+  await cella.click()
+
+  const drill = matrix.getByLabel('Ombra della matrice — Matrice radice / Matrice foglia')
+  await expect(drill).toContainText('Documento della matrice')
+  await drill.getByRole('button', { name: 'Documento della matrice' }).click()
+  await expect(page.getByRole('textbox', { name: 'Titolo documento' })).toHaveValue('Documento della matrice')
+})

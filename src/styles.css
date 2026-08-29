@@ -1914,3 +1914,164 @@ button:disabled {
     padding: 30px 22px;
   }
 }
+
+.matrix-open {
+  width: 100%;
+  margin-top: 16px;
+  padding: 7px 10px;
+  border: 1px solid #3d4137;
+  border-radius: 8px;
+  color: #b9bcb0;
+  background: transparent;
+  font-size: 12px;
+}
+
+.matrix-open:hover {
+  color: #f2efe6;
+  border-color: #5a6050;
+}
+
+.matrix-dialog {
+  width: min(1080px, 94vw);
+}
+
+.matrix-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.matrix-controls div {
+  display: flex;
+  gap: 4px;
+}
+
+.matrix-controls button {
+  padding: 5px 10px;
+  border: 1px solid #cfc7b8;
+  border-radius: 8px;
+  color: inherit;
+  background: #fbf8f1;
+  font-size: 12px;
+}
+
+.matrix-controls button.active {
+  color: #fff;
+  background: #3d5038;
+  border-color: #33412f;
+}
+
+.matrix-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.matrix-filter label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: #6f7265;
+}
+
+.matrix-filter select,
+.matrix-filter input {
+  max-width: 260px;
+  padding: 5px 8px;
+  border: 1px solid #cfc7b8;
+  border-radius: 8px;
+  background: #fbf8f1;
+  font-size: 13px;
+}
+
+.matrix-scroll {
+  overflow: auto;
+  max-height: 46vh;
+}
+
+.matrix-scroll table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+.matrix-scroll th,
+.matrix-scroll td {
+  padding: 6px 9px;
+  border: 1px solid #e2dbcd;
+  text-align: left;
+  vertical-align: top;
+}
+
+.matrix-scroll thead th {
+  background: #f3efe6;
+  font-size: 11px;
+}
+
+.matrix-scroll td button {
+  border: 0;
+  padding: 0 4px;
+  color: #3d5038;
+  background: transparent;
+  font-weight: 650;
+  text-decoration: underline;
+}
+
+.matrix-total {
+  font-weight: 650;
+}
+
+.matrix-drill {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2dbcd;
+  border-radius: 10px;
+  background: #f8f5ee;
+}
+
+.matrix-drill header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.matrix-drill header button {
+  border: 0;
+  padding: 0;
+  color: #6f7265;
+  background: transparent;
+  font-size: 12px;
+}
+
+.matrix-drill ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+
+.matrix-drill li {
+  display: grid;
+  gap: 2px;
+}
+
+.matrix-drill li button {
+  justify-self: start;
+  border: 0;
+  padding: 0;
+  color: #3d5038;
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: underline;
+}
+
+.matrix-drill small {
+  color: #6f7265;
+  font-size: 11px;
+}
