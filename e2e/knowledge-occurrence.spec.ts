@@ -808,3 +808,56 @@ test('FASE 10: dalla ricerca si aprono documento, Concept e contesto', async ({ 
   await panel.locator('.search-results li').filter({ hasText: 'Concept · nome' }).getByRole('button').first().click()
   await expect(page.locator('.inspector-name')).toHaveText('Ombra')
 })
+
+test('FASE 10.1: un Template si applica a una Entity e i valori restano tipizzati', async ({ page }) => {
+  await page.goto('/')
+  const templatePanel = page.getByLabel('Template', { exact: true })
+
+  await templatePanel.getByRole('button', { name: 'Nuovo Template' }).click()
+  const templateDialog = page.getByRole('dialog', { name: 'Nuovo Template' })
+  await templateDialog.getByLabel('Nome del Template').fill('Scheda azienda')
+  await templateDialog.getByRole('button', { name: 'Nuovo Template' }).click()
+  await expect(templatePanel.getByRole('button', { name: /Scheda azienda/ })).toBeVisible()
+
+  await templatePanel.getByRole('button', { name: /Scheda azienda/ }).click()
+  await templatePanel.getByRole('button', { name: 'Aggiungi campo' }).click()
+  let fieldDialog = page.getByRole('dialog', { name: 'Nuovo campo' })
+  await fieldDialog.getByLabel('Nome del campo').fill('Dipendenti')
+  await fieldDialog.getByLabel('Tipo').selectOption('number')
+  await fieldDialog.getByRole('button', { name: 'Aggiungi campo' }).click()
+
+  await templatePanel.getByRole('button', { name: 'Aggiungi campo' }).click()
+  fieldDialog = page.getByRole('dialog', { name: 'Nuovo campo' })
+  await fieldDialog.getByLabel('Nome del campo').fill('Mercato')
+  await fieldDialog.getByLabel('Tipo').selectOption('enum')
+  await fieldDialog.getByLabel('Opzioni separate da virgola').fill('Europa, Asia')
+  await fieldDialog.getByRole('button', { name: 'Aggiungi campo' }).click()
+  await expect(templatePanel.locator('.template-fields li')).toHaveCount(2)
+
+  // Applica il Template a una Entity e scrive i valori.
+  await newDocument(page)
+  await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab USA', 'Azienda')
+  await page.getByRole('button', { name: 'Salva' }).click()
+  await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Entity' }).click()
+
+  const structured = page.getByLabel('Dati strutturati')
+  await structured.getByLabel('Applica un Template').selectOption({ label: 'Scheda azienda' })
+  await expect(structured.locator('.structured-block')).toHaveCount(1)
+
+  await structured.getByLabel('Dipendenti').fill('1800')
+  await structured.getByLabel('Dipendenti').blur()
+  await structured.getByLabel('Mercato').selectOption('Europa')
+
+  // I valori sono persistiti: sopravvivono a un ricaricamento completo.
+  await page.reload()
+  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Entity' }).click()
+  const reopened = page.getByLabel('Dati strutturati')
+  await expect(reopened.getByLabel('Dipendenti')).toHaveValue('1800')
+  await expect(reopened.getByLabel('Mercato')).toHaveValue('Europa')
+
+  // I dati strutturati non toccano il documento.
+  await expect(page.locator('.tiptap')).toHaveText('Rocket Lab')
+})

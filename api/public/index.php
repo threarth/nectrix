@@ -18,10 +18,15 @@ use Nectrix\KnowledgeService;
 use Nectrix\OccurrenceTextExtractor;
 use Nectrix\PlainTextExtractor;
 use Nectrix\QueryService;
+use Nectrix\FieldValueValidator;
 use Nectrix\SearchRepository;
 use Nectrix\SearchService;
 use Nectrix\TagRepository;
 use Nectrix\TagService;
+use Nectrix\SemanticBlockRepository;
+use Nectrix\SemanticBlockService;
+use Nectrix\TemplateRepository;
+use Nectrix\TemplateService;
 
 require dirname(__DIR__) . '/bootstrap.php';
 
@@ -72,6 +77,11 @@ try {
     $tags = new TagService(new TagRepository($pdo), $documentRepository);
     $query = new QueryService($contexts, $tags, $service, $knowledgeRepository);
     $search = new SearchService(new SearchRepository($pdo), new ContextRepository($pdo));
+    $templateRepository = new TemplateRepository($pdo);
+    $blockRepository = new SemanticBlockRepository($pdo);
+    $fieldValidator = new FieldValueValidator();
+    $templates = new TemplateService($templateRepository, $blockRepository, $fieldValidator);
+    $semanticBlocks = new SemanticBlockService($blockRepository, $templateRepository, $fieldValidator);
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -94,6 +104,63 @@ try {
             (string) ($_GET['contextMode'] ?? 'subtree'),
             (string) ($_GET['tagIds'] ?? ''),
         )]);
+    }
+    if ($method === 'GET' && $path === '/api/templates') {
+        respond(200, ['templates' => $templates->list()]);
+    }
+    if ($method === 'POST' && $path === '/api/templates') {
+        respond(201, ['template' => $templates->create(requestBody())]);
+    }
+    if (preg_match('#^/api/templates/([^/]+)$#', (string) $path, $matches) === 1 && $method === 'PUT') {
+        respond(200, ['template' => $templates->update(rawurldecode($matches[1]), requestBody())]);
+    }
+    if ($method === 'POST' && preg_match('#^/api/templates/([^/]+)/(archive|restore)$#', (string) $path, $matches) === 1) {
+        respond(200, ['template' => $templates->setArchived(rawurldecode($matches[1]), $matches[2] === 'archive')]);
+    }
+    if ($method === 'POST' && preg_match('#^/api/templates/([^/]+)/fields$#', (string) $path, $matches) === 1) {
+        respond(201, ['template' => $templates->addField(rawurldecode($matches[1]), requestBody())]);
+    }
+    if ($method === 'POST' && preg_match('#^/api/templates/([^/]+)/fields/order$#', (string) $path, $matches) === 1) {
+        respond(200, ['template' => $templates->reorderFields(rawurldecode($matches[1]), requestBody())]);
+    }
+    if (preg_match('#^/api/template-fields/([^/]+)$#', (string) $path, $matches) === 1) {
+        $fieldId = rawurldecode($matches[1]);
+        if ($method === 'PUT') {
+            respond(200, ['template' => $templates->updateField($fieldId, requestBody())]);
+        }
+        if ($method === 'DELETE') {
+            respond(200, ['template' => $templates->deleteField($fieldId)]);
+        }
+    }
+    if ($method === 'POST' && preg_match('#^/api/template-fields/([^/]+)/type$#', (string) $path, $matches) === 1) {
+        respond(200, $templates->migrateFieldType(rawurldecode($matches[1]), requestBody()));
+    }
+    if (preg_match('#^/api/entity-types/([^/]+)/templates$#', (string) $path, $matches) === 1) {
+        $entityTypeId = rawurldecode($matches[1]);
+        if ($method === 'GET') {
+            respond(200, ['templates' => $templates->recommendations($entityTypeId)]);
+        }
+        if ($method === 'POST') {
+            respond(200, ['templates' => $templates->recommend($entityTypeId, requestBody())]);
+        }
+    }
+    if ($method === 'DELETE' && preg_match('#^/api/entity-types/([^/]+)/templates/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, ['templates' => $templates->unrecommend(rawurldecode($matches[1]), rawurldecode($matches[2]))]);
+    }
+    if (preg_match('#^/api/knowledge-objects/([^/]+)/blocks$#', (string) $path, $matches) === 1) {
+        $objectId = rawurldecode($matches[1]);
+        if ($method === 'GET') {
+            respond(200, ['blocks' => $semanticBlocks->blocksOf($objectId)]);
+        }
+        if ($method === 'POST') {
+            respond(201, ['blocks' => $semanticBlocks->addBlock($objectId, requestBody())]);
+        }
+    }
+    if (preg_match('#^/api/semantic-blocks/([^/]+)$#', (string) $path, $matches) === 1 && $method === 'DELETE') {
+        respond(200, ['blocks' => $semanticBlocks->deleteBlock(rawurldecode($matches[1]))]);
+    }
+    if ($method === 'POST' && preg_match('#^/api/semantic-blocks/([^/]+)/values$#', (string) $path, $matches) === 1) {
+        respond(200, ['blocks' => $semanticBlocks->setValues(rawurldecode($matches[1]), requestBody())]);
     }
     if ($method === 'GET' && $path === '/api/tags') {
         respond(200, ['tags' => $tags->list()]);

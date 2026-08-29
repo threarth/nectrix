@@ -1,8 +1,15 @@
 <script lang="ts">
   // SPDX-License-Identifier: AGPL-3.0-or-later
 
-  import type { DuplicateCandidate, EntityIdentifierInput, KnowledgeObjectDetail } from '../lib/api'
+  import type {
+    DuplicateCandidate,
+    EntityIdentifierInput,
+    KnowledgeObjectDetail,
+    SemanticBlock,
+    Template,
+  } from '../lib/api'
   import { identifierStrings, inspectorStrings } from '../lib/strings'
+  import StructuredData from './StructuredData.svelte'
 
   let {
     object,
@@ -11,6 +18,11 @@
     onToggleEntityTypeArchived,
     onAddIdentifier,
     onRemoveIdentifier,
+    blocks,
+    templates,
+    onAddBlock,
+    onRemoveBlock,
+    onSetValues,
   }: {
     object: KnowledgeObjectDetail
     busy: boolean
@@ -18,6 +30,12 @@
     onToggleEntityTypeArchived: () => void
     onAddIdentifier: (input: EntityIdentifierInput) => void
     onRemoveIdentifier: (identifierId: string) => void
+    /** Structured data of the Entity: blocks of a Template with their typed values. */
+    blocks: SemanticBlock[]
+    templates: Template[]
+    onAddBlock: (templateId: string) => void
+    onRemoveBlock: (blockId: string) => void
+    onSetValues: (blockId: string, fieldId: string, values: unknown[]) => void
   } = $props()
 
   let scheme = $state('')
@@ -116,3 +134,5 @@
   </form>
   <p class="muted inspector-note">{identifierStrings.note}</p>
 </section>
+
+<StructuredData {blocks} {templates} {busy} {onAddBlock} {onRemoveBlock} {onSetValues} />

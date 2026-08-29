@@ -24,6 +24,11 @@ use Nectrix\SearchRepository;
 use Nectrix\SearchService;
 use Nectrix\TagRepository;
 use Nectrix\TagService;
+use Nectrix\FieldValueValidator;
+use Nectrix\SemanticBlockRepository;
+use Nectrix\SemanticBlockService;
+use Nectrix\TemplateRepository;
+use Nectrix\TemplateService;
 use Nectrix\UuidV7;
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -178,7 +183,7 @@ $suite->test('le migrazioni estendono lo schema Document senza rimuovere le colo
 
     assertSameValue($phaseOne, array_slice($columns, 0, count($phaseOne)));
     assertSameValue(['status', 'context_id'], array_slice($columns, count($phaseOne)));
-    assertSameValue(8, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(9, (int) $pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
 });
 
 $domainFixture = [];
@@ -511,7 +516,7 @@ $suite->test('la migration Phase 1.1 aggiorna un database FASE 1 senza perdere D
 
     assertSameValue(1, (int) $upgradePdo->query('SELECT COUNT(*) FROM documents')->fetchColumn());
     assertSameValue('Documento preesistente', $upgradePdo->query('SELECT title FROM documents')->fetchColumn());
-    assertSameValue(8, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
+    assertSameValue(9, (int) $upgradePdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn());
     assertSameValue('field_values', $upgradePdo->query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'field_values'")->fetchColumn());
 });
 
@@ -1774,6 +1779,238 @@ $suite->test('una ricerca troppo corta viene rifiutata', static function () use 
     } catch (ApiException $error) {
         assertSameValue('query_too_short', $error->errorCode);
     }
+});
+
+function templateService(PDO $pdo): TemplateService
+{
+    return new TemplateService(new TemplateRepository($pdo), new SemanticBlockRepository($pdo), new FieldValueValidator());
+}
+
+function blockService(PDO $pdo): SemanticBlockService
+{
+    return new SemanticBlockService(new SemanticBlockRepository($pdo), new TemplateRepository($pdo), new FieldValueValidator());
+}
+
+/** @return array<string, mixed> */
+function fieldNamed(array $template, string $name): array
+{
+    foreach ($template['fields'] as $field) {
+        if ($field['name'] === $name) {
+            return $field;
+        }
+    }
+    throw new RuntimeException("Campo non trovato: {$name}");
+}
+
+$suite->test('i campi di un Template restano ordinati e la rinomina preserva l’ID', static function () use ($pdo): void {
+    $templates = templateService($pdo);
+    $template = $templates->create(['name' => 'Scheda azienda']);
+    $templates->addField($template['id'], ['name' => 'Settore', 'fieldType' => 'text']);
+    $templates->addField($template['id'], ['name' => 'Fondazione', 'fieldType' => 'date']);
+    $withFields = $templates->addField($template['id'], ['name' => 'Quotata', 'fieldType' => 'boolean']);
+
+    assertSameValue(['Settore', 'Fondazione', 'Quotata'], array_column($withFields['fields'], 'name'));
+    assertSameValue([0, 1, 2], array_column($withFields['fields'], 'sort_order'));
+
+    $settore = fieldNamed($withFields, 'Settore');
+    $reordered = $templates->reorderFields($template['id'], ['fieldIds' => [
+        fieldNamed($withFields, 'Quotata')['id'], $settore['id'], fieldNamed($withFields, 'Fondazione')['id'],
+    ]]);
+    assertSameValue(['Quotata', 'Settore', 'Fondazione'], array_column($reordered['fields'], 'name'));
+
+    $renamed = $templates->updateField($settore['id'], ['name' => 'Settore economico']);
+    assertSameValue($settore['id'], fieldNamed($renamed, 'Settore economico')['id']);
+});
+
+$suite->test('i valori tipizzati finiscono nella colonna del proprio tipo', static function () use ($pdo, $service): void {
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityId = entityWithOccurrence($service, $knowledge, 'Azienda tipizzata', 'Azienda strutturata');
+    $template = $templates->create(['name' => 'Dati tipizzati']);
+    $template = $templates->addField($template['id'], ['name' => 'Nome', 'fieldType' => 'text']);
+    $template = $templates->addField($template['id'], ['name' => 'Dipendenti', 'fieldType' => 'number']);
+    $template = $templates->addField($template['id'], ['name' => 'Fondazione', 'fieldType' => 'date']);
+    $template = $templates->addField($template['id'], ['name' => 'Capitale', 'fieldType' => 'currency']);
+    $template = $templates->addField($template['id'], ['name' => 'Quotata', 'fieldType' => 'boolean']);
+
+    $created = $blocks->addBlock($entityId, ['templateId' => $template['id']]);
+    $blockId = $created[0]['id'];
+    $blocks->setValues($blockId, ['fieldId' => fieldNamed($template, 'Nome')['id'], 'values' => ['Rocket Lab']]);
+    $blocks->setValues($blockId, ['fieldId' => fieldNamed($template, 'Dipendenti')['id'], 'values' => [1800]]);
+    $blocks->setValues($blockId, ['fieldId' => fieldNamed($template, 'Fondazione')['id'], 'values' => ['2006-06-01']]);
+    $blocks->setValues($blockId, ['fieldId' => fieldNamed($template, 'Capitale')['id'], 'values' => [['value' => 1250.5, 'currency' => 'USD']]]);
+    $result = $blocks->setValues($blockId, ['fieldId' => fieldNamed($template, 'Quotata')['id'], 'values' => [true]]);
+
+    $byName = [];
+    foreach ($result[0]['fields'] as $field) {
+        $byName[$field['name']] = $field['values'];
+    }
+    assertSameValue('Rocket Lab', $byName['Nome'][0]['value']);
+    assertSameValue(1800.0, $byName['Dipendenti'][0]['value']);
+    assertSameValue('2006-06-01', $byName['Fondazione'][0]['value']);
+    assertSameValue(['value' => 1250.5, 'currency' => 'USD'], $byName['Capitale'][0]['value']);
+    assertSameValue(true, $byName['Quotata'][0]['value']);
+
+    assertSameValue(1, countRows($pdo, "SELECT COUNT(*) FROM field_values WHERE number_value = 1800 AND text_value IS NULL", []));
+    assertThrows(
+        static fn () => $blocks->setValues($blockId, ['fieldId' => fieldNamed($template, 'Dipendenti')['id'], 'values' => ['1800']]),
+        'Un numero non deve accettare una stringa.',
+    );
+});
+
+$suite->test('la cardinalità è rispettata e le opzioni sono vincolanti', static function () use ($pdo, $service): void {
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityId = entityWithOccurrence($service, $knowledge, 'Azienda multipla', 'Azienda multipla');
+    $template = $templates->create(['name' => 'Cardinalità']);
+    $template = $templates->addField($template['id'], ['name' => 'Mercato', 'fieldType' => 'enum', 'options' => ['Europa', 'Asia']]);
+    $template = $templates->addField($template['id'], ['name' => 'Mercati', 'fieldType' => 'multi_enum', 'options' => ['Europa', 'Asia']]);
+    $blockId = $blocks->addBlock($entityId, ['templateId' => $template['id']])[0]['id'];
+
+    $singolo = fieldNamed($template, 'Mercato')['id'];
+    $multiplo = fieldNamed($template, 'Mercati')['id'];
+
+    $result = $blocks->setValues($blockId, ['fieldId' => $multiplo, 'values' => ['Europa', 'Asia']]);
+    $mercati = array_values(array_filter($result[0]['fields'], static fn (array $f): bool => $f['name'] === 'Mercati'))[0];
+    assertSameValue(['Europa', 'Asia'], array_column($mercati['values'], 'value'));
+    assertSameValue([0, 1], array_column($mercati['values'], 'ordinal'));
+
+    try {
+        $blocks->setValues($blockId, ['fieldId' => $singolo, 'values' => ['Europa', 'Asia']]);
+        throw new RuntimeException('Cardinalità non rispettata.');
+    } catch (ApiException $error) {
+        assertSameValue('field_cardinality', $error->errorCode);
+    }
+
+    try {
+        $blocks->setValues($blockId, ['fieldId' => $singolo, 'values' => ['Africa']]);
+        throw new RuntimeException('Opzione fuori elenco accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_field_value', $error->errorCode);
+    }
+});
+
+$suite->test('un riferimento non crea nulla e un campo obbligatorio non resta vuoto', static function () use ($pdo, $service): void {
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityId = entityWithOccurrence($service, $knowledge, 'Azienda riferita', 'Azienda riferita');
+    $conceptId = conceptWithOccurrence($service, 'Concetto riferito');
+    $template = $templates->create(['name' => 'Riferimenti']);
+    $template = $templates->addField($template['id'], ['name' => 'Concetto', 'fieldType' => 'concept_reference']);
+    $template = $templates->addField($template['id'], ['name' => 'Obbligatorio', 'fieldType' => 'text', 'required' => true]);
+    $blockId = $blocks->addBlock($entityId, ['templateId' => $template['id']])[0]['id'];
+    $riferimento = fieldNamed($template, 'Concetto')['id'];
+
+    $conceptsBefore = countRows($pdo, 'SELECT COUNT(*) FROM concepts', []);
+    try {
+        $blocks->setValues($blockId, ['fieldId' => $riferimento, 'values' => [UuidV7::generate()]]);
+        throw new RuntimeException('Riferimento inesistente accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('reference_not_found', $error->errorCode);
+    }
+    assertSameValue($conceptsBefore, countRows($pdo, 'SELECT COUNT(*) FROM concepts', []));
+
+    $blocks->setValues($blockId, ['fieldId' => $riferimento, 'values' => [$conceptId]]);
+    assertSameValue($conceptsBefore, countRows($pdo, 'SELECT COUNT(*) FROM concepts', []));
+
+    try {
+        $blocks->setValues($blockId, ['fieldId' => fieldNamed($template, 'Obbligatorio')['id'], 'values' => []]);
+        throw new RuntimeException('Campo obbligatorio svuotato.');
+    } catch (ApiException $error) {
+        assertSameValue('field_required', $error->errorCode);
+    }
+});
+
+$suite->test('il cambio di tipo con valori richiede il comando dedicato, con preview', static function () use ($pdo, $service): void {
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityId = entityWithOccurrence($service, $knowledge, 'Azienda migrata', 'Azienda migrata');
+    $template = $templates->create(['name' => 'Migrazione']);
+    $template = $templates->addField($template['id'], ['name' => 'Valore', 'fieldType' => 'text']);
+    $fieldId = fieldNamed($template, 'Valore')['id'];
+    $blockId = $blocks->addBlock($entityId, ['templateId' => $template['id']])[0]['id'];
+    $blocks->setValues($blockId, ['fieldId' => $fieldId, 'values' => ['scritto a mano']]);
+
+    // Il CRUD ordinario non accetta il tipo.
+    assertThrows(
+        static fn () => $templates->updateField($fieldId, ['name' => 'Valore', 'fieldType' => 'number']),
+        'Il CRUD ordinario non deve cambiare il tipo.',
+    );
+    assertThrows(
+        static fn () => $templates->deleteField($fieldId),
+        'Un campo con valori non deve essere eliminabile.',
+    );
+
+    $preview = $templates->migrateFieldType($fieldId, ['fieldType' => 'number']);
+    assertSameValue(false, $preview['applied']);
+    assertSameValue(1, $preview['preview']['values']);
+    assertSameValue(true, $preview['preview']['requiresDiscard']);
+    $currentType = $pdo->prepare('SELECT field_type FROM template_fields WHERE id = :id');
+    $currentType->execute(['id' => $fieldId]);
+    assertSameValue('text', (string) $currentType->fetchColumn());
+
+    try {
+        $templates->migrateFieldType($fieldId, ['fieldType' => 'number', 'apply' => true]);
+        throw new RuntimeException('Migrazione senza dichiarare lo scarto.');
+    } catch (ApiException $error) {
+        assertSameValue('field_has_values', $error->errorCode);
+    }
+
+    $applied = $templates->migrateFieldType($fieldId, ['fieldType' => 'number', 'apply' => true, 'discardValues' => true]);
+    assertSameValue(true, $applied['applied']);
+    assertSameValue('number', fieldNamed($applied['template'], 'Valore')['field_type']);
+    assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM field_values WHERE template_field_id = :id', ['id' => $fieldId]));
+});
+
+$suite->test('le raccomandazioni EntityType/Template sono ordinate e non vincolanti', static function () use ($pdo, $service): void {
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityType = $knowledge->createEntityType(['name' => 'Tipo raccomandato']);
+    $primo = $templates->create(['name' => 'Template primo']);
+    $secondo = $templates->create(['name' => 'Template secondo']);
+    $nonRaccomandato = $templates->create(['name' => 'Template libero']);
+
+    $templates->recommend($entityType['id'], ['templateId' => $primo['id']]);
+    $ordered = $templates->recommend($entityType['id'], ['templateId' => $secondo['id']]);
+    assertSameValue(['Template primo', 'Template secondo'], array_column($ordered, 'name'));
+
+    // Un Template non raccomandato resta applicabile.
+    $entityId = entityWithOccurrence($service, $knowledge, 'Entity libera', 'Tipo raccomandato');
+    $applied = $blocks->addBlock($entityId, ['templateId' => $nonRaccomandato['id']]);
+    assertSameValue('Template libero', $applied[0]['templateName']);
+
+    assertSameValue(['Template primo'], array_column($templates->unrecommend($entityType['id'], $secondo['id']), 'name'));
+});
+
+$suite->test('un blocco appartiene alla propria Entity e i campi al proprio Template', static function () use ($pdo, $service): void {
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $entityId = entityWithOccurrence($service, $knowledge, 'Entity con blocchi', 'Tipo blocchi');
+    $primo = $templates->create(['name' => 'Blocco primo']);
+    $primo = $templates->addField($primo['id'], ['name' => 'Campo primo', 'fieldType' => 'text']);
+    $secondo = $templates->create(['name' => 'Blocco secondo']);
+    $secondo = $templates->addField($secondo['id'], ['name' => 'Campo secondo', 'fieldType' => 'text']);
+
+    $blocks->addBlock($entityId, ['templateId' => $primo['id']]);
+    $due = $blocks->addBlock($entityId, ['templateId' => $secondo['id']]);
+    assertSameValue(2, count($due));
+
+    try {
+        $blocks->setValues($due[0]['id'], ['fieldId' => fieldNamed($secondo, 'Campo secondo')['id'], 'values' => ['x']]);
+        throw new RuntimeException('Campo di un altro Template accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('field_wrong_template', $error->errorCode);
+    }
+
+    $remaining = $blocks->deleteBlock($due[1]['id']);
+    assertSameValue(1, count($remaining));
+    assertSameValue(1, countRows($pdo, 'SELECT COUNT(*) FROM semantic_blocks WHERE entity_id = :id', ['id' => $entityId]));
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

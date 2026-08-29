@@ -304,6 +304,108 @@ export async function searchByObject(objectId: string): Promise<SearchResult[]> 
   return payload.results
 }
 
+export interface TemplateField {
+  id: string
+  template_id: string
+  name: string
+  field_type: string
+  is_required: number
+  sort_order: number
+  options_json: string | null
+}
+
+export interface Template {
+  id: string
+  name: string
+  description: string | null
+  status: 'active' | 'archived'
+  fields: TemplateField[]
+}
+
+export interface BlockFieldValue {
+  id: string
+  ordinal: number
+  value: unknown
+  origin: string
+}
+
+export interface BlockField {
+  fieldId: string
+  name: string
+  fieldType: string
+  required: boolean
+  options: string[]
+  values: BlockFieldValue[]
+}
+
+export interface SemanticBlock {
+  id: string
+  templateId: string
+  templateName: string | null
+  sortOrder: number
+  fields: BlockField[]
+}
+
+export async function listTemplates(): Promise<Template[]> {
+  const payload = await request<{ templates: Template[] }>('/api/templates')
+  return payload.templates
+}
+
+export async function createTemplate(name: string): Promise<Template> {
+  const payload = await request<{ template: Template }>('/api/templates', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+  return payload.template
+}
+
+export async function addTemplateField(
+  templateId: string,
+  input: { name: string; fieldType: string; required?: boolean; options?: string[] },
+): Promise<Template> {
+  const payload = await request<{ template: Template }>(
+    `/api/templates/${encodeURIComponent(templateId)}/fields`,
+    { method: 'POST', body: JSON.stringify(input) },
+  )
+  return payload.template
+}
+
+export async function listBlocks(objectId: string): Promise<SemanticBlock[]> {
+  const payload = await request<{ blocks: SemanticBlock[] }>(
+    `/api/knowledge-objects/${encodeURIComponent(objectId)}/blocks`,
+  )
+  return payload.blocks
+}
+
+export async function addBlock(objectId: string, templateId: string): Promise<SemanticBlock[]> {
+  const payload = await request<{ blocks: SemanticBlock[] }>(
+    `/api/knowledge-objects/${encodeURIComponent(objectId)}/blocks`,
+    { method: 'POST', body: JSON.stringify({ templateId }) },
+  )
+  return payload.blocks
+}
+
+export async function removeBlock(blockId: string): Promise<SemanticBlock[]> {
+  const payload = await request<{ blocks: SemanticBlock[] }>(
+    `/api/semantic-blocks/${encodeURIComponent(blockId)}`,
+    { method: 'DELETE' },
+  )
+  return payload.blocks
+}
+
+/** Replaces the values of one field: a single field takes one value, a multi field a list. */
+export async function setBlockValues(
+  blockId: string,
+  fieldId: string,
+  values: unknown[],
+): Promise<SemanticBlock[]> {
+  const payload = await request<{ blocks: SemanticBlock[] }>(
+    `/api/semantic-blocks/${encodeURIComponent(blockId)}/values`,
+    { method: 'POST', body: JSON.stringify({ fieldId, values }) },
+  )
+  return payload.blocks
+}
+
 export interface Tag { id: string; name: string }
 export interface TagSummary extends Tag { documents: number }
 

@@ -6,6 +6,8 @@
     EntityIdentifierInput,
     KnowledgeObjectDetail,
     KnowledgeOccurrenceView,
+    SemanticBlock,
+    Template,
   } from '../lib/api'
   import { inspectorStrings } from '../lib/strings'
   import ConceptInspector from './ConceptInspector.svelte'
@@ -24,6 +26,11 @@
     onAddIdentifier,
     onRemoveIdentifier,
     onRename,
+    blocks,
+    templates,
+    onAddBlock,
+    onRemoveBlock,
+    onSetValues,
   }: {
     object: KnowledgeObjectDetail
     busy?: boolean
@@ -38,6 +45,11 @@
     onAddIdentifier: (input: EntityIdentifierInput) => void
     onRemoveIdentifier: (identifierId: string) => void
     onRename: (name: string, description: string | null) => void
+    blocks: SemanticBlock[]
+    templates: Template[]
+    onAddBlock: (templateId: string) => void
+    onRemoveBlock: (blockId: string) => void
+    onSetValues: (blockId: string, fieldId: string, values: unknown[]) => void
   } = $props()
 
   function startEditing(): void {
@@ -122,6 +134,11 @@
       {onToggleEntityTypeArchived}
       {onAddIdentifier}
       {onRemoveIdentifier}
+      {blocks}
+      {templates}
+      {onAddBlock}
+      {onRemoveBlock}
+      {onSetValues}
     />
   {/if}
 

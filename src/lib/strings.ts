@@ -363,3 +363,33 @@ export const searchStrings = {
     description: 'Documenti che contengono una occurrence attiva di questo oggetto, indipendentemente dalle parole scritte',
   },
 } as const
+
+export const structuredStrings = {
+  label: 'Dati strutturati',
+  description: 'Appartengono alla Entity, non al documento: non sono evidenziazioni né occurrence',
+  empty: 'Nessun blocco: applica un Template per raccogliere dati.',
+  addBlock: 'Applica un Template',
+  removeBlock: { label: '×', description: 'Rimuove il blocco e i suoi valori da questa Entity' },
+  noTemplates: 'Nessun Template disponibile: creane uno.',
+  newTemplate: { label: 'Nuovo Template', dialogTitle: 'Nuovo Template', nameLabel: 'Nome del Template', placeholder: 'Per esempio Scheda azienda' },
+  addField: { label: 'Aggiungi campo', dialogTitle: 'Nuovo campo', nameLabel: 'Nome del campo', placeholder: 'Per esempio Settore' },
+  required: 'obbligatorio',
+  emptyValue: 'vuoto',
+  unitLabel: 'unità',
+  currencyLabel: 'valuta',
+  unsupported: 'Questo tipo si modifica dalla UI dedicata, prevista da una fase successiva.',
+
+  fieldTypes: [
+    { value: 'text', label: 'Testo' },
+    { value: 'number', label: 'Numero' },
+    { value: 'boolean', label: 'Sì/No' },
+    { value: 'date', label: 'Data' },
+    { value: 'enum', label: 'Scelta singola' },
+    { value: 'multi_enum', label: 'Scelta multipla' },
+    { value: 'measurement', label: 'Misura' },
+    { value: 'currency', label: 'Importo' },
+    { value: 'percentage', label: 'Percentuale' },
+    { value: 'url', label: 'Collegamento' },
+  ] as const,
+  optionsLabel: 'Opzioni separate da virgola',
+} as const

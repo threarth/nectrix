@@ -18,8 +18,15 @@
     listDocumentTags,
     listTags,
     renameTag,
+    addBlock,
+    addTemplateField,
+    createTemplate,
+    listBlocks,
+    listTemplates,
+    removeBlock,
     search,
     searchByObject,
+    setBlockValues,
     unassignTag,
     deleteContext,
     listContexts,
@@ -37,6 +44,8 @@
     removeEntityIdentifier,
     type ContextMode,
     type SearchResult,
+    type SemanticBlock,
+    type Template,
     type Tag,
     type TagSummary,
     type DocumentRecord,
@@ -50,6 +59,7 @@
   import ContextPanel from './components/ContextPanel.svelte'
   import DerivedObjects from './components/DerivedObjects.svelte'
   import SearchPanel from './components/SearchPanel.svelte'
+  import TemplatePanel from './components/TemplatePanel.svelte'
   import DocumentTags from './components/DocumentTags.svelte'
   import TagPanel from './components/TagPanel.svelte'
   import KnowledgeInspector from './components/KnowledgeInspector.svelte'
@@ -74,6 +84,8 @@
   let searchQuery = $state('')
   let searchResults = $state<SearchResult[]>([])
   let searching = $state(false)
+  let blocks = $state<SemanticBlock[]>([])
+  let templates = $state<Template[]>([])
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
@@ -97,12 +109,23 @@
     void initialise()
   })
 
+  async function withTemplates(operation: () => Promise<void>): Promise<void> {
+    error = ''
+    try {
+      await operation()
+      templates = await listTemplates()
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
   async function initialise(): Promise<void> {
     loading = true
     error = ''
     try {
       contexts = await listContexts()
       tags = await listTags()
+      templates = await listTemplates()
       documents = await listDocuments(scope, selectedContextId, contextMode, selectedTagIds)
       if (documents.length > 0) {
         await openDocument(documents[0].id)
@@ -411,6 +434,8 @@
     try {
       inspector = await getKnowledgeObject(knowledgeObjectId)
       duplicateCandidates = []
+      blocks = inspector.objectType === 'entity' ? await listBlocks(knowledgeObjectId) : []
+      if (templates.length === 0) templates = await listTemplates()
     } catch (cause) {
       showError(cause)
     } finally {
@@ -458,6 +483,13 @@
       const added = await addEntityIdentifier(object.id, input)
       inspector = added.object
       duplicateCandidates = added.duplicateCandidates
+    })
+  }
+
+  /** Structured data belong to the Entity: they never touch the document content. */
+  async function changeBlocks(operation: () => Promise<SemanticBlock[]>): Promise<void> {
+    await withInspectorBusy(async () => {
+      blocks = await operation()
     })
   }
 
@@ -673,6 +705,17 @@
       })}
     />
 
+    <TemplatePanel
+      {templates}
+      busy={saving}
+      onCreate={(name) => void withTemplates(async () => {
+        await createTemplate(name)
+      })}
+      onAddField={(templateId, input) => void withTemplates(async () => {
+        await addTemplateField(templateId, input)
+      })}
+    />
+
     {#if selectedContextId !== null || selectedTagIds.length > 0}
       <DerivedObjects objects={contextObjects} />
     {/if}
@@ -820,6 +863,11 @@
       onAddIdentifier={(input) => void addIdentifier(input)}
       onRemoveIdentifier={(identifierId) => void removeIdentifier(identifierId)}
       onRename={(name, description) => void renameObject(name, description)}
+      {blocks}
+      {templates}
+      onAddBlock={(templateId) => void changeBlocks(() => addBlock(inspector?.id ?? '', templateId))}
+      onRemoveBlock={(blockId) => void changeBlocks(() => removeBlock(blockId))}
+      onSetValues={(blockId, fieldId, values) => void changeBlocks(() => setBlockValues(blockId, fieldId, values))}
       onToggleArchived={() => void toggleInspectorArchived()}
       onToggleEntityTypeArchived={() => void toggleInspectorEntityTypeArchived()}
       onOpenOccurrence={(occurrence) => void openOccurrence(occurrence)}

@@ -17,6 +17,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 8 — Context: completata.
 - FASE 9 — Tag: completata.
 - FASE 10 — Full text e semantic search: completata.
+- FASE 10.1 — Template System: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
 - API PHP minimale e database SQLite in `data/nectrix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
@@ -25,22 +26,22 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 10.1 — Template System
+### FASE 10.1.1 — Riferimenti editoriali a Entity e SemanticBlock
 
-CRUD di Template e TemplateField, SemanticBlock multipli per Entity e FieldValue tipizzati, con raccomandazioni ordinate EntityType↔Template.
+Nodi `entityReference` e `semanticBlockReference` come riferimenti derivati, con `referenceId` proprio e ID verificabile della destinazione.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- field e blocchi ordinati, payload e cardinalità validati atomicamente;
-- rinomina che preserva l'ID;
-- cambio di tipo o cardinalità bloccato quando esistono valori, con migrazione come comando separato;
-- nessuna creazione automatica di Concept e nessun overwrite implicito dei valori manuali.
+- destinazioni validate e nessun payload strutturato duplicato nel `document_json`;
+- delete, undo, reload e clipboard;
+- copy/paste che rigenera `referenceId`, cut/paste interno verificato che lo conserva;
+- input manipolato che non crea Entity o SemanticBlock.
 
-Gate: definito nella sezione FASE 10.1 di `ROADMAP.md`.
+Gate: definito nella sezione FASE 10.1.1 di `ROADMAP.md`.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 10.1.
+Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 10.1.1.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

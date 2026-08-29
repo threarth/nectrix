@@ -154,11 +154,15 @@ La distinzione fra string matching e matching per identità è esplicita e verif
 
 Gate soddisfatto: Alias e Identifier raggiungono il proprio KnowledgeObject senza contaminare le categorie, verificato anche in negativo; ogni risultato dichiara categoria e modo del match, con il percorso per i Context; l'indice svuotato e ricostruito ritrova gli stessi documenti.
 
-## FASE 10.1 — Template System
+## FASE 10.1 — Template System (completata)
 
 Introdurre CRUD utente di Template/TemplateField, SemanticBlock multipli per Entity e FieldValue tipizzati, inclusi tipi multi e collegamento Concept opzionale. SemanticBlock resta Entity-owned e non è highlight, occurrence, range o copia nel `document_json`. Aggiungere raccomandazioni molti-a-molti ordinate EntityType↔Template per guidare la UI senza imporre compatibilità rigida. `source_reference` resta disabilitato fino alla FASE 16.
 
-Gate: field e blocchi ordinati; payload, appartenenza e cardinalità validati atomicamente; rinomina preserva l'ID; il normale CRUD blocca cambio tipo/cardinalità quando esistono valori e un'eventuale migrazione usa un comando separato con preview e transazione atomica; nessuna creazione automatica di Concept e nessun overwrite implicito dei valori manuali.
+Completato: Template e TemplateField hanno CRUD completo con campi ordinati e riordinabili; la migration 009 aggiunge le raccomandazioni ordinate EntityType↔Template, che guidano la UI senza vincolare, tanto che un Template non raccomandato resta applicabile. Un'Entity può avere più SemanticBlock, ciascuno di un Template, e i FieldValue finiscono nella colonna tipizzata del proprio tipo: numeri, date, booleani, misure, valute e riferimenti non vengono mai confrontati come testo. La cardinalità è verificata, le opzioni di un campo enum sono vincolanti e un campo obbligatorio non può restare vuoto. `source_reference` resta rifiutato fino alla FASE 16.
+
+La rinomina di Template e campi preserva l'ID, quindi i valori già scritti restano attaccati alla stessa definizione. Il CRUD ordinario non accetta il cambio di tipo: esiste il comando dedicato che senza `apply` mostra soltanto l'impatto e, quando esistono valori, richiede di dichiarare esplicitamente che vanno scartati, applicando poi definizione e scarto in un'unica transazione. Un riferimento a Concept o Entity deve puntare a qualcosa che esiste già: scriverlo non crea nulla, e ogni scrittura sostituisce soltanto il campo indicato.
+
+Gate soddisfatto: ordinamento dei campi e conservazione dell'ID alla rinomina; valori tipizzati, cardinalità e appartenenza validati con scrittura atomica per campo; cambio di tipo bloccato nel CRUD ordinario, con preview e transazione nel comando separato; nessuna creazione automatica di Concept e nessun overwrite implicito, verificati contando i Concept prima e dopo.
 
 ## FASE 10.1.1 — Riferimenti editoriali a Entity e SemanticBlock
 
