@@ -204,11 +204,17 @@ Ogni evidence conserva il percorso verso i dati autorevoli: la occurrence porta 
 
 Gate soddisfatto: evidence valide, navigabili e verificate dopo un editing che stacca la occurrence; percorso verso i dati autorevoli conservato in ogni famiglia; destinazioni inesistenti o di tipo errato rifiutate, verificato anche passando un Document dove serve una occurrence.
 
-## FASE 13 — Compare
+## FASE 13 — Compare (completata)
 
 Workspace con modalità separate Compare Concepts e Compare Entities. La prima confronta descrizione, Alias, Context derivati, Relation e occurrence; la seconda usa EntityType, EntityIdentifier, Context derivati, Relation, occurrence e Template condivisi per allineare FieldValue. Una modalità mista non viene introdotta senza un caso d'uso esplicito.
 
-Gate: confronto basato solo sulla conoscenza persistita, colonne Entity allineate per TemplateField stabile e nessun testo generato da AI.
+Completato: `POST /api/compare` riceve una lista di KnowledgeObject e risponde con le righe allineate. La modalità è derivata dai soggetti, non dichiarata dal client: soggetti di tipo diverso vengono rifiutati con `compare_mixed_mode`, perché un Concept e una Entity non hanno righe confrontabili. Ogni riga dichiara il percorso che l'ha prodotta — `persisted` per i dati propri, `derived` per Context, Relation e occurrence raggiunti tramite Document→KnowledgeOccurrence, `field_value` per i valori allineati per TemplateField — così una cella vuota si distingue da una cella non applicabile.
+
+Le colonne Entity si allineano soltanto sui Template condivisi da tutti i soggetti: il repository seleziona i template posseduti da ciascun soggetto e allinea per TemplateField stabile, non per etichetta. Nessun testo viene generato: ogni cella riporta valori persistiti o l'assenza esplicita.
+
+La UI aggiunge una barra di confronto che accumula i soggetti scelti dall'inspector e li apre affiancati; da lì si svuota la selezione o si toglie un soggetto per volta.
+
+Gate soddisfatto: confronto basato solo sulla conoscenza persistita, colonne Entity allineate per TemplateField stabile, modalità mista rifiutata e nessun testo generato da AI.
 
 ## FASE 14 — Matrix e Context views
 

@@ -25,6 +25,8 @@ use Nectrix\RelationRepository;
 use Nectrix\RelationService;
 use Nectrix\EvidenceRepository;
 use Nectrix\EvidenceService;
+use Nectrix\CompareRepository;
+use Nectrix\CompareService;
 use Nectrix\QueryService;
 use Nectrix\SearchRepository;
 use Nectrix\SearchService;
@@ -2533,6 +2535,111 @@ $suite->test('rimuovere una evidence non tocca il dato che indicava', static fun
     assertSameValue([], $remaining);
     assertSameValue('Documento da conservare', $service->get($document['id'])['title']);
     assertSameValue(1, count($relations->of($primo)));
+});
+
+function compareService(PDO $pdo): CompareService
+{
+    return new CompareService(
+        new CompareRepository($pdo),
+        new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor()),
+        relationService($pdo),
+        new TemplateRepository($pdo),
+    );
+}
+
+/** @return list<string> */
+function compareRow(array $comparison, string $label, int $column): array
+{
+    foreach ($comparison['rows'] as $row) {
+        if ($row['label'] === $label) {
+            return $row['cells'][$column];
+        }
+    }
+    throw new RuntimeException("Riga non trovata: {$label}");
+}
+
+$suite->test('il confronto fra Concept mostra solo conoscenza persistita', static function () use ($pdo, $service): void {
+    $compare = compareService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $contexts = contextService($pdo);
+    $relations = relationService($pdo);
+
+    $primo = conceptWithOccurrence($service, 'Confronto primo');
+    $secondo = conceptWithOccurrence($service, 'Confronto secondo');
+    $knowledge->updateObject($primo, ['name' => 'Confronto primo', 'description' => 'Prima descrizione']);
+    $knowledge->addAlias($primo, ['alias' => 'Alias del primo']);
+    $relations->create($primo, ['targetId' => $secondo, 'relationType' => 'si oppone a']);
+    $context = $contexts->create(['name' => 'Contesto confronto']);
+    $documents = (new CompareRepository($pdo))->occurrencesOf($primo);
+    $contexts->assignDocument($documents[0]['document_id'], ['contextId' => $context['id']]);
+
+    $comparison = $compare->compare(['objectIds' => [$primo, $secondo]]);
+
+    assertSameValue('concepts', $comparison['mode']);
+    assertSameValue(['Confronto primo', 'Confronto secondo'], array_column($comparison['subjects'], 'name'));
+    assertSameValue(['Prima descrizione'], compareRow($comparison, 'Descrizione', 0));
+    assertSameValue([], compareRow($comparison, 'Descrizione', 1));
+    assertSameValue(['Alias del primo'], compareRow($comparison, 'Alias', 0));
+    assertSameValue(['Contesto confronto'], compareRow($comparison, 'Context', 0));
+    assertSameValue([], compareRow($comparison, 'Context', 1));
+    assertSameValue(['→ si oppone a Confronto secondo'], compareRow($comparison, 'Relazioni', 0));
+    assertSameValue(['← si oppone a Confronto primo'], compareRow($comparison, 'Relazioni', 1));
+});
+
+$suite->test('il confronto fra Entity allinea le colonne su un TemplateField condiviso', static function () use ($pdo, $service): void {
+    $compare = compareService($pdo);
+    $templates = templateService($pdo);
+    $blocks = blockService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+
+    $condiviso = $templates->create(['name' => 'Scheda condivisa']);
+    $condiviso = $templates->addField($condiviso['id'], ['name' => 'Dipendenti', 'fieldType' => 'number']);
+    $solitario = $templates->create(['name' => 'Scheda solitaria']);
+    $solitario = $templates->addField($solitario['id'], ['name' => 'Solo mia', 'fieldType' => 'text']);
+
+    $prima = entityWithOccurrence($service, $knowledge, 'Entity confronto prima', 'Tipo confronto');
+    $seconda = entityWithOccurrence($service, $knowledge, 'Entity confronto seconda', 'Tipo confronto');
+    foreach ([[$prima, 1800], [$seconda, 90]] as [$entityId, $value]) {
+        $blockId = $blocks->addBlock($entityId, ['templateId' => $condiviso['id']])[0]['id'];
+        $blocks->setValues($blockId, ['fieldId' => fieldNamed($condiviso, 'Dipendenti')['id'], 'values' => [$value]]);
+    }
+    $onlyBlock = $blocks->addBlock($prima, ['templateId' => $solitario['id']]);
+    $blocks->setValues(
+        array_values(array_filter($onlyBlock, static fn (array $b): bool => $b['templateId'] === $solitario['id']))[0]['id'],
+        ['fieldId' => fieldNamed($solitario, 'Solo mia')['id'], 'values' => ['non allineata'],
+    ]);
+
+    $comparison = $compare->compare(['objectIds' => [$prima, $seconda]]);
+
+    assertSameValue('entities', $comparison['mode']);
+    assertSameValue(['Tipo confronto'], compareRow($comparison, 'EntityType', 0));
+    assertSameValue(['1800'], compareRow($comparison, 'Scheda condivisa · Dipendenti', 0));
+    assertSameValue(['90'], compareRow($comparison, 'Scheda condivisa · Dipendenti', 1));
+
+    // Il Template applicato a una sola Entity non produce colonne allineate.
+    $labels = array_column($comparison['rows'], 'label');
+    assertTrue(!in_array('Scheda solitaria · Solo mia', $labels, true), 'Un Template non condiviso non allinea nulla.');
+});
+
+$suite->test('Concept ed Entity non si confrontano insieme', static function () use ($pdo, $service): void {
+    $compare = compareService($pdo);
+    $knowledge = new KnowledgeService(new KnowledgeRepository($pdo), new OccurrenceTextExtractor());
+    $conceptId = conceptWithOccurrence($service, 'Misto concetto');
+    $entityId = entityWithOccurrence($service, $knowledge, 'Misto entity', 'Tipo misto');
+
+    try {
+        $compare->compare(['objectIds' => [$conceptId, $entityId]]);
+        throw new RuntimeException('Modalita mista accettata.');
+    } catch (ApiException $error) {
+        assertSameValue('compare_mixed_mode', $error->errorCode);
+    }
+
+    try {
+        $compare->compare(['objectIds' => [$conceptId]]);
+        throw new RuntimeException('Confronto con un solo oggetto accettato.');
+    } catch (ApiException $error) {
+        assertSameValue('invalid_request', $error->errorCode);
+    }
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

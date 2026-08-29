@@ -449,6 +449,24 @@ export async function listRelationTypes(): Promise<string[]> {
   return payload.types
 }
 
+export interface ComparisonRow {
+  label: string
+  /** Where the row comes from: persisted data, a derived path or a typed value. */
+  path: 'persisted' | 'derived' | 'field_value'
+  cells: string[][]
+}
+
+export interface Comparison {
+  mode: 'concepts' | 'entities'
+  subjects: { id: string; name: string }[]
+  rows: ComparisonRow[]
+}
+
+/** Concept and Entity are compared separately: they are not the same kind of thing. */
+export async function compareObjects(objectIds: string[]): Promise<Comparison> {
+  return request<Comparison>('/api/compare', { method: 'POST', body: JSON.stringify({ objectIds }) })
+}
+
 export interface EvidenceView {
   id: string
   family: 'document' | 'occurrence' | 'semantic_block' | 'field_value'

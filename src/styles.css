@@ -614,7 +614,8 @@ button:disabled {
   align-items: center;
   gap: 6px;
   max-width: 1060px;
-  margin: -8px auto 16px;
+  /* Nessun margine negativo: con l'intestazione a capo coprirebbe i suoi pulsanti. */
+  margin: 0 auto 16px;
   font-size: 12px;
   color: #6f7265;
 }
@@ -1447,6 +1448,72 @@ button:disabled {
   color: #4a4d43;
 }
 
+.inspector-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compare-tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: 1060px;
+  margin: 16px auto 0;
+  padding: 10px 14px;
+  border: 1px solid #ded7c9;
+  border-radius: 10px;
+  background: #f3efe6;
+  font-size: 12px;
+  color: #6f7265;
+}
+
+.compare-dialog {
+  width: min(900px, 100%);
+}
+
+.compare-scroll {
+  overflow-x: auto;
+}
+
+.compare-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.compare-scroll th,
+.compare-scroll td {
+  padding: 7px 9px;
+  border-bottom: 1px solid #ded7c9;
+  text-align: left;
+  vertical-align: top;
+}
+
+.compare-scroll thead th {
+  font-size: 14px;
+}
+
+.compare-scroll tbody th {
+  width: 190px;
+  font-weight: 650;
+}
+
+.compare-scroll tbody th small {
+  display: block;
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #8a8d80;
+}
+
+.compare-scroll ul {
+  margin: 0;
+  padding-left: 14px;
+}
+
 .inspector-lifecycle,
 .inspector-secondary {
   align-self: flex-start;
@@ -1524,8 +1591,14 @@ button:disabled {
 
 .save-area {
   display: flex;
+  /* Deve andare a capo dentro la colonna: con l'ispettore aperto sborderebbe sotto di esso. */
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 10px 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .save-status {

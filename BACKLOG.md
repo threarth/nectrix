@@ -30,21 +30,21 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 
 ## Prossimo lavoro autorizzabile
 
-### FASE 13 — Compare
+### FASE 14 — Matrix e Context views
 
-Workspace con modalita separate Compare Concepts e Compare Entities, basate solo sulla conoscenza persistita.
+Viste `Concept × Context`, `Entity × Context`, `EntityType × Context`, `Template × Context` e filtri FieldValue×Context, con drill-down sui Document e sulle occurrence che hanno prodotto il match.
 
 Prima del gate devono essere verificati con test regressivi:
 
-- confronto basato solo su dati persistiti, senza testo generato;
-- colonne Entity allineate per TemplateField stabile;
-- nessuna modalita mista senza un caso d'uso esplicito.
+- conteggi coerenti con le query strutturate gia' disponibili;
+- ogni cella dichiara il percorso che ha prodotto il match;
+- Entity, Template e FieldValue raggiungono il Context solo tramite Document->KnowledgeOccurrence.
 
-Gate: confronto basato solo sulla conoscenza persistita, colonne Entity allineate per TemplateField stabile e nessun testo generato da AI.
+Gate: conteggi e filtri coerenti con le query strutturate e ogni cella dichiara il percorso che ha prodotto il match.
 
 ## Decisioni
 
-Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 13.
+Il registro unico è `DECISIONS.md`. Non risultano decisioni programmate che blocchino la FASE 14; la prima decisione dovuta è ADR-P15-01 sul renderer della Knowledge Map, all'inizio della FASE 15.
 
 Sono già stabiliti, senza anticiparne l'implementazione:
 

@@ -502,3 +502,20 @@ export const evidenceStrings = {
     ai_suggested: 'proposto',
   } as Record<string, string>,
 } as const
+
+export const compareStrings = {
+  add: { label: 'Confronta', description: 'Aggiunge questo oggetto al confronto' },
+  trayLabel: 'Confronto',
+  hint: 'Concept ed Entity si confrontano separatamente.',
+  run: { label: 'Apri il confronto', description: 'Mostra i due o più oggetti affiancati' },
+  clear: { label: 'Svuota', description: 'Toglie tutti gli oggetti dal confronto' },
+  remove: (name: string): string => `Togli ${name} dal confronto`,
+  dialogTitle: (mode: string): string => (mode === 'concepts' ? 'Confronto fra Concept' : 'Confronto fra Entity'),
+  close: 'Chiudi',
+  empty: '—',
+  paths: {
+    persisted: 'dato registrato',
+    derived: 'derivato dalle occurrence',
+    field_value: 'valore strutturato',
+  } as Record<string, string>,
+} as const

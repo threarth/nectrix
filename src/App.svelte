@@ -29,6 +29,7 @@
     searchByObject,
     setBlockValues,
     addRelationEvidence,
+    compareObjects,
     createRelation,
     deleteRelation,
     listRelations,
@@ -54,6 +55,7 @@
     type ContextMode,
     type SearchResult,
     type SemanticBlock,
+    type Comparison,
     type EvidenceView,
     type RelationView,
     type StructuredEntity,
@@ -70,6 +72,7 @@
   } from './lib/api'
   import ContextPanel from './components/ContextPanel.svelte'
   import DerivedObjects from './components/DerivedObjects.svelte'
+  import CompareDialog from './components/CompareDialog.svelte'
   import RelationDialog from './components/RelationDialog.svelte'
   import SearchPanel from './components/SearchPanel.svelte'
   import TemplatePanel from './components/TemplatePanel.svelte'
@@ -77,7 +80,7 @@
   import TagPanel from './components/TagPanel.svelte'
   import KnowledgeInspector from './components/KnowledgeInspector.svelte'
   import { contextPathLabel, orderContexts, type ContextNode } from './lib/contexts'
-  import { contextStrings, documentStrings, tagStrings } from './lib/strings'
+  import { compareStrings, contextStrings, documentStrings, tagStrings } from './lib/strings'
   import {
     collectOccurrences,
     deriveOccurrenceCreates,
@@ -105,6 +108,8 @@
   let relationTypes = $state<string[]>([])
   let addingRelation = $state(false)
   let relationEvidence = $state<{ relationId: string; items: EvidenceView[] } | null>(null)
+  let compareQueue = $state<{ id: string; name: string }[]>([])
+  let comparison = $state<Comparison | null>(null)
   let selected = $state<DocumentRecord | null>(null)
   let draftTitle = $state('')
   let draftJson = $state<JSONContent | null>(null)
@@ -547,6 +552,22 @@
     })
   }
 
+  /** The comparison works on persisted knowledge only: nothing is generated. */
+  function addToCompare(): void {
+    const object = inspector
+    if (!object || compareQueue.some((entry) => entry.id === object.id)) return
+    compareQueue = [...compareQueue, { id: object.id, name: object.name }]
+  }
+
+  async function runComparison(): Promise<void> {
+    error = ''
+    try {
+      comparison = await compareObjects(compareQueue.map((entry) => entry.id))
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
   /** Provenance: which already existing data supports the relation. */
   async function showEvidence(relationId: string): Promise<void> {
     if (relationEvidence?.relationId === relationId) {
@@ -932,7 +953,39 @@
         <button class="save-button" type="button" onclick={addDocument}>Crea il primo documento</button>
       </section>
     {/if}
+    {#if compareQueue.length > 0}
+      <div class="compare-tray" aria-label={compareStrings.trayLabel}>
+        <span>{compareStrings.trayLabel}</span>
+        {#each compareQueue as entry (entry.id)}
+          <span class="document-tag">
+            {entry.name}
+            <button
+              type="button"
+              aria-label={compareStrings.remove(entry.name)}
+              onclick={() => (compareQueue = compareQueue.filter((row) => row.id !== entry.id))}
+            >×</button>
+          </span>
+        {/each}
+        <button
+          type="button"
+          class="lifecycle-button"
+          disabled={compareQueue.length < 2}
+          title={compareStrings.run.description}
+          onclick={() => void runComparison()}
+        >{compareStrings.run.label}</button>
+        <button
+          type="button"
+          class="lifecycle-button"
+          title={compareStrings.clear.description}
+          onclick={() => (compareQueue = [])}
+        >{compareStrings.clear.label}</button>
+      </div>
+    {/if}
   </main>
+
+  {#if comparison !== null}
+    <CompareDialog {comparison} onClose={() => (comparison = null)} />
+  {/if}
 
   {#if addingRelation && inspector}
     <RelationDialog
@@ -978,6 +1031,7 @@
         addRelationEvidence(relationId, { family: 'document', destinationId: selected?.id ?? '' }))}
       onRemoveEvidence={(relationId, family, evidenceId) => void changeEvidence(relationId, () =>
         removeRelationEvidence(relationId, family, evidenceId))}
+      onAddToCompare={addToCompare}
       onToggleArchived={() => void toggleInspectorArchived()}
       onToggleEntityTypeArchived={() => void toggleInspectorEntityTypeArchived()}
       onOpenOccurrence={(occurrence) => void openOccurrence(occurrence)}

@@ -23,6 +23,8 @@ use Nectrix\RelationRepository;
 use Nectrix\RelationService;
 use Nectrix\EvidenceRepository;
 use Nectrix\EvidenceService;
+use Nectrix\CompareRepository;
+use Nectrix\CompareService;
 use Nectrix\QueryService;
 use Nectrix\FieldValueValidator;
 use Nectrix\SearchRepository;
@@ -96,6 +98,7 @@ try {
     $relationRepository = new RelationRepository($pdo);
     $relations = new RelationService($relationRepository, $knowledgeRepository);
     $evidence = new EvidenceService(new EvidenceRepository($pdo), $relationRepository);
+    $compare = new CompareService(new CompareRepository($pdo), $knowledge, $relations, $templateRepository);
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -304,6 +307,9 @@ try {
             rawurldecode($matches[3]),
             rawurldecode($matches[4]),
         )]);
+    }
+    if ($method === 'POST' && $path === '/api/compare') {
+        respond(200, $compare->compare(requestBody()));
     }
     if ($method === 'GET' && $path === '/api/relation-types') {
         respond(200, ['types' => $relations->types()]);

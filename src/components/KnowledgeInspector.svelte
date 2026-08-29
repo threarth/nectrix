@@ -11,7 +11,7 @@
     SemanticBlock,
     Template,
   } from '../lib/api'
-  import { evidenceStrings, inspectorStrings, relationStrings } from '../lib/strings'
+  import { compareStrings, evidenceStrings, inspectorStrings, relationStrings } from '../lib/strings'
   import ConceptInspector from './ConceptInspector.svelte'
   import EntityInspector from './EntityInspector.svelte'
 
@@ -42,6 +42,7 @@
     onShowEvidence,
     onAddDocumentEvidence,
     onRemoveEvidence,
+    onAddToCompare,
   }: {
     object: KnowledgeObjectDetail
     busy?: boolean
@@ -72,6 +73,7 @@
     onShowEvidence: (relationId: string) => void
     onAddDocumentEvidence: (relationId: string) => void
     onRemoveEvidence: (relationId: string, family: EvidenceView['family'], evidenceId: string) => void
+    onAddToCompare: () => void
   } = $props()
 
   function startEditing(): void {
@@ -270,11 +272,20 @@
     {/if}
   </section>
 
-  <button
-    type="button"
-    class="inspector-lifecycle"
-    disabled={busy}
-    title={lifecycleAction.description}
-    onclick={onToggleArchived}
-  >{lifecycleAction.label}</button>
+  <div class="inspector-footer">
+    <button
+      type="button"
+      class="inspector-lifecycle"
+      disabled={busy}
+      title={lifecycleAction.description}
+      onclick={onToggleArchived}
+    >{lifecycleAction.label}</button>
+    <button
+      type="button"
+      class="inspector-secondary"
+      disabled={busy}
+      title={compareStrings.add.description}
+      onclick={onAddToCompare}
+    >{compareStrings.add.label}</button>
+  </div>
 </aside>

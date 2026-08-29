@@ -1067,3 +1067,40 @@ test('FASE 12: una relazione dichiara su quali dati si basa', async ({ page }) =
   await expect(evidence).toContainText('Nessuna evidenza dichiarata')
   await expect(page.locator('.sidebar nav')).toContainText('Documento collegato')
 })
+
+test('FASE 13: due Concept si confrontano affiancati sulla conoscenza registrata', async ({ page }) => {
+  await page.goto('/')
+  for (const [text, name] of [['Introversione', 'Introversione'], ['Estroversione', 'Estroversione']] as const) {
+    await newDocument(page)
+    await createConceptFrom(page, text, name)
+    await page.getByRole('button', { name: 'Salva' }).click()
+    await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
+    await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+    await page.getByRole('button', { name: 'Apri Concept' }).click()
+    await expect(page.locator('.inspector-name')).toHaveText(name)
+
+    if (name === 'Introversione') {
+      await page.getByLabel('Aggiungi alias').fill('Rivolto all’interno')
+      await page.locator('.inspector').getByRole('button', { name: 'Aggiungi alias' }).click()
+      await expect(page.locator('.inspector-list li').first()).toContainText('Rivolto all’interno')
+    }
+    await page.locator('.inspector').getByRole('button', { name: 'Confronta' }).click()
+  }
+
+  const tray = page.getByLabel('Confronto', { exact: true })
+  await expect(tray).toContainText('Introversione')
+  await expect(tray).toContainText('Estroversione')
+  await tray.getByRole('button', { name: 'Apri il confronto' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Confronto fra Concept' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('thead th').nth(1)).toHaveText('Introversione')
+  await expect(dialog.locator('thead th').nth(2)).toHaveText('Estroversione')
+
+  const aliasRow = dialog.locator('tbody tr').filter({ hasText: 'Alias' })
+  await expect(aliasRow.locator('td').first()).toContainText('Rivolto all’interno')
+  await expect(aliasRow.locator('td').nth(1)).toContainText('—')
+
+  const occurrenceRow = dialog.getByRole('row', { name: /^Occurrence/ })
+  await expect(occurrenceRow).toContainText('derivato dalle occurrence')
+})
