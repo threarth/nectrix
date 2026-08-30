@@ -5,12 +5,12 @@
 
 declare(strict_types=1);
 
-use Nectrix\ApiException;
-use Nectrix\Database;
-use Nectrix\DocumentPurgeService;
-use Nectrix\DocumentRepository;
-use Nectrix\KnowledgeRepository;
-use Nectrix\Migrator;
+use Chaorganix\ApiException;
+use Chaorganix\Database;
+use Chaorganix\DocumentPurgeService;
+use Chaorganix\DocumentRepository;
+use Chaorganix\KnowledgeRepository;
+use Chaorganix\Migrator;
 
 require dirname(__DIR__) . '/bootstrap.php';
 
@@ -72,7 +72,7 @@ if ($documentId === '') {
     exit(2);
 }
 
-$databasePath = is_string($options['db'] ?? null) ? $options['db'] : dirname(__DIR__, 2) . '/data/nectrix.sqlite';
+$databasePath = is_string($options['db'] ?? null) ? $options['db'] : dirname(__DIR__, 2) . '/data/chaorganix.sqlite';
 $backupDirectory = is_string($options['backup-dir'] ?? null) ? $options['backup-dir'] : dirname(__DIR__, 2) . '/data/backups';
 
 try {

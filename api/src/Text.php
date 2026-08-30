@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * String helpers that work without the mbstring extension, which is not always installed.

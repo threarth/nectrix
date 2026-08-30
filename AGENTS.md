@@ -86,7 +86,7 @@ Ogni bug editoriale deve avere un test regressivo. Non affidarsi al solo test ma
 
 ## Dipendenze e dati
 
-- Il codice originale di Nectrix è distribuito con licenza `AGPL-3.0-or-later`. I nuovi file sorgente devono riportare `SPDX-License-Identifier: AGPL-3.0-or-later` quando il formato consente commenti.
+- Il codice originale di Chaorganix è distribuito con licenza `AGPL-3.0-or-later`. I nuovi file sorgente devono riportare `SPDX-License-Identifier: AGPL-3.0-or-later` quando il formato consente commenti.
 - Aggiungere una dipendenza solo quando riduce concretamente rischio o complessità della fase corrente.
 - Usare esclusivamente dipendenze e servizi gratuiti, senza canoni, abbonamenti, licenze o funzionalità che richiedano pagamento. Un eventuale cambio di policy richiede prima una decisione esplicita del proprietario e l'aggiornamento di `THIRD_PARTY_LICENSES.md`; non può essere implicito nell'aggiunta di una dipendenza.
 - Prima di aggiungere o aggiornare una dipendenza, verificare la licenza alla fonte ufficiale, accertarne la compatibilità con il progetto e aggiornare `THIRD_PARTY_LICENSES.md` nello stesso intervento.

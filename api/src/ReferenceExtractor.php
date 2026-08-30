@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * Editorial references present in a Document. Each placement has its own referenceId, so the same

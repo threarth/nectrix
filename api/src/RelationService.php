@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * KnowledgeRelation: directed arcs declared by the user between Concept and Entity in any

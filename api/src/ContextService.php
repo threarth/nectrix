@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * Commands on the Context hierarchy. A Context organises fragments of text, not Document: it

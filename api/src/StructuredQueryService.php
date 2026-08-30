@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * Structured search over FieldValue, combinable with the editorial dimensions.

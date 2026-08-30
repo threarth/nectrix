@@ -131,6 +131,8 @@
   /** Grows when a deletion rewrote the open Document: the editor has to take the new content. */
   let editorReloadToken = $state(0)
   let trash = $state<TrashContents>({ knowledgeObjects: [], contexts: [] })
+  /** Grows at ogni richiesta della lista: una risposta arrivata in ritardo viene scartata. */
+  let documentsFetch = 0
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined
   /** Grows at every edit: tells whether the draft moved on while a save was in flight. */
   let draftVersion = 0
@@ -155,6 +157,16 @@
     void initialise()
   })
 
+  /**
+   * Reloads the document list discarding a late answer: with the automatic save, a list requested
+   * before a write could otherwise land after it and show the previous title.
+   */
+  async function reloadDocuments(): Promise<void> {
+    const ticket = ++documentsFetch
+    const list = await listDocuments(scope, selectedContextId, contextMode, selectedTagIds)
+    if (ticket === documentsFetch) documents = list
+  }
+
   async function withTemplates(operation: () => Promise<void>): Promise<void> {
     error = ''
     try {
@@ -173,7 +185,7 @@
       tags = await listTags()
       templates = await listTemplates()
       trash = await fetchTrash()
-      documents = await listDocuments(scope, selectedContextId, contextMode, selectedTagIds)
+      await reloadDocuments()
       if (documents.length > 0) {
         await openDocument(documents[0].id)
       }
@@ -229,7 +241,7 @@
   async function refreshFilters(): Promise<void> {
     error = ''
     try {
-      documents = await listDocuments(scope, selectedContextId, contextMode, selectedTagIds)
+      await reloadDocuments()
       contextObjects = selectedContextId === null && selectedTagIds.length === 0
         ? []
         : await derivedKnowledgeObjects(selectedContextId, contextMode, selectedTagIds)
@@ -397,6 +409,10 @@
   /** The Document lifecycle already has a trash: the × uses it, it does not invent a second one. */
   async function moveDocumentToTrash(documentId: string): Promise<void> {
     error = ''
+    if (selected?.id === documentId && autosaveTimer !== undefined) {
+      clearTimeout(autosaveTimer)
+      autosaveTimer = undefined
+    }
     try {
       await setDocumentLifecycle(documentId, 'trash')
       documents = documents.filter((document) => document.id !== documentId)
@@ -472,7 +488,7 @@
     scope = next
     error = ''
     try {
-      documents = await listDocuments(scope, selectedContextId, contextMode)
+      await reloadDocuments()
     } catch (cause) {
       showError(cause)
     }
@@ -481,12 +497,15 @@
   /** Archive, trash and restore are reversible and never touch content or occurrence. */
   async function changeLifecycle(action: 'archive' | 'trash' | 'restore'): Promise<void> {
     if (!selected || saving) return
+    // Un salvataggio automatico in attesa scriverebbe su un Document appena archiviato o cestinato.
+    if (autosaveTimer !== undefined) clearTimeout(autosaveTimer)
+    autosaveTimer = undefined
     if (dirty && !window.confirm('Le modifiche non salvate andranno perse. Continuare?')) return
     saving = true
     error = ''
     try {
       applyDocument(await setDocumentLifecycle(selected.id, action))
-      documents = await listDocuments(scope, selectedContextId, contextMode)
+      await reloadDocuments()
     } catch (cause) {
       showError(cause)
     } finally {
@@ -533,6 +552,8 @@
       if (draftVersion === version) applyDocument(saved)
       else adoptRevision(saved)
       if (rangesChanged) contexts = await listContexts()
+      // Il salvataggio ha l'ultima parola sulla lista: una richiesta piu vecchia non deve tornarci sopra.
+      documentsFetch += 1
       documents = [saved, ...documents.filter((document) => document.id !== saved.id)]
       await refreshInspector()
     } catch (cause) {
@@ -882,16 +903,16 @@
 </script>
 
 <svelte:head>
-  <meta name="description" content="Nectrix, documenti per lo studio e la conoscenza personale" />
+  <meta name="description" content="Chaorganix: Concept, Entity e Context sui frammenti per organizzare il caos degli appunti" />
 </svelte:head>
 
 <div class="app-frame" class:with-inspector={inspector !== null}>
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true">N</span>
+      <span class="brand-mark" aria-hidden="true">C</span>
       <div>
-        <strong>Nectrix</strong>
-        <small>Documenti di studio</small>
+        <strong>Chaorganix</strong>
+        <small>Organize the chaos of knowledge</small>
       </div>
     </div>
 

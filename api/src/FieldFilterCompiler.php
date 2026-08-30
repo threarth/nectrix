@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * Compiles one filter over field_values into a typed SQL condition and its bound parameters.

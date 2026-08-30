@@ -369,7 +369,7 @@ describe('invarianti delle KnowledgeOccurrence (FASE 4)', () => {
     editor.chain().setTextSelection(1).insertContent('«').run()
 
     expect(editor.state.doc.textContent).toBe('«Backlog!')
-    expect(editor.getHTML()).toContain('class="nectrix-knowledge-occurrence">Backlog</span>')
+    expect(editor.getHTML()).toContain('class="chaorganix-knowledge-occurrence">Backlog</span>')
     expect(occurrenceIdsOf(editor)).toEqual([OCCURRENCE_ID])
   })
 
@@ -539,7 +539,7 @@ describe('clipboard delle KnowledgeOccurrence (FASE 4)', () => {
     expect(new Set(ids).size).toBe(2)
   })
 
-  test('INV-OCC-11: senza formato clipboard Nectrix il cut/paste rigenera l’ID', () => {
+  test('INV-OCC-11: senza formato clipboard Chaorganix il cut/paste rigenera l’ID', () => {
     const { editor } = createClipboardEditor(documentWithOccurrence)
     editor.commands.setTextSelection({ from: 1, to: 8 })
     const cut = editor.state.selection.content()

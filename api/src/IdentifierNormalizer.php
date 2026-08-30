@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * INV-EID-05: every scheme declares a versioned normalisation and case-sensitivity policy.

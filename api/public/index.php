@@ -4,47 +4,47 @@
 
 declare(strict_types=1);
 
-use Nectrix\ApiException;
-use Nectrix\ContextOccurrenceExtractor;
-use Nectrix\DeletionService;
-use Nectrix\TrashService;
-use Nectrix\DocumentPruner;
-use Nectrix\ContextOccurrenceRepository;
-use Nectrix\ContextRepository;
-use Nectrix\ContextService;
-use Nectrix\Database;
-use Nectrix\DocumentRepository;
-use Nectrix\DocumentService;
-use Nectrix\DocumentValidator;
-use Nectrix\Migrator;
-use Nectrix\KnowledgeOccurrenceExtractor;
-use Nectrix\KnowledgeRepository;
-use Nectrix\KnowledgeService;
-use Nectrix\OccurrenceTextExtractor;
-use Nectrix\PlainTextExtractor;
-use Nectrix\ReferenceExtractor;
-use Nectrix\ReferenceRepository;
-use Nectrix\RelationRepository;
-use Nectrix\RelationService;
-use Nectrix\EvidenceRepository;
-use Nectrix\EvidenceService;
-use Nectrix\CompareRepository;
-use Nectrix\CompareService;
-use Nectrix\FieldFilterCompiler;
-use Nectrix\MatrixRepository;
-use Nectrix\MatrixService;
-use Nectrix\QueryService;
-use Nectrix\FieldValueValidator;
-use Nectrix\SearchRepository;
-use Nectrix\SearchService;
-use Nectrix\TagRepository;
-use Nectrix\TagService;
-use Nectrix\SemanticBlockRepository;
-use Nectrix\SemanticBlockService;
-use Nectrix\TemplateRepository;
-use Nectrix\TemplateService;
-use Nectrix\StructuredQueryRepository;
-use Nectrix\StructuredQueryService;
+use Chaorganix\ApiException;
+use Chaorganix\ContextOccurrenceExtractor;
+use Chaorganix\DeletionService;
+use Chaorganix\TrashService;
+use Chaorganix\DocumentPruner;
+use Chaorganix\ContextOccurrenceRepository;
+use Chaorganix\ContextRepository;
+use Chaorganix\ContextService;
+use Chaorganix\Database;
+use Chaorganix\DocumentRepository;
+use Chaorganix\DocumentService;
+use Chaorganix\DocumentValidator;
+use Chaorganix\Migrator;
+use Chaorganix\KnowledgeOccurrenceExtractor;
+use Chaorganix\KnowledgeRepository;
+use Chaorganix\KnowledgeService;
+use Chaorganix\OccurrenceTextExtractor;
+use Chaorganix\PlainTextExtractor;
+use Chaorganix\ReferenceExtractor;
+use Chaorganix\ReferenceRepository;
+use Chaorganix\RelationRepository;
+use Chaorganix\RelationService;
+use Chaorganix\EvidenceRepository;
+use Chaorganix\EvidenceService;
+use Chaorganix\CompareRepository;
+use Chaorganix\CompareService;
+use Chaorganix\FieldFilterCompiler;
+use Chaorganix\MatrixRepository;
+use Chaorganix\MatrixService;
+use Chaorganix\QueryService;
+use Chaorganix\FieldValueValidator;
+use Chaorganix\SearchRepository;
+use Chaorganix\SearchService;
+use Chaorganix\TagRepository;
+use Chaorganix\TagService;
+use Chaorganix\SemanticBlockRepository;
+use Chaorganix\SemanticBlockService;
+use Chaorganix\TemplateRepository;
+use Chaorganix\TemplateService;
+use Chaorganix\StructuredQueryRepository;
+use Chaorganix\StructuredQueryService;
 
 require dirname(__DIR__) . '/bootstrap.php';
 
@@ -78,7 +78,7 @@ function requestBody(): array
 }
 
 try {
-    $databasePath = getenv('NECTRIX_DB_PATH') ?: dirname(__DIR__, 2) . '/data/nectrix.sqlite';
+    $databasePath = getenv('CHAORGANIX_DB_PATH') ?: dirname(__DIR__, 2) . '/data/chaorganix.sqlite';
     $pdo = Database::connect($databasePath);
     (new Migrator($pdo, dirname(__DIR__) . '/migrations'))->migrate();
     $knowledgeRepository = new KnowledgeRepository($pdo);

@@ -1,6 +1,6 @@
 # Registro delle decisioni architetturali
 
-Questo documento è il registro unico delle decisioni trasversali di Nectrix. Le decisioni `adopted` sono vincolanti; quelle `scheduled` devono essere chiuse prima di iniziare la fase indicata. Una voce risolta non resta nell'elenco delle decisioni aperte.
+Questo documento è il registro unico delle decisioni trasversali di Chaorganix. Le decisioni `adopted` sono vincolanti; quelle `scheduled` devono essere chiuse prima di iniziare la fase indicata. Una voce risolta non resta nell'elenco delle decisioni aperte.
 
 ## Stati
 
@@ -98,7 +98,7 @@ Concept, Entity ed EntityType referenziati non vengono eliminati fisicamente dal
 
 **Stato:** `adopted` (chiude ADR-P15-01)
 
-La Knowledge Map della FASE 15 usa **Cytoscape.js** (MIT, 3.34.x, nessuna dipendenza runtime), non un renderer scritto in casa. La libreria porta layout, selezione, stile ed eventi; il codice di Nectrix resta quello che traduce KnowledgeObject e KnowledgeRelation in nodi e archi. Sigma.js — pari licenza e manutenzione — è stata scartata perché il suo vantaggio è il WebGL su decine di migliaia di nodi, una scala che Nectrix non prevede, al prezzo di graphology, di un pacchetto di layout separato e di più codice di integrazione.
+La Knowledge Map della FASE 15 usa **Cytoscape.js** (MIT, 3.34.x, nessuna dipendenza runtime), non un renderer scritto in casa. La libreria porta layout, selezione, stile ed eventi; il codice di Chaorganix resta quello che traduce KnowledgeObject e KnowledgeRelation in nodi e archi. Sigma.js — pari licenza e manutenzione — è stata scartata perché il suo vantaggio è il WebGL su decine di migliaia di nodi, una scala che Chaorganix non prevede, al prezzo di graphology, di un pacchetto di layout separato e di più codice di integrazione.
 
 Il vincolo di dominio resta quello della roadmap: nodi principali soltanto KnowledgeObject, archi soltanto KnowledgeRelation dichiarate; SemanticBlock, TemplateField, FieldValue, Context, Tag e KnowledgeOccurrence non diventano nodi, e Context e Tag restano filtri, grouping e coloring. Un cambio di libreria richiederebbe una nuova decisione.
 

@@ -2,7 +2,7 @@
 
 ## 1. Obiettivi e confini
 
-Nectrix è un'applicazione locale-first a singolo utente. L'editor deve rimanere simile a un normale word processor; la struttura semantica viene aggiunta esplicitamente e non deve interrompere la scrittura.
+Chaorganix è un'applicazione locale-first a singolo utente. L'editor deve rimanere simile a un normale word processor; la struttura semantica viene aggiunta esplicitamente e non deve interrompere la scrittura.
 
 L'architettura iniziale è un monolite modulare:
 
@@ -32,7 +32,7 @@ data/                database locale escluso da Git
 docs/                contratti eseguibili documentati
 ```
 
-L'API espone nella FASE 1 health, list, create, get e update di Document. `PUT` richiede `baseRevision`; non esiste ancora un endpoint di cancellazione. Il database predefinito è `data/nectrix.sqlite`, sostituibile tramite `NECTRIX_DB_PATH`. Il runner PHP è intenzionalmente dependency-free; Vitest copre lo schema editoriale reale nel DOM simulato.
+L'API espone nella FASE 1 health, list, create, get e update di Document. `PUT` richiede `baseRevision`; non esiste ancora un endpoint di cancellazione. Il database predefinito è `data/chaorganix.sqlite`, sostituibile tramite `CHAORGANIX_DB_PATH`. Il runner PHP è intenzionalmente dependency-free; Vitest copre lo schema editoriale reale nel DOM simulato.
 
 Dalla FASE 7 gli inspector espongono anche ConceptAlias ed EntityIdentifier, aggiunti e rimossi solo con comandi espliciti. La normalizzazione degli identificatori è dichiarata per scheme e versionata: la versione applicata viene salvata sul record, così un cambio futuro di policy è riconoscibile e ri-normalizzabile senza indovinare.
 
@@ -178,13 +178,13 @@ La verifica usa l'endpoint di sola lettura `GET /api/knowledge-objects?ids=…`,
 La preferenza “cut/paste nello stesso documento mantiene l'ID” è realizzabile solo quando il client può provare che si tratta dello stesso taglio. La decisione è:
 
 1. al cut interno, generare un nonce casuale one-shot e registrare in memoria documento, revisione editoriale, occurrence coinvolte e impronta del payload;
-2. inserire il nonce anche in un formato clipboard custom Nectrix; il solo HTML non prova un cut;
+2. inserire il nonce anche in un formato clipboard custom Chaorganix; il solo HTML non prova un cut;
 3. al paste nello stesso documento, mantenere gli ID solo se nonce e payload corrispondono, il token non è già stato consumato, gli originali non sono più presenti e ogni ID produce un unico intervallo;
 4. consumare il token al primo paste riuscito e invalidarlo su nuovo copy/cut, reload o distruzione dell'editor;
 5. tra Document, senza formato custom, con token scaduto oppure in qualsiasi caso ambiguo, trattare l'operazione come copy/paste e generare nuovi ID;
 6. se un ID risulta ancora presente, generare sempre un nuovo ID per evitare duplicati.
 
-Il formato clipboard custom è `application/x-nectrix-slice` e trasporta `nonce`, `documentId` e impronta del payload. L'impronta è calcolata soltanto su ciò che sopravvive al round trip del clipboard, cioè testo visibile della slice e occurrenceId ordinati, così il confronto resta valido dopo la serializzazione in HTML. Il token in memoria conserva inoltre gli occurrenceId tagliati e viene consumato al primo paste valido.
+Il formato clipboard custom è `application/x-chaorganix-slice` e trasporta `nonce`, `documentId` e impronta del payload. L'impronta è calcolata soltanto su ciò che sopravvive al round trip del clipboard, cioè testo visibile della slice e occurrenceId ordinati, così il confronto resta valido dopo la serializzazione in HTML. Il token in memoria conserva inoltre gli occurrenceId tagliati e viene consumato al primo paste valido.
 
 Il token non è persistenza di dominio e scade con la sessione editoriale. Questa policy privilegia la coerenza rispetto alla conservazione dell'identità nei casi non dimostrabili.
 
@@ -320,7 +320,7 @@ La provenienza è separata in tre livelli:
 ```text
 Source          opera o risorsa (es. un libro)
 SourceLocator   punto nella fonte (es. capitolo 4, pagina 122)
-Association     dove Nectrix usa quella fonte
+Association     dove Chaorganix usa quella fonte
 ```
 
 Un collegamento all'intero Document usa `DocumentSource`. Un collegamento a una parte del testo usa un `SourceAnchor` persistente rappresentato nel documento da:
@@ -368,7 +368,7 @@ Il file binario non viene incorporato come base64 nel `document_json`. Viene con
 
 La prima versione accetta PNG, JPEG e WebP dopo verifica del contenuto reale, applica limiti configurabili di byte e pixel e non accetta SVG attivi. Eliminare un nodo immagine non elimina immediatamente l'Asset: l'asset non più referenziato diventa candidato a garbage collection dopo un periodo di retention. Undo deve poterlo ripristinare.
 
-Copiare un'immagine già presente in Nectrix può riusare lo stesso `assetId`, perché un Asset è una risorsa immutabile condivisibile e non un'occurrence. Incollare o caricare un nuovo file crea invece un nuovo Asset. Un'immagine può successivamente essere collegata a una Source/figura senza fondere `Asset` (file) e `Source` (provenienza).
+Copiare un'immagine già presente in Chaorganix può riusare lo stesso `assetId`, perché un Asset è una risorsa immutabile condivisibile e non un'occurrence. Incollare o caricare un nuovo file crea invece un nuovo Asset. Un'immagine può successivamente essere collegata a una Source/figura senza fondere `Asset` (file) e `Source` (provenienza).
 
 Associazioni dedicate possono inoltre collegare Asset a KnowledgeObject, SemanticBlock, FieldValue e SourceLocator. Il collegamento non trasforma il file in Entity, dato strutturato o evidence e non modifica il lifecycle del binario.
 

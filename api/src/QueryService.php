@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * Combines the dimensions that select Document. The Tag classifies the container, the Context marks

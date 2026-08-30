@@ -8,7 +8,7 @@ import { isUuidV7 } from './uuid'
 export const OCCURRENCE_MARK_NAME = 'knowledgeOccurrence'
 
 /** Custom clipboard format: only this proves an internal cut, plain HTML never does. */
-export const CUT_CLIPBOARD_FORMAT = 'application/x-nectrix-slice'
+export const CUT_CLIPBOARD_FORMAT = 'application/x-chaorganix-slice'
 
 export type KnowledgeObjectType = 'concept' | 'entity'
 
@@ -232,7 +232,7 @@ export function parseCutClipboardPayload(raw: string | null): CutClipboardPayloa
     if (typeof payload.fingerprint !== 'string') return null
     return { nonce: payload.nonce, documentId: payload.documentId, fingerprint: payload.fingerprint }
   } catch (cause) {
-    console.warn('Formato clipboard Nectrix non leggibile, il paste userà nuovi ID.', cause)
+    console.warn('Formato clipboard Chaorganix non leggibile, il paste userà nuovi ID.', cause)
     return null
   }
 }

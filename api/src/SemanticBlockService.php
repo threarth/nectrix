@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * SemanticBlock of an Entity and their typed values. Writing a value never creates the Concept or

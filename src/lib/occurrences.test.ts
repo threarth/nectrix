@@ -188,7 +188,7 @@ describe('policy prudente di cut/paste', () => {
     expect(canKeepCutOccurrenceIds(check())).toBe(true)
   })
 
-  test('rigenera gli ID senza formato clipboard Nectrix', () => {
+  test('rigenera gli ID senza formato clipboard Chaorganix', () => {
     expect(canKeepCutOccurrenceIds(check({ payload: null }))).toBe(false)
   })
 

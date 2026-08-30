@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * Matrices KnowledgeObject x Context. The columns are the Context, the rows are the subject of the

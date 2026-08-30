@@ -2,7 +2,7 @@
 
 ## Policy
 
-Nectrix rispetta le condizioni di tutte le licenze applicabili e usa esclusivamente dipendenze e servizi gratuiti. Non sono ammessi canoni, abbonamenti, licenze o piani hosted che richiedano pagamento, né funzionalità a pagamento. Un eventuale cambio di questa policy richiede prima una decisione esplicita del proprietario e l'aggiornamento di questo documento; non può essere implicito nell'aggiunta di una dipendenza.
+Chaorganix rispetta le condizioni di tutte le licenze applicabili e usa esclusivamente dipendenze e servizi gratuiti. Non sono ammessi canoni, abbonamenti, licenze o piani hosted che richiedano pagamento, né funzionalità a pagamento. Un eventuale cambio di questa policy richiede prima una decisione esplicita del proprietario e l'aggiornamento di questo documento; non può essere implicito nell'aggiunta di una dipendenza.
 
 Prima di introdurre o aggiornare una dipendenza occorre:
 

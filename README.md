@@ -1,6 +1,6 @@
-# Nectrix
+# Chaorganix
 
-Nectrix è un sistema personale di organizzazione della conoscenza centrato su testo libero e struttura progressiva:
+Chaorganix è un sistema personale di organizzazione della conoscenza centrato su testo libero e struttura progressiva:
 
 > Scrivere normalmente → strutturare solo quando serve → rendere tutto ricercabile e collegabile.
 
@@ -45,7 +45,7 @@ Il progetto usa esclusivamente componenti e servizi gratuiti. Ogni dipendenza ef
 
 ## Licenza
 
-Nectrix è software libero distribuito secondo la [GNU Affero General Public License, versione 3 o successiva](LICENSE) (`AGPL-3.0-or-later`). Chi distribuisce una versione modificata o la rende disponibile agli utenti attraverso una rete deve offrire anche il relativo codice sorgente secondo i termini della licenza.
+Chaorganix è software libero distribuito secondo la [GNU Affero General Public License, versione 3 o successiva](LICENSE) (`AGPL-3.0-or-later`). Chi distribuisce una versione modificata o la rende disponibile agli utenti attraverso una rete deve offrire anche il relativo codice sorgente secondo i termini della licenza.
 
 ## Avvio locale
 
@@ -62,7 +62,7 @@ In un secondo terminale:
 npm run dev
 ```
 
-L'interfaccia è disponibile su `http://127.0.0.1:5173`; Vite inoltra `/api` a `http://127.0.0.1:8080`. Il database applicativo viene creato in `data/nectrix.sqlite` ed è escluso da Git. Il percorso può essere sostituito con la variabile `NECTRIX_DB_PATH` per test o installazioni locali differenti.
+L'interfaccia è disponibile su `http://127.0.0.1:5173`; Vite inoltra `/api` a `http://127.0.0.1:8080`. Il database applicativo viene creato in `data/chaorganix.sqlite` ed è escluso da Git. Il percorso può essere sostituito con la variabile `CHAORGANIX_DB_PATH` per test o installazioni locali differenti.
 
 Il purge fisico di un Document è manutenzione esplicita, non un comando dell'interfaccia. Mostra sempre prima l'impatto e agisce solo con `--apply`, su un Document nel cestino, scrivendo un backup:
 

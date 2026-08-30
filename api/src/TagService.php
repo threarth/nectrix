@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * Commands on Tag and on their assignment to Document. A Tag is a dimension of its own: it never

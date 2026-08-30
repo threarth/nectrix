@@ -84,7 +84,7 @@ const Highlight = Mark.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['mark', { ...HTMLAttributes, class: 'nectrix-highlight' }, 0]
+    return ['mark', { ...HTMLAttributes, class: 'chaorganix-highlight' }, 0]
   },
 })
 
@@ -146,7 +146,7 @@ const ContextOccurrence = Mark.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['span', { ...HTMLAttributes, class: 'nectrix-context-occurrence' }, 0]
+    return ['span', { ...HTMLAttributes, class: 'chaorganix-context-occurrence' }, 0]
   },
 })
 
@@ -178,7 +178,7 @@ const KnowledgeOccurrence = Mark.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['span', { ...HTMLAttributes, class: 'nectrix-knowledge-occurrence' }, 0]
+    return ['span', { ...HTMLAttributes, class: 'chaorganix-knowledge-occurrence' }, 0]
   },
 })
 
@@ -290,7 +290,7 @@ function referenceNode(name: keyof typeof REFERENCE_ATTRIBUTES) {
     },
 
     renderHTML({ HTMLAttributes }) {
-      return ['span', { ...HTMLAttributes, 'data-reference-kind': name, class: `nectrix-reference nectrix-${name}` }]
+      return ['span', { ...HTMLAttributes, 'data-reference-kind': name, class: `chaorganix-reference chaorganix-${name}` }]
     },
   })
 }
@@ -338,7 +338,7 @@ function uniqueByOccurrenceId(occurrences: OccurrenceAttributes[]): OccurrenceAt
 
 /**
  * Clipboard memory of one editor: the last internal cut and the proof read from the last paste.
- * A copy always produces new IDs, only a cut proved by the custom Nectrix format inside the same
+ * A copy always produces new IDs, only a cut proved by the custom Chaorganix format inside the same
  * Document can keep them, and every ambiguous case falls back to new IDs.
  */
 class OccurrenceClipboard {
@@ -716,7 +716,7 @@ function startBoundaryDrag(view: EditorView, side: 'start' | 'end', event: Point
 
 function boundaryHandle(view: EditorView, side: 'start' | 'end'): HTMLElement {
   const handle = document.createElement('span')
-  handle.className = `nectrix-occurrence-handle nectrix-occurrence-handle-${side}`
+  handle.className = `chaorganix-occurrence-handle chaorganix-occurrence-handle-${side}`
   handle.contentEditable = 'false'
   handle.setAttribute('role', 'button')
   handle.setAttribute('aria-label', occurrenceHandleStrings[side])

@@ -8,7 +8,7 @@ test('crea un Concept da selezione e lo conserva dopo save/reload', async ({ pag
   await createConceptFrom(page, 'Backlog', 'Backlog')
   await save(page)
   await page.reload()
-  await expect(page.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
+  await expect(page.locator('.chaorganix-knowledge-occurrence')).toHaveText('Backlog')
 })
 
 test('crea una Entity con EntityType da selezione e la conserva dopo save/reload', async ({ page }) => {
@@ -17,7 +17,7 @@ test('crea una Entity con EntityType da selezione e la conserva dopo save/reload
   await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab USA', 'Company')
   await save(page)
   await page.reload()
-  await expect(page.locator('.nectrix-knowledge-occurrence')).toHaveText('Rocket Lab')
+  await expect(page.locator('.chaorganix-knowledge-occurrence')).toHaveText('Rocket Lab')
 })
 
 /**
@@ -57,10 +57,16 @@ async function markContext(page: Page, name: string, parent?: string): Promise<v
   await page.locator('.tiptap').press('Control+A')
   await toolbarButton(page, 'Segna Context').click()
   const dialog = page.getByRole('dialog', { name: 'Segna un Context' })
-  if (parent !== undefined) await dialog.getByRole('radio', { name: parent }).check()
-  await dialog.getByLabel('Nuovo Context').fill(name)
-  await dialog.getByRole('button', { name: 'Crea', exact: true }).click()
-  await expect(dialog.getByRole('radio', { name: new RegExp(name) })).toBeChecked()
+  const choice = dialog.getByRole('radio', { name: new RegExp(name) })
+
+  // Il Context puo' esistere gia': in quel caso si sceglie, non si ricrea.
+  if (await choice.count() === 0) {
+    if (parent !== undefined) await dialog.getByRole('radio', { name: new RegExp(parent) }).first().check()
+    await dialog.getByLabel('Nuovo Context').fill(name)
+    await dialog.getByRole('button', { name: 'Crea', exact: true }).click()
+  }
+  await choice.first().check()
+  await expect(choice.first()).toBeChecked()
   await dialog.getByRole('button', { name: 'Segna', exact: true }).click()
   await save(page)
 }
@@ -76,7 +82,7 @@ async function unmarkContexts(page: Page): Promise<void> {
 
 /** Drags the closing handle of the occurrence to the right, extending its range. */
 async function dragEndHandle(page: Page): Promise<void> {
-  const handle = page.locator('.nectrix-occurrence-handle-end')
+  const handle = page.locator('.chaorganix-occurrence-handle-end')
   await expect(handle).toBeVisible()
   const box = await expect.poll(() => handle.boundingBox()).not.toBeNull().then(() => handle.boundingBox())
   if (box === null) throw new Error('Maniglia non visibile.')
@@ -101,12 +107,12 @@ async function conceptWithTail(page: Page): Promise<void> {
   const dialog = page.getByRole('dialog', { name: 'Nuovo Concept' })
   await dialog.getByLabel('Nome del Concept').fill('Backlog')
   await dialog.getByRole('button', { name: 'Crea Concept' }).click()
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
+  await expect(editor.locator('.chaorganix-knowledge-occurrence')).toHaveText('Backlog')
 
   await editor.press('ArrowRight')
   await page.keyboard.type(' utile')
   await expect(editor).toHaveText('Backlog utile')
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
+  await expect(editor.locator('.chaorganix-knowledge-occurrence')).toHaveText('Backlog')
 
   await save(page)
 }
@@ -124,7 +130,7 @@ function toolbarButton(page: Page, name: string) {
 
 /** Occurrence IDs currently rendered in the editor, in document order. */
 async function occurrenceIds(page: Page): Promise<(string | null)[]> {
-  return page.locator('.tiptap .nectrix-knowledge-occurrence').evaluateAll((nodes) =>
+  return page.locator('.tiptap .chaorganix-knowledge-occurrence').evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute('data-occurrence-id')))
 }
 
@@ -139,7 +145,7 @@ async function createConceptFrom(page: Page, text: string, name: string): Promis
   const dialog = page.getByRole('dialog', { name: 'Nuovo Concept' })
   await dialog.getByLabel('Nome del Concept').fill(name)
   await dialog.getByRole('button', { name: 'Crea Concept' }).click()
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText(text)
+  await expect(editor.locator('.chaorganix-knowledge-occurrence')).toHaveText(text)
 }
 
 /** Creates an Entity from the whole content of the editor. */
@@ -155,7 +161,7 @@ async function createEntityFrom(page: Page, text: string, name: string, entityTy
   await dialog.getByLabel('Nome della Entity').fill(name)
   await dialog.getByLabel('Nome del nuovo EntityType').fill(entityType)
   await dialog.getByRole('button', { name: 'Crea Entity' }).click()
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText(text)
+  await expect(editor.locator('.chaorganix-knowledge-occurrence')).toHaveText(text)
 }
 
 test('INV-OCC-10: il copy/paste crea una seconda occurrence con ID nuovo e stesso Concept', async ({ page }) => {
@@ -170,15 +176,15 @@ test('INV-OCC-10: il copy/paste crea una seconda occurrence con ID nuovo e stess
   await expect(page.locator('.tiptap')).toContainText('Backlog e')
   await page.keyboard.press('Control+V')
 
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(2)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(2)
   await save(page)
   await page.reload()
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(2)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(2)
 
   const ids = await occurrenceIds(page)
   expect(ids).toHaveLength(2)
   expect(new Set(ids).size).toBe(2)
-  const objectIds = await page.locator('.tiptap .nectrix-knowledge-occurrence').evaluateAll((nodes) =>
+  const objectIds = await page.locator('.tiptap .chaorganix-knowledge-occurrence').evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute('data-knowledge-object-id')))
   expect(new Set(objectIds).size).toBe(1)
 })
@@ -193,13 +199,13 @@ test('INV-OCC-11: il cut/paste nello stesso documento conserva l’occurrenceId'
 
   await page.locator('.tiptap').press('Control+A')
   await page.keyboard.press('Control+X')
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(0)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(0)
   await page.keyboard.press('Control+V')
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(1)
 
   await save(page)
   await page.reload()
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(1)
 
   expect(await occurrenceIds(page)).toEqual([before])
 })
@@ -210,7 +216,7 @@ test('INV-OCC-09: undo della creazione non lascia una creazione fantasma al salv
   await createConceptFrom(page, 'Provvisorio', 'Provvisorio')
 
   await page.locator('.tiptap').press('Control+Z')
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(0)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(0)
 
   await save(page)
   await expect(page.getByRole('alert')).toHaveCount(0)
@@ -230,16 +236,16 @@ test('INV-OCC-08 e INV-OCC-09: l’occurrence salvata torna attiva dopo cancella
 
   await page.locator('.tiptap').press('Control+A')
   await page.keyboard.press('Delete')
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(0)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(0)
   await save(page)
 
   await page.locator('.tiptap').press('Control+Z')
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(1)
   await save(page)
   await expect(page.getByRole('alert')).toHaveCount(0)
 
   await page.reload()
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(1)
   expect(await occurrenceIds(page)).toEqual([before])
 })
 
@@ -253,17 +259,17 @@ test('INV-OCC-09: un Concept creato, cancellato e ripristinato con undo viene cr
   await save(page)
 
   await page.locator('.tiptap').press('Control+Z')
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(1)
   await save(page)
   await expect(page.getByRole('alert')).toHaveCount(0)
 
   await page.reload()
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Mai salvato')
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveText('Mai salvato')
 })
 
 /** Opens the inspector of the occurrence currently in the document. */
 async function openInspectorFromOccurrence(page: Page, label: string): Promise<void> {
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').first().click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').first().click()
   await page.getByRole('button', { name: label }).click()
   await expect(page.locator('.inspector')).toBeVisible()
 }
@@ -297,7 +303,7 @@ test('FASE 6: archive e restore di un Concept cambiano solo lo stato', async ({ 
 
   await inspector.getByRole('button', { name: 'Ripristina', exact: true }).click()
   await expect(inspector.locator('.inspector-status')).toContainText('attivo')
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(1)
 })
 
 test('FASE 6: il popover di una Entity apre l’Entity Inspector con il suo EntityType', async ({ page }) => {
@@ -334,7 +340,7 @@ test('FASE 6.1: archiviare un Document lo rende in sola lettura e lo toglie dagl
   await expect(page.getByRole('toolbar')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Salva' })).toHaveCount(0)
   await expect(page.locator('.tiptap')).toHaveAttribute('contenteditable', 'false')
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(1)
 
   await expect(page.locator('.sidebar nav')).not.toContainText(title)
   await page.getByRole('button', { name: 'Archiviati' }).click()
@@ -363,7 +369,7 @@ test('FASE 6.1: il cestino è una vista di recupero e non elimina nulla', async 
   await expect(page.locator('.sidebar nav')).not.toContainText(title)
 
   await page.getByRole('button', { name: 'Ripristina', exact: true }).click()
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Cestinato')
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveText('Cestinato')
   await expect(page.getByRole('button', { name: 'Salva' })).toBeVisible()
 })
 
@@ -386,10 +392,10 @@ test('la dialog di associazione cerca e collega un Concept esistente a un altro 
   await expect(dialog.getByText('Metodo scientifico')).toBeVisible()
   await dialog.getByRole('button', { name: 'Associa', exact: true }).click()
 
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Qui parlo del metodo')
+  await expect(editor.locator('.chaorganix-knowledge-occurrence')).toHaveText('Qui parlo del metodo')
   await save(page)
 
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
   await expect(page.locator('.inspector-name')).toHaveText('Metodo scientifico')
   await expect(page.locator('.inspector-occurrences li')).toHaveCount(2)
@@ -401,7 +407,7 @@ test('FASE 7: gli alias di un Concept si aggiungono e si rimuovono senza toccare
   await createConceptFrom(page, 'Metodo', 'Metodo scientifico')
   await save(page)
 
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
   const inspector = page.locator('.inspector')
 
@@ -420,7 +426,7 @@ test('FASE 7: un identificatore duplicato su un’altra Entity produce un candid
   await newDocument(page)
   await createEntityFrom(page, 'Prima', 'Prima società', 'Azienda')
   await save(page)
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Entity' }).click()
 
   const inspector = page.locator('.inspector')
@@ -433,7 +439,7 @@ test('FASE 7: un identificatore duplicato su un’altra Entity produce un candid
   await newDocument(page)
   await createEntityFrom(page, 'Seconda', 'Seconda società', 'Azienda')
   await save(page)
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Entity' }).click()
 
   await inspector.getByLabel('Scheme').fill('lei')
@@ -451,15 +457,15 @@ test('le maniglie correggono il confine dell’occurrence mantenendo lo stesso I
   await conceptWithTail(page)
   const [before] = await occurrenceIds(page)
 
-  await editor.locator('.nectrix-knowledge-occurrence').click()
+  await editor.locator('.chaorganix-knowledge-occurrence').click()
   await dragEndHandle(page)
 
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog utile')
+  await expect(editor.locator('.chaorganix-knowledge-occurrence')).toHaveText('Backlog utile')
   expect(await occurrenceIds(page)).toEqual([before])
 
   await save(page)
   await page.reload()
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Backlog utile')
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveText('Backlog utile')
   expect(await occurrenceIds(page)).toEqual([before])
 })
 
@@ -469,9 +475,9 @@ test('il pannello mostra il confine corretto subito dopo il trascinamento, prima
   const editor = page.locator('.tiptap')
   await conceptWithTail(page)
 
-  await editor.locator('.nectrix-knowledge-occurrence').click()
+  await editor.locator('.chaorganix-knowledge-occurrence').click()
   await dragEndHandle(page)
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog utile')
+  await expect(editor.locator('.chaorganix-knowledge-occurrence')).toHaveText('Backlog utile')
 
   await page.getByRole('button', { name: 'Apri Concept' }).click()
   const occurrence = page.locator('.inspector-occurrences .occurrence-text').first()
@@ -501,15 +507,15 @@ test('la barra dei comandi compare sulla selezione e crea il Concept senza passa
   await dialog.getByLabel('Nome del Concept').fill('Scienza')
   await dialog.getByRole('button', { name: 'Crea Concept' }).click()
 
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(editor.locator('.chaorganix-knowledge-occurrence')).toHaveCount(1)
   await save(page)
   await page.reload()
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(1)
 })
 
 /** Computed background of the first occurrence and of the element painted behind it. */
 async function occurrenceColours(page: Page): Promise<{ background: string; behind: string | null }> {
-  return page.locator('.tiptap .nectrix-knowledge-occurrence').first().evaluate((node) => {
+  return page.locator('.tiptap .chaorganix-knowledge-occurrence').first().evaluate((node) => {
     const parent = node.parentElement
     return {
       background: window.getComputedStyle(node).backgroundColor,
@@ -559,7 +565,7 @@ test('un Concept resta visibile anche sopra una evidenziazione già salvata', as
   expect(saved.ok()).toBe(true)
 
   await page.goto('/')
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('rchetipi')
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveText('rchetipi')
 
   const colours = await occurrenceColours(page)
   expect(colours.behind).toBe('rgb(246, 221, 121)')
@@ -578,7 +584,7 @@ test('creare un Concept toglie l’evidenziazione dal suo intervallo', async ({ 
 
   await editor.press('Control+A')
   await toolbarButton(page, 'Evidenzia').click()
-  await expect(editor.locator('mark.nectrix-highlight')).toHaveCount(1)
+  await expect(editor.locator('mark.chaorganix-highlight')).toHaveCount(1)
 
   await editor.press('Control+A')
   await toolbarButton(page, 'Crea Concept').click()
@@ -586,8 +592,8 @@ test('creare un Concept toglie l’evidenziazione dal suo intervallo', async ({ 
   await dialog.getByLabel('Nome del Concept').fill('Senza evidenziazione')
   await dialog.getByRole('button', { name: 'Crea Concept' }).click()
 
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveCount(1)
-  await expect(editor.locator('mark.nectrix-highlight')).toHaveCount(0)
+  await expect(editor.locator('.chaorganix-knowledge-occurrence')).toHaveCount(1)
+  await expect(editor.locator('mark.chaorganix-highlight')).toHaveCount(0)
   await expect(toolbarButton(page, 'Evidenzia')).toBeDisabled()
 })
 
@@ -600,10 +606,10 @@ test('evidenziare un paragrafo che contiene un Concept lascia il Concept intatto
   await editor.press('Control+A')
   await toolbarButton(page, 'Evidenzia').click()
 
-  await expect(editor.locator('mark.nectrix-highlight')).toHaveText(' utile')
-  await expect(editor.locator('.nectrix-knowledge-occurrence')).toHaveText('Backlog')
-  await expect(editor.locator('.nectrix-knowledge-occurrence mark.nectrix-highlight')).toHaveCount(0)
-  await expect(editor.locator('mark.nectrix-highlight .nectrix-knowledge-occurrence')).toHaveCount(0)
+  await expect(editor.locator('mark.chaorganix-highlight')).toHaveText(' utile')
+  await expect(editor.locator('.chaorganix-knowledge-occurrence')).toHaveText('Backlog')
+  await expect(editor.locator('.chaorganix-knowledge-occurrence mark.chaorganix-highlight')).toHaveCount(0)
+  await expect(editor.locator('mark.chaorganix-highlight .chaorganix-knowledge-occurrence')).toHaveCount(0)
 })
 
 test('Concept ed Entity si distinguono a colpo d’occhio', async ({ page }) => {
@@ -628,7 +634,7 @@ test('CRUD: rinominare un Concept dall’inspector non tocca occurrence e alias'
   await createConceptFrom(page, 'Bozza', 'Nome provvisorio')
   await save(page)
 
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
   const inspector = page.locator('.inspector')
   await page.getByLabel('Aggiungi alias').fill('Alias stabile')
@@ -644,7 +650,7 @@ test('CRUD: rinominare un Concept dall’inspector non tocca occurrence e alias'
   await expect(inspector.locator('.inspector-fields dd').first()).toHaveText('Spiegazione breve.')
   await expect(inspector.locator('.inspector-occurrences li')).toHaveCount(1)
   await expect(inspector.locator('.inspector-list li')).toContainText('Alias stabile')
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveText('Bozza')
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveText('Bozza')
 })
 
 test('FASE 8: il Context marcato sul testo filtra i documenti e ne deriva Concept ed Entity', async ({ page }) => {
@@ -698,7 +704,7 @@ test('FASE 14.2: il Context si cestina con due pressioni e si elimina davvero da
   const trash = page.getByLabel('Cestino della conoscenza', { exact: true })
   await expect(trash).toContainText('Context eliminabile')
   await expect(trash).toContainText('1 frammento marcato')
-  await expect(page.locator('.nectrix-context-occurrence')).toHaveCount(1)
+  await expect(page.locator('.chaorganix-context-occurrence')).toHaveCount(1)
 
   await trash.getByRole('button', { name: 'Ripristina' }).click()
   await expect(contextRow(page, 'Context eliminabile')).toHaveCount(1)
@@ -709,7 +715,7 @@ test('FASE 14.2: il Context si cestina con due pressioni e si elimina davvero da
 
   await expect(trash).toContainText('Cestino vuoto')
   await expect(page.locator('.tiptap')).toContainText('Parole che restano dopo la cancellazione')
-  await expect(page.locator('.nectrix-context-occurrence')).toHaveCount(0)
+  await expect(page.locator('.chaorganix-context-occurrence')).toHaveCount(0)
 })
 
 test('FASE 9: i Tag filtrano i documenti e restano separati dai Concept', async ({ page }) => {
@@ -776,7 +782,7 @@ test('FASE 10: la ricerca distingue testo, alias e identità', async ({ page }) 
   await save(page)
 
   // Un alias che non compare nel testo del documento.
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
   await page.getByLabel('Aggiungi alias').fill('Individuazione junghiana')
   await page.locator('.inspector').getByRole('button', { name: 'Aggiungi alias' }).click()
@@ -855,7 +861,7 @@ test('FASE 10.1: un Template si applica a una Entity e i valori restano tipizzat
   await newDocument(page)
   await createEntityFrom(page, 'Rocket Lab', 'Rocket Lab USA', 'Azienda')
   await save(page)
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Entity' }).click()
 
   const structured = page.getByLabel('Dati strutturati')
@@ -868,7 +874,7 @@ test('FASE 10.1: un Template si applica a una Entity e i valori restano tipizzat
 
   // I valori sono persistiti: sopravvivono a un ricaricamento completo.
   await page.reload()
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Entity' }).click()
   const reopened = page.getByLabel('Dati strutturati')
   await expect(reopened.getByLabel('Dipendenti')).toHaveValue('1800')
@@ -896,17 +902,17 @@ test('FASE 10.1.1: un riferimento mostra la destinazione senza copiarla nel docu
   await expect(dialog.getByText('Rocket Lab riferimento')).toBeVisible()
   await dialog.getByRole('button', { name: 'Inserisci' }).click()
 
-  const reference = editor.locator('.nectrix-reference')
+  const reference = editor.locator('.chaorganix-reference')
   await expect(reference).toHaveCount(1)
   await expect(reference).toHaveAttribute('data-label', 'Rocket Lab riferimento')
 
   // Il contenuto salvato porta solo gli ID: il nome non compare nel documento.
   await save(page)
   await page.reload()
-  await expect(page.locator('.tiptap .nectrix-reference')).toHaveAttribute('data-label', 'Rocket Lab riferimento')
+  await expect(page.locator('.tiptap .chaorganix-reference')).toHaveAttribute('data-label', 'Rocket Lab riferimento')
   await expect(page.locator('.tiptap')).toHaveText('Vedi anche ')
 
-  const attributes = await page.locator('.tiptap .nectrix-reference').evaluate((node) =>
+  const attributes = await page.locator('.tiptap .chaorganix-reference').evaluate((node) =>
     Array.from(node.attributes).map((attribute) => attribute.name).sort())
   expect(attributes).toContain('data-reference-id')
   expect(attributes).toContain('data-entity-id')
@@ -928,18 +934,18 @@ test('FASE 10.1.1: copiare un riferimento genera una nuova collocazione, stessa 
   await dialog.getByRole('button', { name: 'Cerca', exact: true }).click()
   await expect(dialog.getByText('Electron vettore')).toBeVisible()
   await dialog.getByRole('button', { name: 'Inserisci' }).click()
-  await expect(editor.locator('.nectrix-reference')).toHaveCount(1)
+  await expect(editor.locator('.chaorganix-reference')).toHaveCount(1)
 
-  const before = await editor.locator('.nectrix-reference').getAttribute('data-reference-id')
+  const before = await editor.locator('.chaorganix-reference').getAttribute('data-reference-id')
   await editor.press('Control+A')
   await page.keyboard.press('Control+C')
   await page.keyboard.press('ArrowRight')
   await page.keyboard.press('Control+V')
 
-  await expect(editor.locator('.nectrix-reference')).toHaveCount(2)
-  const ids = await editor.locator('.nectrix-reference').evaluateAll((nodes) =>
+  await expect(editor.locator('.chaorganix-reference')).toHaveCount(2)
+  const ids = await editor.locator('.chaorganix-reference').evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute('data-reference-id')))
-  const destinations = await editor.locator('.nectrix-reference').evaluateAll((nodes) =>
+  const destinations = await editor.locator('.chaorganix-reference').evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute('data-entity-id')))
   expect(new Set(ids).size).toBe(2)
   expect(ids).toContain(before)
@@ -967,7 +973,7 @@ test('FASE 10.2: la ricerca strutturata confronta i numeri come numeri', async (
     await createEntityFrom(page, entity, entity, 'Azienda numerica')
     await save(page)
     await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
-    await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+    await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
     await page.getByRole('button', { name: 'Apri Entity' }).click()
     const structured = page.getByLabel('Dati strutturati')
     await structured.getByLabel('Applica un Template').selectOption({ label: 'Scheda numerica' })
@@ -1014,7 +1020,7 @@ test('FASE 11: una relazione si dichiara, ha una direzione e non nasce da sola',
   await save(page)
 
   // Il Concept non ha relazioni malgrado la co-occorrenza.
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').first().click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').first().click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
   const relations = page.getByLabel('Relazioni', { exact: true })
   await expect(relations).toContainText('Nessuna relazione dichiarata')
@@ -1051,7 +1057,7 @@ test('FASE 12: una relazione dichiara su quali dati si basa', async ({ page }) =
   await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento collegato')
   await save(page)
 
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
   const relations = page.getByLabel('Relazioni', { exact: true })
   await relations.getByRole('button', { name: 'Collega' }).click()
@@ -1084,7 +1090,7 @@ test('FASE 13: due Concept si confrontano affiancati sulla conoscenza registrata
     await createConceptFrom(page, text, name)
     await save(page)
     await expect(page.getByText('Modifiche non salvate')).toHaveCount(0)
-    await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+    await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
     await page.getByRole('button', { name: 'Apri Concept' }).click()
     await expect(page.locator('.inspector-name')).toHaveText(name)
 
@@ -1154,7 +1160,7 @@ test('FASE 14.2: la × cestina documento e Concept con due pressioni, senza dial
   await save(page)
 
   // Il Concept va nel cestino dall'inspector: due pressioni, nessuna dialog di conferma.
-  await page.locator('.tiptap .nectrix-knowledge-occurrence').click()
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
   await page.getByRole('button', { name: 'Apri Concept' }).click()
   const trashButton = page.locator('.inspector-danger')
   await trashButton.click()
@@ -1165,7 +1171,7 @@ test('FASE 14.2: la × cestina documento e Concept con due pressioni, senza dial
   await expect(trash).toContainText('Concept da cestinare')
   await expect(trash).toContainText('1 frammento marcato')
   // La marcatura resta nel testo: cestinare non tocca le parole né l'indice del documento.
-  await expect(page.locator('.tiptap .nectrix-knowledge-occurrence')).toHaveCount(1)
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(1)
 
   await trash.getByRole('button', { name: 'Ripristina' }).click()
   await expect(trash).toContainText('Cestino vuoto')

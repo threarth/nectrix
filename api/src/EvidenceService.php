@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 
-namespace Nectrix;
+namespace Chaorganix;
 
 /**
  * Provenance of a KnowledgeRelation or of a derived FieldValue. Evidence points only at data that

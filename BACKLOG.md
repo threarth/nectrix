@@ -23,7 +23,7 @@ Questo file riassume il punto di ripresa. `ROADMAP.md`, `INVARIANTS.md` e i docu
 - FASE 11 — KnowledgeRelation: completata.
 - FASE 12 — Provenance delle relazioni e dei dati: completata.
 - Frontend Svelte/Vite/TypeScript con editor TipTap base.
-- API PHP minimale e database SQLite in `data/nectrix.sqlite`.
+- API PHP minimale e database SQLite in `data/chaorganix.sqlite`.
 - Flussi della fase limitati a creazione, elenco, apertura e aggiornamento dei Document; cancellazione non ancora prevista.
 - Migration additiva per KnowledgeObject, Concept, Entity/EntityType, KnowledgeOccurrence, KnowledgeRelation, Template, SemanticBlock e FieldValue tipizzati; nessuna API/UI semantica anticipata.
 - Test backend, round trip TipTap, type-check, build, controllo licenze e audit dipendenze verdi alla chiusura della Phase 1.1.

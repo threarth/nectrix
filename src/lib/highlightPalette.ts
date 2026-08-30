@@ -4,7 +4,7 @@ import { defaultHighlightColors, normalizeHighlightColor } from './editor'
 
 export const MIN_HIGHLIGHT_COLORS = 4
 export const MAX_HIGHLIGHT_COLORS = 10
-export const HIGHLIGHT_PALETTE_STORAGE_KEY = 'nectrix.highlightPalette.v1'
+export const HIGHLIGHT_PALETTE_STORAGE_KEY = 'chaorganix.highlightPalette.v1'
 
 export function readHighlightPalette(storage: Storage | undefined = browserStorage()): string[] {
   if (!storage) return [...defaultHighlightColors]

@@ -4,50 +4,50 @@
 
 declare(strict_types=1);
 
-use Nectrix\ApiException;
-use Nectrix\ContextOccurrenceExtractor;
-use Nectrix\DeletionService;
-use Nectrix\TrashService;
-use Nectrix\DocumentPruner;
-use Nectrix\ContextOccurrenceRepository;
-use Nectrix\ContextRepository;
-use Nectrix\FieldFilterCompiler;
-use Nectrix\MatrixRepository;
-use Nectrix\MatrixService;
-use Nectrix\ContextService;
-use Nectrix\Database;
-use Nectrix\DocumentPurgeService;
-use Nectrix\DocumentRepository;
-use Nectrix\DocumentService;
-use Nectrix\DocumentValidator;
-use Nectrix\KnowledgeOccurrenceExtractor;
-use Nectrix\KnowledgeRepository;
-use Nectrix\IdentifierNormalizer;
-use Nectrix\KnowledgeService;
-use Nectrix\OccurrenceTextExtractor;
-use Nectrix\Migrator;
-use Nectrix\PlainTextExtractor;
-use Nectrix\ReferenceExtractor;
-use Nectrix\ReferenceRepository;
-use Nectrix\RelationRepository;
-use Nectrix\RelationService;
-use Nectrix\EvidenceRepository;
-use Nectrix\EvidenceService;
-use Nectrix\CompareRepository;
-use Nectrix\CompareService;
-use Nectrix\QueryService;
-use Nectrix\SearchRepository;
-use Nectrix\SearchService;
-use Nectrix\TagRepository;
-use Nectrix\TagService;
-use Nectrix\FieldValueValidator;
-use Nectrix\SemanticBlockRepository;
-use Nectrix\SemanticBlockService;
-use Nectrix\TemplateRepository;
-use Nectrix\TemplateService;
-use Nectrix\StructuredQueryRepository;
-use Nectrix\StructuredQueryService;
-use Nectrix\UuidV7;
+use Chaorganix\ApiException;
+use Chaorganix\ContextOccurrenceExtractor;
+use Chaorganix\DeletionService;
+use Chaorganix\TrashService;
+use Chaorganix\DocumentPruner;
+use Chaorganix\ContextOccurrenceRepository;
+use Chaorganix\ContextRepository;
+use Chaorganix\FieldFilterCompiler;
+use Chaorganix\MatrixRepository;
+use Chaorganix\MatrixService;
+use Chaorganix\ContextService;
+use Chaorganix\Database;
+use Chaorganix\DocumentPurgeService;
+use Chaorganix\DocumentRepository;
+use Chaorganix\DocumentService;
+use Chaorganix\DocumentValidator;
+use Chaorganix\KnowledgeOccurrenceExtractor;
+use Chaorganix\KnowledgeRepository;
+use Chaorganix\IdentifierNormalizer;
+use Chaorganix\KnowledgeService;
+use Chaorganix\OccurrenceTextExtractor;
+use Chaorganix\Migrator;
+use Chaorganix\PlainTextExtractor;
+use Chaorganix\ReferenceExtractor;
+use Chaorganix\ReferenceRepository;
+use Chaorganix\RelationRepository;
+use Chaorganix\RelationService;
+use Chaorganix\EvidenceRepository;
+use Chaorganix\EvidenceService;
+use Chaorganix\CompareRepository;
+use Chaorganix\CompareService;
+use Chaorganix\QueryService;
+use Chaorganix\SearchRepository;
+use Chaorganix\SearchService;
+use Chaorganix\TagRepository;
+use Chaorganix\TagService;
+use Chaorganix\FieldValueValidator;
+use Chaorganix\SemanticBlockRepository;
+use Chaorganix\SemanticBlockService;
+use Chaorganix\TemplateRepository;
+use Chaorganix\TemplateService;
+use Chaorganix\StructuredQueryRepository;
+use Chaorganix\StructuredQueryService;
+use Chaorganix\UuidV7;
 
 require dirname(__DIR__) . '/bootstrap.php';
 
@@ -1220,7 +1220,7 @@ $suite->test('il purge rifiuta un Document non nel cestino e non modifica nulla'
     assertSameValue('document_not_trashed', $preview['blockers'][0]['reason']);
 
     try {
-        $purge->purge($document['id'], sys_get_temp_dir() . '/nectrix-purge-test');
+        $purge->purge($document['id'], sys_get_temp_dir() . '/chaorganix-purge-test');
         throw new RuntimeException('Purge eseguito su un Document non nel cestino.');
     } catch (ApiException $error) {
         assertSameValue('purge_blocked', $error->errorCode);
@@ -1254,7 +1254,7 @@ $suite->test('il purge rimuove Document e occurrence con backup, senza toccare i
     $conceptId = UuidV7::generate();
     $document = documentWithConcept($service, $occurrenceId, $conceptId);
     $service->trash($document['id']);
-    $backupDirectory = sys_get_temp_dir() . '/nectrix-purge-' . bin2hex(random_bytes(6));
+    $backupDirectory = sys_get_temp_dir() . '/chaorganix-purge-' . bin2hex(random_bytes(6));
     $purge = new DocumentPurgeService($pdo, new DocumentRepository($pdo), new KnowledgeRepository($pdo));
 
     $preview = $purge->preview($document['id']);
