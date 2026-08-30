@@ -7,6 +7,8 @@ declare(strict_types=1);
 use Chaorganix\ApiException;
 use Chaorganix\ContextOccurrenceExtractor;
 use Chaorganix\DeletionService;
+use Chaorganix\FragmentExtractor;
+use Chaorganix\PreviewService;
 use Chaorganix\TrashService;
 use Chaorganix\DocumentPruner;
 use Chaorganix\ContextOccurrenceRepository;
@@ -99,6 +101,7 @@ try {
     $contexts = new ContextService($contextRepository);
     $deletions = new DeletionService($pdo, $documentRepository, new DocumentPruner(), new PlainTextExtractor());
     $trash = new TrashService($pdo);
+    $previews = new PreviewService($pdo, $documentRepository, new FragmentExtractor(), $contextRepository);
     $tags = new TagService(new TagRepository($pdo), $documentRepository);
     $query = new QueryService($contexts, $tags, $service, $knowledgeRepository);
     $search = new SearchService(new SearchRepository($pdo), $contextRepository);
@@ -241,6 +244,9 @@ try {
     if ($method === 'POST' && $path === '/api/contexts') {
         respond(201, ['context' => $contexts->create(requestBody())]);
     }
+    if ($method === 'GET' && $path === '/api/contexts/tree') {
+        respond(200, $contexts->tree());
+    }
     if (preg_match('#^/api/contexts/([^/]+)$#', (string) $path, $matches) === 1) {
         $contextId = rawurldecode($matches[1]);
         if ($method === 'PUT') {
@@ -300,6 +306,12 @@ try {
     }
     if ($method === 'GET' && preg_match('#^/api/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
         respond(200, ['object' => $knowledge->object(rawurldecode($matches[1]))]);
+    }
+    if ($method === 'GET' && preg_match('#^/api/previews/knowledge-objects/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, $previews->knowledgeObject(rawurldecode($matches[1])));
+    }
+    if ($method === 'GET' && preg_match('#^/api/previews/contexts/([^/]+)$#', (string) $path, $matches) === 1) {
+        respond(200, $previews->context(rawurldecode($matches[1]), (string) ($_GET['mode'] ?? 'subtree')));
     }
     if ($method === 'GET' && $path === '/api/trash') {
         respond(200, $trash->list());

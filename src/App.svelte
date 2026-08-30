@@ -12,6 +12,9 @@
     assignTag,
     createContext,
     deleteKnowledgeObject,
+    fetchContextTree,
+    fetchContextPreview,
+    fetchObjectPreview,
     fetchTrash,
     trashContext,
     trashKnowledgeObject,
@@ -42,7 +45,6 @@
     structuredSearch,
     unassignTag,
     deleteContext,
-    listContexts,
     listDocuments,
     moveContext,
     renameContext,
@@ -61,6 +63,8 @@
     type Comparison,
     type EvidenceView,
     type RelationView,
+    type ContextObject,
+    type Preview,
     type StructuredEntity,
     type TrashContents,
     type Template,
@@ -78,6 +82,7 @@
   import DerivedObjects from './components/DerivedObjects.svelte'
   import CompareDialog from './components/CompareDialog.svelte'
   import MatrixDialog from './components/MatrixDialog.svelte'
+  import PreviewGallery from './components/PreviewGallery.svelte'
   import RemoveButton from './components/RemoveButton.svelte'
   import TrashPanel from './components/TrashPanel.svelte'
   import RelationDialog from './components/RelationDialog.svelte'
@@ -131,6 +136,10 @@
   /** Grows when a deletion rewrote the open Document: the editor has to take the new content. */
   let editorReloadToken = $state(0)
   let trash = $state<TrashContents>({ knowledgeObjects: [], contexts: [] })
+  let contextTreeObjects = $state<ContextObject[]>([])
+  let preview = $state<Preview | null>(null)
+  /** Occurrence chosen in a preview: the editor brings it into view once the Document is open. */
+  let focusOccurrence = $state<string | null>(null)
   /** Grows at ogni richiesta della lista: una risposta arrivata in ritardo viene scartata. */
   let documentsFetch = 0
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined
@@ -161,6 +170,16 @@
    * Reloads the document list discarding a late answer: with the automatic save, a list requested
    * before a write could otherwise land after it and show the previous title.
    */
+  /**
+   * Reloads the hierarchy and the knowledge it holds: the sidebar is a tree, so a Context and the
+   * Concept or Entity contained in its ranges arrive together.
+   */
+  async function reloadContexts(): Promise<void> {
+    const tree = await fetchContextTree()
+    contexts = tree.contexts
+    contextTreeObjects = tree.objects
+  }
+
   async function reloadDocuments(): Promise<void> {
     const ticket = ++documentsFetch
     const list = await listDocuments(scope, selectedContextId, contextMode, selectedTagIds)
@@ -181,7 +200,7 @@
     loading = true
     error = ''
     try {
-      contexts = await listContexts()
+      await reloadContexts()
       tags = await listTags()
       templates = await listTemplates()
       trash = await fetchTrash()
@@ -398,7 +417,7 @@
     try {
       await trashContext(contextId)
       if (selectedContextId === contextId) selectedContextId = null
-      contexts = await listContexts()
+      await reloadContexts()
       await refreshTrash()
       await refreshFilters()
     } catch (cause) {
@@ -431,7 +450,7 @@
       if (kind === 'object') await trashKnowledgeObject(id, false)
       else {
         await trashContext(id, false)
-        contexts = await listContexts()
+        await reloadContexts()
       }
       await refreshTrash()
       await refreshFilters()
@@ -452,6 +471,28 @@
     }
   }
 
+  /**
+   * Shows what an organiser organises: the Document that carry its fragments. It answers the only
+   * question the index alone cannot — «che cos'era questo?» — and works anche for what is in the
+   * trash, whose fragments are still in the text.
+   */
+  async function showPreview(kind: 'object' | 'context', id: string): Promise<void> {
+    error = ''
+    try {
+      preview = kind === 'object'
+        ? await fetchObjectPreview(id)
+        : await fetchContextPreview(id, contextMode)
+    } catch (cause) {
+      showError(cause)
+    }
+  }
+
+  async function openFromPreview(documentId: string, occurrenceId: string | null): Promise<void> {
+    preview = null
+    await openDocument(documentId)
+    if (occurrenceId !== null) focusOccurrence = occurrenceId
+  }
+
   async function refreshTrash(): Promise<void> {
     trash = await fetchTrash()
   }
@@ -462,13 +503,13 @@
       applyDocument(await getDocument(selected.id))
       editorReloadToken += 1
     }
-    contexts = await listContexts()
+    await reloadContexts()
     await refreshFilters()
   }
 
   async function createContextForRange(name: string, parentId: string | null): Promise<ContextNode> {
     const created = await createContext(name, parentId)
-    contexts = await listContexts()
+    await reloadContexts()
     return created
   }
 
@@ -476,7 +517,7 @@
     error = ''
     try {
       await operation()
-      contexts = await listContexts()
+      await reloadContexts()
       await refreshFilters()
     } catch (cause) {
       showError(cause)
@@ -551,7 +592,7 @@
       // riportare indietro il testo digitato nel frattempo, solo prendere atto della revisione.
       if (draftVersion === version) applyDocument(saved)
       else adoptRevision(saved)
-      if (rangesChanged) contexts = await listContexts()
+      if (rangesChanged) await reloadContexts()
       // Il salvataggio ha l'ultima parola sulla lista: una richiesta piu vecchia non deve tornarci sopra.
       documentsFetch += 1
       documents = [saved, ...documents.filter((document) => document.id !== saved.id)]
@@ -576,6 +617,8 @@
   }
 
   function applyDocument(document: DocumentRecord): void {
+    // Aprire un documento chiude le miniature: la finestra principale mostra una cosa per volta.
+    preview = null
     // A KnowledgeObject created but not yet persisted survives a save of the same Document: undo
     // can bring its mark back and the next save still has to declare its creation.
     const sameDocument = selected?.id === document.id
@@ -942,10 +985,12 @@
 
     <ContextPanel
       {contexts}
+      objects={contextTreeObjects}
       selectedId={selectedContextId}
       mode={contextMode}
       busy={saving}
       onSelect={(contextId) => void selectContext(contextId)}
+      onPreview={(contextId) => void showPreview('context', contextId)}
       onModeChange={(mode) => void changeContextMode(mode)}
       onCreate={(name, parentId) => void withContexts(async () => {
         await createContext(name, parentId)
@@ -957,6 +1002,8 @@
         await moveContext(contextId, parentId)
       })}
       onDelete={(contextId) => void moveContextToTrash(contextId)}
+      onOpenObject={(objectId) => void showPreview('object', objectId)}
+      onTrashObject={(objectId) => void moveObjectToTrash(objectId)}
     />
 
     <TagPanel
@@ -994,6 +1041,8 @@
     <TrashPanel
       contents={trash}
       busy={saving}
+      onPreviewObject={(objectId) => void showPreview('object', objectId)}
+      onPreviewContext={(contextId) => void showPreview('context', contextId)}
       onRestoreObject={(objectId) => void restoreFromTrash('object', objectId)}
       onRestoreContext={(contextId) => void restoreFromTrash('context', contextId)}
       onPurgeObject={(objectId) => void purgeFromTrash('object', objectId)}
@@ -1011,7 +1060,8 @@
       <DerivedObjects
         objects={contextObjects}
         busy={saving}
-        onOpen={(objectId) => void openInspector(objectId)}
+        onOpen={(objectId) => void showPreview('object', objectId)}
+        onInspect={(objectId) => void openInspector(objectId)}
         onTrash={(objectId) => void moveObjectToTrash(objectId)}
       />
     {/if}
@@ -1080,7 +1130,13 @@
       </div>
     {/if}
 
-    {#if selected && draftJson}
+    {#if preview}
+      <PreviewGallery
+        {preview}
+        onOpen={(documentId, occurrenceId) => void openFromPreview(documentId, occurrenceId)}
+        onClose={() => (preview = null)}
+      />
+    {:else if selected && draftJson}
       <header class="document-header">
         <textarea
           bind:this={titleInput}
@@ -1133,6 +1189,8 @@
           editable={!readOnly}
           {contexts}
           reloadToken={editorReloadToken}
+          focusOccurrenceId={focusOccurrence}
+          onFocused={() => (focusOccurrence = null)}
           onChange={changeContent}
           onObjectCreate={addPendingObject}
           onOpenInspector={(knowledgeObjectId) => void openInspector(knowledgeObjectId)}
@@ -1220,6 +1278,7 @@
       busy={inspectorBusy}
       {duplicateCandidates}
       onClose={() => (inspector = null)}
+      onPreview={() => void showPreview('object', shown.id)}
       onDelete={() => void moveObjectToTrash(shown.id)}
       onAddAlias={(alias) => void addAlias(alias)}
       onRemoveAlias={(aliasId) => void removeAlias(aliasId)}

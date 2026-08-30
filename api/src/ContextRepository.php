@@ -164,6 +164,28 @@ final class ContextRepository
     }
 
     /**
+     * Concept and Entity of every Context, each one under the Context that actually contains its
+     * fragment. This is what makes the sidebar a tree: a Context holds its sub-context and the
+     * knowledge marked inside its own ranges, not the knowledge of its descendants.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function knowledgeObjectsByContext(): array
+    {
+        return $this->pdo->query(
+            'SELECT DISTINCT m.context_id, m.knowledge_object_id AS id, m.object_type, ' .
+            'COALESCE(c.canonical_name, e.name) AS name FROM context_memberships m ' .
+            'JOIN context_occurrences o ON o.id = m.context_occurrence_id ' .
+            'LEFT JOIN concepts c ON c.id = m.knowledge_object_id ' .
+            'LEFT JOIN entities e ON e.id = m.knowledge_object_id ' .
+            "WHERE o.status = 'active' " .
+            'AND NOT EXISTS (SELECT 1 FROM knowledge_object_trash t ' .
+            'WHERE t.knowledge_object_id = m.knowledge_object_id) ' .
+            'ORDER BY name COLLATE NOCASE'
+        )->fetchAll();
+    }
+
+    /**
      * Concept and Entity whose fragment is contained in one of the given Context. This is the
      * derived membership, not the co-presence in the same Document.
      *

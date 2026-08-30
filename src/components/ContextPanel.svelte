@@ -8,34 +8,47 @@
     deletionImpact,
     orderContexts,
     possibleParents,
+    treeRows,
     type ContextNode,
+    type ContextObjectRow,
   } from '../lib/contexts'
   import { contextStrings, trashStrings } from '../lib/strings'
+  import { SvelteSet } from 'svelte/reactivity'
   import NameDialog from './NameDialog.svelte'
   import RemoveButton from './RemoveButton.svelte'
 
   let {
     contexts,
+    objects = [],
     selectedId,
     mode,
     busy = false,
     onSelect,
+    onPreview,
     onModeChange,
     onCreate,
     onRename,
     onMove,
     onDelete,
+    onOpenObject,
+    onTrashObject,
   }: {
     contexts: ContextNode[]
+    /** Concept and Entity contained in the ranges of each Context: the branches of the tree. */
+    objects?: ContextObjectRow[]
     selectedId: string | null
     mode: ContextMode
     busy?: boolean
     onSelect: (contextId: string | null) => void
+    /** Shows the Documents that carry the ranges of this Context, as thumbnails. */
+    onPreview: (contextId: string) => void
     onModeChange: (mode: ContextMode) => void
     onCreate: (name: string, parentId: string | null) => void
     onRename: (contextId: string, name: string) => void
     onMove: (contextId: string, parentId: string | null) => void
     onDelete: (contextId: string) => void
+    onOpenObject: (objectId: string) => void
+    onTrashObject: (objectId: string) => void
   } = $props()
 
   const rows = $derived(orderContexts(contexts))
@@ -45,6 +58,14 @@
   const impact = $derived(selectedId === null ? 0 : deletionImpact(rows, selectedId))
 
   let naming = $state<'create' | 'rename' | null>(null)
+  let collapsed = $state(new SvelteSet<string>())
+
+  const tree = $derived(treeRows(rows, objects, collapsed))
+
+  function toggle(contextId: string): void {
+    if (collapsed.has(contextId)) collapsed.delete(contextId)
+    else collapsed.add(contextId)
+  }
 
   function blockedFor(contextId: string): boolean {
     return deletionBlockers(rows, contextId) !== null
@@ -65,27 +86,57 @@
   {#if rows.length === 0}
     <p class="empty-state">{contextStrings.empty}</p>
   {:else}
-    {#each rows as row (row.id)}
-      <div class="context-line">
-        <button
-          type="button"
-          class="context-row"
-          class:active={selectedId === row.id}
-          style={`padding-left: ${12 + row.depth * 14}px`}
-          title={contextPathLabel(row)}
-          aria-label={(row.occurrences ?? 0) > 0
-            ? `${row.name}, ${contextStrings.rangeCount(row.occurrences ?? 0)}`
-            : row.name}
-          onclick={() => onSelect(row.id)}
-        >{row.name}{#if (row.occurrences ?? 0) > 0}<small>{row.occurrences}</small>{/if}</button>
-        <RemoveButton
-          label={row.name}
-          disabled={busy || blockedFor(row.id)}
-          description={trashStrings.trashObject.description}
-          confirmDescription={trashStrings.trashObjectConfirm}
-          onRemove={() => onDelete(row.id)}
-        />
-      </div>
+    {#each tree as row (`${row.kind}:${row.id}:${row.depth}`)}
+      {#if row.kind === 'context'}
+        <div class="context-line" style={`padding-left: ${row.depth * 12}px`}>
+          <button
+            type="button"
+            class="context-twist"
+            aria-label={collapsed.has(row.id) ? contextStrings.tree.expand(row.name) : contextStrings.tree.collapse(row.name)}
+            aria-expanded={!collapsed.has(row.id)}
+            disabled={!row.hasChildren}
+            onclick={() => toggle(row.id)}
+          >{row.hasChildren ? (collapsed.has(row.id) ? '▸' : '▾') : '·'}</button>
+          <button
+            type="button"
+            class="context-row"
+            class:active={selectedId === row.id}
+            title={contextStrings.tree.contextDescription}
+            aria-label={row.occurrences > 0
+              ? `${row.name}, ${contextStrings.rangeCount(row.occurrences)}`
+              : row.name}
+            onclick={() => {
+              onSelect(row.id)
+              if (row.occurrences > 0) onPreview(row.id)
+            }}
+          >{row.name}{#if row.occurrences > 0}<small>{row.occurrences}</small>{/if}</button>
+          <RemoveButton
+            label={row.name}
+            disabled={busy || blockedFor(row.id)}
+            description={trashStrings.trashObject.description}
+            confirmDescription={trashStrings.trashObjectConfirm}
+            onRemove={() => onDelete(row.id)}
+          />
+        </div>
+      {:else}
+        <div class="context-line context-object" style={`padding-left: ${row.depth * 12}px`}>
+          <span class="context-twist" aria-hidden="true">{row.objectType === 'concept' ? '◆' : '■'}</span>
+          <button
+            type="button"
+            class="context-row"
+            title={contextStrings.tree.objectDescription}
+            aria-label={`${trashStrings.kind(row.objectType)} ${row.name}`}
+            onclick={() => onOpenObject(row.id)}
+          >{row.name}</button>
+          <RemoveButton
+            label={row.name}
+            disabled={busy}
+            description={trashStrings.trashObject.description}
+            confirmDescription={trashStrings.trashObjectConfirm}
+            onRemove={() => onTrashObject(row.id)}
+          />
+        </div>
+      {/if}
     {/each}
   {/if}
 

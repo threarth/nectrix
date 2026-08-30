@@ -13,7 +13,7 @@
     SemanticBlock,
     Template,
   } from '../lib/api'
-  import { compareStrings, evidenceStrings, inspectorStrings, relationStrings } from '../lib/strings'
+  import { compareStrings, evidenceStrings, inspectorStrings, previewStrings, relationStrings } from '../lib/strings'
   import ConceptInspector from './ConceptInspector.svelte'
   import EntityInspector from './EntityInspector.svelte'
 
@@ -45,6 +45,7 @@
     onAddDocumentEvidence,
     onRemoveEvidence,
     onAddToCompare,
+    onPreview,
     onDelete,
   }: {
     object: KnowledgeObjectDetail
@@ -77,7 +78,9 @@
     onAddDocumentEvidence: (relationId: string) => void
     onRemoveEvidence: (relationId: string, family: EvidenceView['family'], evidenceId: string) => void
     onAddToCompare: () => void
-    /** Deletes the object for good: occurrences, marks in the text and what it owned. */
+    /** Shows the Documents that contain it, as thumbnails. */
+    onPreview: () => void
+    /** Moves the object to the trash: the marks stay in the text. */
     onDelete: () => void
   } = $props()
 
@@ -306,6 +309,13 @@
       title={lifecycleAction.description}
       onclick={onToggleArchived}
     >{lifecycleAction.label}</button>
+    <button
+      type="button"
+      class="inspector-secondary"
+      disabled={busy}
+      title={previewStrings.showLabel.description}
+      onclick={onPreview}
+    >{previewStrings.showLabel.label}</button>
     <button
       type="button"
       class="inspector-secondary"

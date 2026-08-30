@@ -7,6 +7,8 @@ declare(strict_types=1);
 use Chaorganix\ApiException;
 use Chaorganix\ContextOccurrenceExtractor;
 use Chaorganix\DeletionService;
+use Chaorganix\FragmentExtractor;
+use Chaorganix\PreviewService;
 use Chaorganix\TrashService;
 use Chaorganix\DocumentPruner;
 use Chaorganix\ContextOccurrenceRepository;
@@ -3081,6 +3083,95 @@ $suite->test('FASE 14.2: dal cestino l’eliminazione definitiva toglie anche la
     assertSameValue($before, $service->get($document['id'])['plainText']);
     assertSameValue(0, countRows($pdo, 'SELECT COUNT(*) FROM context_trash WHERE context_id = ?', [$contesto['id']]));
     assertSameValue(['knowledgeObjects' => [], 'contexts' => []], $trash->list());
+});
+
+function previewService(PDO $pdo): PreviewService
+{
+    return new PreviewService($pdo, new DocumentRepository($pdo), new FragmentExtractor(), new ContextRepository($pdo));
+}
+
+$suite->test('FASE 14.3: l’anteprima mostra il frammento con le parole intorno, non il solo mark', static function () use ($pdo, $service): void {
+    $previews = previewService($pdo);
+    $document = $service->create(['title' => 'Il Se in Jung']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([
+        ['type' => 'text', 'text' => 'Il '],
+        occurrenceText('Se', $occurrenceId, $conceptId),
+        ['type' => 'text', 'text' => ' in Jung non coincide con l’Io.'],
+    ]), [conceptCreate($occurrenceId, $conceptId, 'Se junghiano')], 'Il Se in Jung');
+
+    $preview = $previews->knowledgeObject($conceptId);
+
+    assertSameValue('concept', $preview['kind']);
+    assertSameValue('Se junghiano', $preview['label']);
+    assertSameValue(false, $preview['trashed']);
+    assertSameValue(1, count($preview['documents']));
+    assertSameValue('Il Se in Jung', $preview['documents'][0]['title']);
+    $fragment = $preview['documents'][0]['fragments'][0];
+    // Il frammento da solo non direbbe nulla: l'anteprima porta con se le parole intorno.
+    assertSameValue('Se', $fragment['text']);
+    assertSameValue('Il ', $fragment['before']);
+    assertSameValue(' in Jung non coincide con l’Io.', $fragment['after']);
+});
+
+$suite->test('FASE 14.3: un oggetto cestinato mostra ancora che cos’era', static function () use ($pdo, $service): void {
+    $previews = previewService($pdo);
+    $trash = new TrashService($pdo);
+    $document = $service->create(['title' => 'Documento con cestinato']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([
+        occurrenceText('Rimozione', $occurrenceId, $conceptId),
+        ['type' => 'text', 'text' => ' e ritorno del rimosso.'],
+    ]), [conceptCreate($occurrenceId, $conceptId, 'Rimozione freudiana')], 'Documento con cestinato');
+
+    $trash->trashKnowledgeObject($conceptId);
+    $preview = $previews->knowledgeObject($conceptId);
+
+    assertSameValue(true, $preview['trashed']);
+    assertSameValue('Rimozione', $preview['documents'][0]['fragments'][0]['text']);
+    assertSameValue('active', $preview['documents'][0]['fragments'][0]['status']);
+});
+
+$suite->test('FASE 14.3: l’anteprima di un Context mostra il testo che i suoi range coprono', static function () use ($pdo, $service): void {
+    $previews = previewService($pdo);
+    $contexts = contextService($pdo);
+    $radice = $contexts->create(['name' => 'Anteprima radice']);
+    $foglia = $contexts->create(['name' => 'Anteprima foglia', 'parentId' => $radice['id']]);
+    $document = $service->create(['title' => 'Documento della foglia']);
+    $range = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([
+        contextText('Un pensiero marcato per intero', $range, $foglia['id']),
+    ]), [], 'Documento della foglia', [contextCreate($range, $foglia['id'])]);
+
+    $sottoalbero = $previews->context($radice['id'], 'subtree');
+    $esatta = $previews->context($radice['id'], 'exact');
+
+    assertSameValue('context', $sottoalbero['kind']);
+    assertSameValue(1, count($sottoalbero['documents']));
+    assertSameValue('Un pensiero marcato per intero', $sottoalbero['documents'][0]['fragments'][0]['text']);
+    // Il range vive nella foglia: la radice da sola non lo vede.
+    assertSameValue(0, count($esatta['documents']));
+});
+
+$suite->test('FASE 14.3: un Document che ha perso il mark non compare fra le miniature', static function () use ($pdo, $service): void {
+    $previews = previewService($pdo);
+    $document = $service->create(['title' => 'Mark rimosso']);
+    $occurrenceId = UuidV7::generate();
+    $conceptId = UuidV7::generate();
+    saveRevision($service, $document['id'], 0, documentOfParagraphs([
+        occurrenceText('Transfert', $occurrenceId, $conceptId),
+    ]), [conceptCreate($occurrenceId, $conceptId, 'Transfert')], 'Mark rimosso');
+    saveRevision($service, $document['id'], 1, documentOfParagraphs([
+        ['type' => 'text', 'text' => 'Transfert'],
+    ]), [], 'Mark rimosso');
+
+    $preview = $previews->knowledgeObject($conceptId);
+
+    // L'occurrence resta detached nel database, ma l'anteprima racconta il testo di adesso.
+    assertSameValue('detached', occurrenceStatus($pdo, $occurrenceId));
+    assertSameValue([], $preview['documents']);
 });
 
 $suite->test('lo schema finale non contiene violazioni di foreign key', static function () use ($pdo): void {

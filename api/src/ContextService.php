@@ -24,6 +24,20 @@ final class ContextService
         return $this->repository->list();
     }
 
+    /**
+     * The hierarchy together with the knowledge each node holds: sub-context and the Concept or
+     * Entity whose fragments are contained in its own ranges.
+     *
+     * @return array<string, mixed>
+     */
+    public function tree(): array
+    {
+        return [
+            'contexts' => $this->repository->list(),
+            'objects' => $this->repository->knowledgeObjectsByContext(),
+        ];
+    }
+
     /** @param array<string, mixed> $input @return array<string, mixed> */
     public function create(array $input): array
     {

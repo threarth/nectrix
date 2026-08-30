@@ -252,6 +252,18 @@ Nella stessa fase la struttura a colonne indipendenti sostituisce lo scorrimento
 
 Gate soddisfatto: due pressioni al posto della dialog, cestino reversibile che non tocca il testo, eliminazione definitiva solo dal cestino e liste, ricerche e matrici che ignorano ciò che è cestinato.
 
+## FASE 14.3 — Miniature e albero della conoscenza (completata)
+
+Un indice dice che una cosa esiste, non che cos'era: quello vive negli appunti. La fase porta il testo davanti agli occhi in ogni punto in cui si nomina un organizzatore.
+
+Completato: `GET /api/previews/knowledge-objects/{id}` e `GET /api/previews/contexts/{id}` restituiscono i Document che portano i frammenti, ciascuno con il testo marcato **e le parole intorno** — «Sé» da solo non dice nulla, «il Sé in Jung non coincide con l'Io» dice tutto. Il testo si legge dal `document_json`, che resta l'unica autorità, e un Document che ha perso il mark non compare: l'anteprima racconta il presente, non ciò che il database ricorda.
+
+Le miniature si aprono cliccando un Context o un Concept o una Entity nella barra laterale, dal pulsante «Dove compare» dell'inspector e dal cestino. Si mostrano nella finestra principale, non in una modale, e scegliere una miniatura apre il documento portando in vista il frammento. Un oggetto cestinato mostra ancora che cos'era: i suoi frammenti sono ancora nel testo, quindi la vista temporanea permette di guardare prima di decidere.
+
+La barra laterale dei Context diventa un albero: ogni nodo contiene i propri sotto-contesti e i Concept e le Entity i cui frammenti cadono dentro i suoi range — non quelli dei discendenti, che stanno sotto il nodo che li contiene davvero. Ogni riga porta la propria × a due pressioni.
+
+Gate soddisfatto: miniature con contorno leggibile, apertura del documento dal frammento, anteprima di ciò che è nel cestino, sparizione immediata dei mark dal documento aperto quando si elimina davvero, e albero coerente con l'appartenenza derivata.
+
 ## FASE 15 — Knowledge Map
 
 Valutare Cytoscape.js e Sigma.js, quindi usare una libreria esistente. Consentire viste Concept only, Entity only e Concept+Entity; i nodi KnowledgeObject sono distinti visivamente e gli archi sono KnowledgeRelation. SemanticBlock, TemplateField, FieldValue, Context, Tag e KnowledgeOccurrence non diventano nodi principali; Context e Tag restano filtri/grouping/coloring.

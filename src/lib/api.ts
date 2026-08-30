@@ -814,3 +814,58 @@ export async function trashContext(contextId: string, trashed = true): Promise<v
     method: 'POST',
   })
 }
+
+export interface PreviewFragment {
+  occurrenceId: string
+  status: string
+  /** Words before and after the marked text: a fragment alone would be unreadable. */
+  before: string
+  text: string
+  after: string
+}
+
+export interface PreviewDocument {
+  id: string
+  title: string
+  status: string
+  revision: number
+  fragments: PreviewFragment[]
+  total: number
+}
+
+export interface Preview {
+  kind: 'concept' | 'entity' | 'context'
+  id: string
+  label: string
+  /** True when the organiser sits in the trash: the preview is what it was. */
+  trashed: boolean
+  documents: PreviewDocument[]
+}
+
+/** Where a Concept or an Entity appears, with the words around each occurrence. */
+export async function fetchObjectPreview(objectId: string): Promise<Preview> {
+  return request<Preview>(`/api/previews/knowledge-objects/${encodeURIComponent(objectId)}`)
+}
+
+/** Where the ranges of a Context live, with the text they cover. */
+export async function fetchContextPreview(contextId: string, mode: ContextMode = 'subtree'): Promise<Preview> {
+  return request<Preview>(`/api/previews/contexts/${encodeURIComponent(contextId)}?mode=${mode}`)
+}
+
+export interface ContextObject {
+  context_id: string
+  id: string
+  object_type: 'concept' | 'entity'
+  name: string
+}
+
+export interface ContextTree {
+  contexts: ContextNode[]
+  /** Concept and Entity under the Context whose ranges actually contain their fragment. */
+  objects: ContextObject[]
+}
+
+/** The hierarchy with the knowledge each node holds: what the sidebar tree draws. */
+export async function fetchContextTree(): Promise<ContextTree> {
+  return request<ContextTree>('/api/contexts/tree')
+}

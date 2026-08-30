@@ -1182,3 +1182,60 @@ test('FASE 14.2: la × cestina documento e Concept con due pressioni, senza dial
   await page.getByRole('button', { name: 'Cestino', exact: true }).click()
   await expect(page.locator('.sidebar nav')).toContainText('Documento da cestinare')
 })
+
+test('FASE 14.3: le miniature mostrano dove compare un Concept e portano al documento', async ({ page }) => {
+  await page.goto('/')
+  await newDocument(page)
+  // Il Concept copre una parola sola: l'anteprima deve portarsi dietro le parole intorno.
+  await createConceptFrom(page, 'Individuazione', 'Individuazione junghiana')
+  const editor = page.locator('.tiptap')
+  await editor.press('ArrowRight')
+  await page.keyboard.type(' in Jung non coincide con l Io.')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Il Sé junghiano')
+  await save(page)
+
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').first().click()
+  await page.getByRole('button', { name: 'Apri Concept' }).click()
+  await page.getByRole('button', { name: 'Dove compare' }).click()
+
+  const gallery = page.getByLabel('Concept · Individuazione junghiana')
+  await expect(gallery.locator('.preview-card')).toHaveCount(1)
+  await expect(gallery).toContainText('Il Sé junghiano')
+  await expect(gallery.locator('.preview-fragment mark').first()).toHaveText('Individuazione')
+  await expect(gallery.locator('.preview-fragment').first()).toContainText('in Jung non coincide')
+
+  // La miniatura porta al documento: la finestra principale torna a mostrare il testo.
+  await gallery.locator('.preview-open').first().click()
+  await expect(page.getByRole('textbox', { name: 'Titolo documento' })).toHaveValue('Il Sé junghiano')
+  await expect(page.locator('.preview-view')).toHaveCount(0)
+})
+
+test('FASE 14.3: un Concept cestinato si guarda prima di eliminarlo, e sparisce dal testo', async ({ page }) => {
+  await page.goto('/')
+  await newDocument(page)
+  await createConceptFrom(page, 'Rimozione', 'Rimozione freudiana')
+  await page.getByRole('textbox', { name: 'Titolo documento' }).fill('Documento della rimozione')
+  await save(page)
+
+  await page.locator('.tiptap .chaorganix-knowledge-occurrence').click()
+  await page.getByRole('button', { name: 'Apri Concept' }).click()
+  const trashButton = page.locator('.inspector-danger')
+  await trashButton.click()
+  await expect(trashButton).toHaveText('Confermi?')
+  await trashButton.click()
+
+  // Nel cestino il mark resta nel testo: si può ancora vedere che cos'era.
+  const trash = page.getByLabel('Cestino della conoscenza', { exact: true })
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(1)
+  await trash.locator('.trash-name').first().click()
+  const gallery = page.getByLabel('Concept · Rimozione freudiana')
+  await expect(gallery).toContainText('vista temporanea di ciò che era')
+  await expect(gallery.locator('.preview-fragment mark').first()).toHaveText('Rimozione')
+  await gallery.getByRole('button', { name: 'Chiudi' }).click()
+
+  // Eliminandolo davvero il mark sparisce dal documento aperto, le parole restano.
+  await pressTwice(page, 'Cestino della conoscenza', 'Rimozione freudiana')
+  await expect(page.locator('.tiptap .chaorganix-knowledge-occurrence')).toHaveCount(0)
+  await expect(page.locator('.tiptap')).toContainText('Rimozione')
+  await expect(trash).toContainText('Cestino vuoto')
+})

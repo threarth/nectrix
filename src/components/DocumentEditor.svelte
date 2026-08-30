@@ -63,6 +63,8 @@
     editable = true,
     contexts = [],
     reloadToken = 0,
+    focusOccurrenceId = null,
+    onFocused,
     onChange,
     onObjectCreate,
     onOpenInspector,
@@ -78,6 +80,9 @@
     contexts?: ContextNode[]
     /** Changes when the server rewrote the Document: the editor has to take the new content. */
     reloadToken?: number
+    /** Occurrence chosen elsewhere, to bring into view once the Document is open. */
+    focusOccurrenceId?: string | null
+    onFocused?: () => void
     onChange: (content: JSONContent) => void
     onObjectCreate: (knowledgeObjectId: string, object: PendingKnowledgeObject) => void
     onOpenInspector: (knowledgeObjectId: string) => void
@@ -233,7 +238,27 @@
     void loadReferenceLabels(editor)
   }
 
+  /** How long the fragment reached from a preview stays highlighted. */
+  const FOUND_MS = 1600
+
   let appliedReloadToken = untrack(() => reloadToken)
+
+  /**
+   * Brings into view the occurrence chosen in a preview. Selecting it would move the caret and
+   * mark the draft as changed, so the fragment is only scrolled to and highlighted for a moment.
+   */
+  $effect(() => {
+    const occurrenceId = focusOccurrenceId
+    if (occurrenceId === null || occurrenceId === undefined) return
+    untrack(() => {
+      const target = element?.querySelector(`[data-occurrence-id="${occurrenceId}"]`)
+        ?? element?.querySelector(`[data-context-occurrence-id="${occurrenceId}"]`)
+      target?.scrollIntoView({ block: 'center' })
+      target?.classList.add('chaorganix-occurrence-found')
+      setTimeout(() => target?.classList.remove('chaorganix-occurrence-found'), FOUND_MS)
+      onFocused?.()
+    })
+  })
 
   /**
    * Takes the content again when a deletion rewrote the Document on the server. Without this the

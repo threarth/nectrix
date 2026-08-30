@@ -8,6 +8,8 @@
   let {
     contents,
     busy = false,
+    onPreviewObject,
+    onPreviewContext,
     onRestoreObject,
     onRestoreContext,
     onPurgeObject,
@@ -15,6 +17,9 @@
   }: {
     contents: TrashContents
     busy?: boolean
+    /** Shows what the trashed object was: its fragments are still in the text. */
+    onPreviewObject: (objectId: string) => void
+    onPreviewContext: (contextId: string) => void
     onRestoreObject: (objectId: string) => void
     onRestoreContext: (contextId: string) => void
     onPurgeObject: (objectId: string) => void
@@ -35,7 +40,12 @@
       {#each contents.knowledgeObjects as item (item.id)}
         <li>
           <span class="trash-kind">{trashStrings.kind(item.object_type ?? 'concept')}</span>
-          <span class="trash-name">{item.name}</span>
+          <button
+            type="button"
+            class="trash-name"
+            title={trashStrings.preview.description}
+            onclick={() => onPreviewObject(item.id)}
+          >{item.name}</button>
           <small>{trashStrings.ranges(item.occurrences)}</small>
           <button
             type="button"
@@ -55,7 +65,12 @@
       {#each contents.contexts as item (item.id)}
         <li>
           <span class="trash-kind">{trashStrings.kind('context')}</span>
-          <span class="trash-name">{item.name}</span>
+          <button
+            type="button"
+            class="trash-name"
+            title={trashStrings.preview.description}
+            onclick={() => onPreviewContext(item.id)}
+          >{item.name}</button>
           <small>{trashStrings.ranges(item.occurrences)}</small>
           <button
             type="button"

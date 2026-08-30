@@ -6,6 +6,7 @@ import {
   deletionBlockers,
   deletionImpact,
   orderContexts,
+  treeRows,
   possibleParents,
   type ContextNode,
 } from './contexts'
@@ -65,5 +66,40 @@ describe('impedimenti alla cancellazione di un Context', () => {
     expect(deletionBlockers(rows, 'jung')).toBeNull()
     expect(deletionBlockers(rows, 'lavoro')).toBeNull()
     expect(deletionImpact(rows, 'jung')).toBe(0)
+  })
+})
+
+describe('albero dei Context con la conoscenza che contengono', () => {
+  const branch = [
+    { id: 'uni', parent_id: null, name: 'Università', occurrences: 2 },
+    { id: 'psi', parent_id: 'uni', name: 'Psicologia', occurrences: 1 },
+  ]
+  const objects = [
+    { context_id: 'uni', id: 'c1', object_type: 'concept' as const, name: 'Inconscio' },
+    { context_id: 'psi', id: 'e1', object_type: 'entity' as const, name: 'Jung' },
+  ]
+
+  test('ogni Context porta la propria conoscenza, non quella dei discendenti', () => {
+    const rows = treeRows(branch, objects, new Set())
+
+    expect(rows.map((row) => `${row.kind}:${row.name}@${row.depth}`)).toEqual([
+      'context:Università@0',
+      'object:Inconscio@1',
+      'context:Psicologia@1',
+      'object:Jung@2',
+    ])
+  })
+
+  test('un Context richiuso nasconde tutto quello che sta sotto', () => {
+    const rows = treeRows(branch, objects, new Set(['uni']))
+
+    expect(rows.map((row) => row.name)).toEqual(['Università'])
+    expect(rows[0].kind === 'context' && rows[0].hasChildren).toBe(true)
+  })
+
+  test('un Context senza figli né conoscenza non offre da espandere', () => {
+    const rows = treeRows([{ id: 'solo', parent_id: null, name: 'Solo' }], [], new Set())
+
+    expect(rows[0].kind === 'context' && rows[0].hasChildren).toBe(false)
   })
 })

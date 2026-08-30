@@ -1,19 +1,23 @@
 <script lang="ts">
   // SPDX-License-Identifier: AGPL-3.0-or-later
 
-  import { contextStrings, trashStrings } from '../lib/strings'
+  import { contextStrings, previewStrings, trashStrings } from '../lib/strings'
   import RemoveButton from './RemoveButton.svelte'
 
   let {
     objects,
     busy = false,
     onOpen,
+    onInspect,
     onTrash,
   }: {
     /** Concept and Entity of the Documents selected by the Context and Tag filters. */
     objects: { id: string; object_type: 'concept' | 'entity'; name: string }[]
     busy?: boolean
+    /** Shows the Documents that contain it, as thumbnails. */
     onOpen: (objectId: string) => void
+    /** Opens the detail panel of the object itself. */
+    onInspect: (objectId: string) => void
     onTrash: (objectId: string) => void
   } = $props()
 </script>
@@ -26,9 +30,21 @@
     <ul>
       {#each objects as object (object.id)}
         <li>
-          <button type="button" class="derived-open" onclick={() => onOpen(object.id)}>
+          <button
+            type="button"
+            class="derived-open"
+            title={previewStrings.showLabel.description}
+            onclick={() => onOpen(object.id)}
+          >
             <span>{trashStrings.kind(object.object_type)}</span> {object.name}
           </button>
+          <button
+            type="button"
+            class="derived-inspect"
+            aria-label={`Dettaglio di ${object.name}`}
+            title={contextStrings.derived.inspect}
+            onclick={() => onInspect(object.id)}
+          >›</button>
           <RemoveButton
             label={object.name}
             disabled={busy}

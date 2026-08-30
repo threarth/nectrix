@@ -296,10 +296,17 @@ export const contextStrings = {
   documentCount: (documents: number): string =>
     documents === 1 ? '1 documento' : `${documents} documenti`,
 
+  tree: {
+    expand: (name: string): string => `Espandi ${name}`,
+    collapse: (name: string): string => `Richiudi ${name}`,
+    contextDescription: 'Filtra i documenti e mostra le miniature di questo contesto',
+    objectDescription: 'Mostra i documenti che lo contengono',
+  },
   rangeCount: (ranges: number): string => (ranges === 1 ? '1 frammento' : `${ranges} frammenti`),
 
   derived: {
     label: 'Concept ed Entity qui',
+    inspect: 'Apre il dettaglio dell’oggetto',
     empty: 'Nessun Concept o Entity nei documenti filtrati.',
     description: 'Ricavati dai documenti selezionati attraverso le loro occurrence, non assegnati direttamente a contesti o tag',
   },
@@ -628,8 +635,28 @@ export const trashStrings = {
   ranges: (count: number): string => (count === 1 ? '1 frammento marcato' : `${count} frammenti marcati`),
   kind: (objectType: 'concept' | 'entity' | 'context'): string =>
     objectType === 'concept' ? 'Concept' : objectType === 'entity' ? 'Entity' : 'Context',
+  preview: { description: 'Mostra i documenti che lo contengono: il testo non è cambiato' },
   trashObject: { description: 'Sposta nel cestino: resta ripristinabile e il testo non cambia' },
   trashObjectConfirm: 'Premi di nuovo per spostare nel cestino',
   trashDocument: { description: 'Sposta il documento nel cestino: resta ripristinabile' },
   trashDocumentConfirm: 'Premi di nuovo per spostare il documento nel cestino',
+} as const
+
+export const previewStrings = {
+  title: (kind: 'concept' | 'entity' | 'context', label: string): string =>
+    `${kind === 'concept' ? 'Concept' : kind === 'entity' ? 'Entity' : 'Context'} · ${label}`,
+  hint: 'Le miniature mostrano i documenti che contengono questo indice: scegline uno per aprirlo.',
+  trashedHint: 'È nel cestino: questa è una vista temporanea di ciò che era, il testo non è cambiato.',
+  empty: 'Nessun documento lo contiene ancora.',
+  close: 'Chiudi',
+  open: (title: string): string => `Apri ${title}`,
+  more: (hidden: number): string => (hidden === 1 ? '+1 altro frammento' : `+${hidden} altri frammenti`),
+  fragments: (count: number): string => (count === 1 ? '1 frammento' : `${count} frammenti`),
+  detached: 'staccato dal testo',
+  documentStatus: {
+    active: '',
+    archived: 'archiviato',
+    trashed: 'nel cestino',
+  } as Record<string, string>,
+  showLabel: { label: 'Dove compare', description: 'Mostra i documenti che contengono questo indice' },
 } as const

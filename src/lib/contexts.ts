@@ -71,3 +71,65 @@ export function deletionBlockers(rows: readonly ContextRow[], contextId: string)
 export function deletionImpact(rows: readonly ContextRow[], contextId: string): number {
   return rows.find((candidate) => candidate.id === contextId)?.occurrences ?? 0
 }
+
+export interface ContextObjectRow {
+  context_id: string
+  id: string
+  object_type: 'concept' | 'entity'
+  name: string
+}
+
+export type TreeRow =
+  | { kind: 'context'; id: string; name: string; depth: number; occurrences: number; hasChildren: boolean }
+  | { kind: 'object'; id: string; name: string; depth: number; objectType: 'concept' | 'entity'; contextId: string }
+
+/**
+ * Flattens the hierarchy into the rows the sidebar draws: every Context is followed by the
+ * knowledge its own ranges contain, then by its sub-context. A collapsed Context hides everything
+ * below it — its knowledge included — because that is what the fold means to the eye.
+ */
+export function treeRows(
+  contexts: readonly ContextRow[],
+  objects: readonly ContextObjectRow[],
+  collapsed: ReadonlySet<string>,
+): TreeRow[] {
+  const byParent = new Map<string, ContextRow[]>()
+  for (const context of [...contexts].sort((first, second) => first.name.localeCompare(second.name))) {
+    const key = context.parent_id ?? ''
+    byParent.set(key, [...(byParent.get(key) ?? []), context])
+  }
+  const objectsOf = new Map<string, ContextObjectRow[]>()
+  for (const object of objects) {
+    objectsOf.set(object.context_id, [...(objectsOf.get(object.context_id) ?? []), object])
+  }
+
+  const rows: TreeRow[] = []
+  const walk = (parentId: string, depth: number): void => {
+    for (const context of byParent.get(parentId) ?? []) {
+      const children = byParent.get(context.id) ?? []
+      const own = objectsOf.get(context.id) ?? []
+      rows.push({
+        kind: 'context',
+        id: context.id,
+        name: context.name,
+        depth,
+        occurrences: context.occurrences ?? 0,
+        hasChildren: children.length > 0 || own.length > 0,
+      })
+      if (collapsed.has(context.id)) continue
+      for (const object of own) {
+        rows.push({
+          kind: 'object',
+          id: object.id,
+          name: object.name,
+          depth: depth + 1,
+          objectType: object.object_type,
+          contextId: context.id,
+        })
+      }
+      walk(context.id, depth + 1)
+    }
+  }
+  walk('', 0)
+  return rows
+}
